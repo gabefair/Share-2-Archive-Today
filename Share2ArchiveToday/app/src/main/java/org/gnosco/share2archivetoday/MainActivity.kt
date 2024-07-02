@@ -28,7 +28,20 @@ class MainActivity : ComponentActivity() {
         if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
             intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText ->
                 Log.d("MainActivity", "Shared text: $sharedText")
-                openInBrowser("https://archive.is/?run=1&url=$sharedText")
+                val trimmedText = sharedText.trim()
+                val sharedUri = Uri.parse(trimmedText)
+                if (sharedUri != null && sharedUri.scheme != null && sharedUri.host != null) {
+//                    val modifiedUri = Uri.Builder()
+//                        .scheme("https")
+//                        .authority("archive.today")
+//                        .appendPath("share")
+//                        .appendQueryParameter("url", sharedText)
+//                        .build()
+//                    openInBrowser(modifiedUri.toString())
+//                    openInBrowser("https://archive.is/?run=1&url=$trimmedText")
+                    openInBrowser("https://archive.today/share?url=${Uri.encode(trimmedText)}")
+
+                }
             }
         }
     }
