@@ -11,11 +11,12 @@ import org.gnosco.share2archivetoday.ui.theme.Share2ArchiveTodayTheme
 
 import android.net.Uri
 import android.util.Log
+import androidx.core.util.PatternsCompat
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+//        setContentView(R.layout.activity_main)
         handleShareIntent(intent)
     }
 
@@ -28,21 +29,37 @@ class MainActivity : ComponentActivity() {
         if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
             intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText ->
                 Log.d("MainActivity", "Shared text: $sharedText")
-                val trimmedText = sharedText.trim()
-                val sharedUri = Uri.parse(trimmedText)
-                if (sharedUri != null && sharedUri.scheme != null && sharedUri.host != null) {
+                val url = extractUrl(sharedText)
+                if (url != null) {
+                    openInBrowser("https://archive.is/?run=1&url=${Uri.encode(url)}")
+                }
+//
+//                val trimmedText = sharedText.trim()
+//                val sharedUri = Uri.parse(trimmedText)
+//                if (sharedUri != null && sharedUri.scheme != null && sharedUri.host != null) {
 //                    val modifiedUri = Uri.Builder()
 //                        .scheme("https")
 //                        .authority("archive.today")
-//                        .appendPath("share")
-//                        .appendQueryParameter("url", sharedText)
+////                        .appendPath("share")
+//                        .appendQueryParameter("url", trimmedText)
 //                        .build()
 //                    openInBrowser(modifiedUri.toString())
-//                    openInBrowser("https://archive.is/?run=1&url=$trimmedText")
-                    openInBrowser("https://archive.today/share?url=${Uri.encode(trimmedText)}")
+////                    openInBrowser("https://archive.is/?run=1&url=$trimmedText")
+////                    openInBrowser("https://archive.is/?run=1&url=${Uri.encode(trimmedText)}")
 
-                }
+//                }
             }
+
+        }
+        finish()
+    }
+
+    private fun extractUrl(text: String): String? {
+        val matcher = PatternsCompat.WEB_URL.matcher(text)
+        return if (matcher.find()) {
+            matcher.group(0)
+        } else {
+            null
         }
     }
 
