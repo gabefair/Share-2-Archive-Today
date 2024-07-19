@@ -8,3 +8,5 @@ Also, in order for this app to be listed on the google play store, I have to ref
 
 
 App is currently in Closed Beta testing and I'm looking for testers ( I have 15 so far and need 20 to be allowed onto the app store)
+
+To help me out: https://docs.google.com/forms/d/e/1FAIpQLSclncofsfMWiYIeChe8DaynP1xeSJUJV2n1x021gKP2iOQVkw/viewform?usp=sf_link
