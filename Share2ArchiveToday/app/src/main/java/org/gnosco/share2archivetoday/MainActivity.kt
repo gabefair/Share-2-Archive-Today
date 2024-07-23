@@ -33,21 +33,6 @@ class MainActivity : ComponentActivity() {
                 if (url != null) {
                     openInBrowser("https://archive.is/?run=1&url=${Uri.encode(url)}")
                 }
-//
-//                val trimmedText = sharedText.trim()
-//                val sharedUri = Uri.parse(trimmedText)
-//                if (sharedUri != null && sharedUri.scheme != null && sharedUri.host != null) {
-//                    val modifiedUri = Uri.Builder()
-//                        .scheme("https")
-//                        .authority("archive.today")
-////                        .appendPath("share")
-//                        .appendQueryParameter("url", trimmedText)
-//                        .build()
-//                    openInBrowser(modifiedUri.toString())
-////                    openInBrowser("https://archive.is/?run=1&url=$trimmedText")
-////                    openInBrowser("https://archive.is/?run=1&url=${Uri.encode(trimmedText)}")
-
-//                }
             }
 
         }
