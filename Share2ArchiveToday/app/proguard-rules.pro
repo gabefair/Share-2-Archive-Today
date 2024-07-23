@@ -19,3 +19,19 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Keep the main activity
+-keep class org.gnosco.share2archivetoday.MainActivity { *; }
+
+# Keep all the Compose-related classes
+-keep class androidx.compose.** { *; }
+-keep class androidx.activity.ComponentActivity { *; }
+
+# Keep logging (optional)
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+    public static int w(...);
+    public static int e(...);
+}
