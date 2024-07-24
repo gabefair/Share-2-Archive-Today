@@ -64,6 +64,8 @@ class MainActivity : ComponentActivity() {
                 newUriBuilder.appendQueryParameter("q", newNestedUriBuilder.build().toString())
             }
 
+            newUriBuilder.path(uri.path?.replace("/shorts/", "/v/") ?: uri.path)
+
             return newUriBuilder.build().toString()
         }
         return url
