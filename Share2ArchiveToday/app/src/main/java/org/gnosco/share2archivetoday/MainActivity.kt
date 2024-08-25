@@ -31,7 +31,8 @@ class MainActivity : ComponentActivity() {
                 Log.d("MainActivity", "Shared text: $sharedText")
                 val url = extractUrl(sharedText)
                 if (url != null) {
-                    val cleanedUrl = cleanYoutubeUrl(url)
+                    val processedUrl = processArchiveUrl(url) //Remove archive.<tld>/o/ from the URL
+                    val cleanedUrl = cleanTrackingParamsFromUrl(processedUrl)
                     openInBrowser("https://archive.is/?run=1&url=${Uri.encode(cleanedUrl)}")
                 }
             }
@@ -40,17 +41,35 @@ class MainActivity : ComponentActivity() {
         finish()
     }
 
-    private fun cleanYoutubeUrl(url: String): String {
+    private fun processArchiveUrl(url: String): String {
         val uri = Uri.parse(url)
-        if (uri.host?.contains("youtube.com") == true || uri.host?.contains("youtu.be") == true) {
-            val newUriBuilder = uri.buildUpon().clearQuery()
+        val pattern = Regex("archive\\.[a-z]+/o/[a-zA-Z0-9]+/(.+)")
+        val matchResult = pattern.find(uri.toString())
 
-            uri.queryParameterNames.forEach { param ->
-                if (param != "si") {
-                    newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
-                }
+        return if (matchResult != null) {
+            matchResult.groupValues[1]
+        } else {
+            url
+        }
+    }
+
+    private fun cleanTrackingParamsFromUrl(url: String): String {
+        val uri = Uri.parse(url)
+
+        // Check if there are any query parameters
+        if (uri.queryParameterNames.isEmpty()) {
+            // No query parameters, return the original URL
+            return url
+        }
+
+        val newUriBuilder = uri.buildUpon().clearQuery()
+        uri.queryParameterNames.forEach { param ->
+            if (param != "si") {
+                newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
             }
+        }
 
+        if (uri.host?.contains("youtube.com") == true || uri.host?.contains("youtu.be") == true) {
             // Special handling for nested query parameters like `redir_token`
             val nestedQueryParams = uri.getQueryParameter("q")
             if (nestedQueryParams != null) {
@@ -65,10 +84,9 @@ class MainActivity : ComponentActivity() {
             }
 
             newUriBuilder.path(uri.path?.replace("/shorts/", "/v/") ?: uri.path)
-
-            return newUriBuilder.build().toString()
         }
-        return url
+
+        return newUriBuilder.build().toString()
     }
 
 
