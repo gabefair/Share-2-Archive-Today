@@ -47,21 +47,30 @@ class MainActivity : ComponentActivity() {
 
     private fun cleanTrackingParamsFromUrl(url: String): String {
         val uri = Uri.parse(url)
-
         if (uri.queryParameterNames.isEmpty()) {
             return url
         }
 
+        // List of common tracking parameters to be removed
+        val trackingParams = setOf(
+            "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+            "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "tclid",
+            "aff_id", "affiliate_id", "ref", "referer", "campaign_id", "ad_id",
+            "adgroup_id", "adset_id", "creativetype", "placement", "network",
+            "mc_eid", "mc_cid", "s", "icid", "_ga", "_gid", "scid", "click_id",
+            "trk", "track", "trk_sid", "sid"
+        )
+
         val newUriBuilder = uri.buildUpon().clearQuery()
         uri.queryParameterNames.forEach { param ->
-            // Skip adding UTM parameters and any other tracking parameters
-            if (!param.startsWith("utm_") && param != "si") {
+            // Skip adding tracking parameters
+            if (param !in trackingParams) {
                 newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
             }
         }
 
+        // Additional handling for YouTube URLs
         if (uri.host?.contains("youtube.com") == true || uri.host?.contains("youtu.be") == true) {
-            // Special handling for nested query parameters like `redir_token`
             val nestedQueryParams = uri.getQueryParameter("q")
             if (nestedQueryParams != null) {
                 val nestedUri = Uri.parse(nestedQueryParams)
