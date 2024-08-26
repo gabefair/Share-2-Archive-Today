@@ -3,7 +3,6 @@ package org.gnosco.share2archivetoday
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-
 import android.net.Uri
 import android.util.Log
 import androidx.core.util.PatternsCompat
@@ -11,7 +10,6 @@ import androidx.core.util.PatternsCompat
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-//        setContentView(R.layout.activity_main)
         handleShareIntent(intent)
     }
 
@@ -26,12 +24,11 @@ class MainActivity : ComponentActivity() {
                 Log.d("MainActivity", "Shared text: $sharedText")
                 val url = extractUrl(sharedText)
                 if (url != null) {
-                    val processedUrl = processArchiveUrl(url) //Remove archive.<tld>/o/ from the URL
+                    val processedUrl = processArchiveUrl(url)
                     val cleanedUrl = cleanTrackingParamsFromUrl(processedUrl)
                     openInBrowser("https://archive.is/?run=1&url=${Uri.encode(cleanedUrl)}")
                 }
             }
-
         }
         finish()
     }
@@ -51,15 +48,14 @@ class MainActivity : ComponentActivity() {
     private fun cleanTrackingParamsFromUrl(url: String): String {
         val uri = Uri.parse(url)
 
-        // Check if there are any query parameters
         if (uri.queryParameterNames.isEmpty()) {
-            // No query parameters, return the original URL
             return url
         }
 
         val newUriBuilder = uri.buildUpon().clearQuery()
         uri.queryParameterNames.forEach { param ->
-            if (param != "si") {
+            // Skip adding UTM parameters and any other tracking parameters
+            if (!param.startsWith("utm_") && param != "si") {
                 newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
             }
         }
@@ -84,7 +80,6 @@ class MainActivity : ComponentActivity() {
         return newUriBuilder.build().toString()
     }
 
-
     private fun extractUrl(text: String): String? {
         val matcher = PatternsCompat.WEB_URL.matcher(text)
         return if (matcher.find()) {
@@ -100,6 +95,4 @@ class MainActivity : ComponentActivity() {
         startActivity(browserIntent)
         finish()
     }
-
-
 }
