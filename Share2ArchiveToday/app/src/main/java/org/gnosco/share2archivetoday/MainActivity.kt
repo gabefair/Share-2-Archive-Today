@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
             intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText ->
                 Log.d("MainActivity", "Shared text: $sharedText")
                 val url = extractUrl(sharedText)
+
                 if (url != null) {
                     val processedUrl = processArchiveUrl(url)
                     val cleanedUrl = cleanTrackingParamsFromUrl(processedUrl)
@@ -92,11 +93,29 @@ class MainActivity : ComponentActivity() {
     private fun extractUrl(text: String): String? {
         val matcher = PatternsCompat.WEB_URL.matcher(text)
         return if (matcher.find()) {
-            matcher.group(0)
+            var url = matcher.group(0)
+            // Clean the URL by removing erroneous prefixes
+            url = cleanUrl(url)
+            url
         } else {
             null
         }
     }
+
+
+    private fun cleanUrl(url: String): String {
+        // Find the last occurrence of "https://" in the URL, which should be the start of the valid part
+        val lastValidUrlIndex = url.lastIndexOf("https://")
+        return if (lastValidUrlIndex != -1) {
+            // Extract the portion from the last valid "https://" and clean any remaining %09 sequences
+            url.substring(lastValidUrlIndex).replace(Regex("%09+"), "")
+        } else {
+            // If no valid "https://" is found, return the original URL cleaned of %09 sequences
+            url.replace(Regex("%09+"), "")
+        }
+    }
+
+
 
     private fun openInBrowser(url: String) {
         Log.d("MainActivity", "Opening URL: $url")
