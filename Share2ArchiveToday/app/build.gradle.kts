@@ -12,8 +12,8 @@ android {
         applicationId = "org.gnosco.share2archivetoday"
         minSdk = 19 // Updated to support Android KitKat (API 19)
         targetSdk = 34
-        versionCode = 12
-        versionName = "2.2"
+        versionCode = 13
+        versionName = "2.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
