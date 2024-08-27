@@ -2,6 +2,7 @@
  Simple Android app to add an icon to your share menu to publically archive a url on Archive.today and Archive.Is
 
 It does not spy on you or collect any data. Find it on the [Google Play Store](https://play.google.com/store/apps/details?id=org.gnosco.share2archivetoday). (F-Droid store coming soon)
+
 Find the companion chrome browser app on the [Chrome Web Store](https://chromewebstore.google.com/detail/archive-webpage/falfcajjjjfjjlfabnfaadepcoagegip).
 
 
