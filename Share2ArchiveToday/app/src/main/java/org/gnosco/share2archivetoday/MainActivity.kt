@@ -58,9 +58,9 @@ class MainActivity : ComponentActivity() {
             "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "tclid",
             "aff_id", "affiliate_id", "ref", "referer", "campaign_id", "ad_id",
             "adgroup_id", "adset_id", "creativetype", "placement", "network",
-            "mc_eid", "mc_cid", "s", "icid", "_ga", "_gid", "scid", "click_id",
+            "mc_eid", "mc_cid", "si", "icid", "_ga", "_gid", "scid", "click_id",
             "trk", "track", "trk_sid", "sid", "mibextid", "fb_action_ids",
-            "fb_action_types", "twclid", "igshid", "s_kwcid"  
+            "fb_action_types", "twclid", "igshid", "s_kwcid"
         )
 
 
