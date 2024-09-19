@@ -52,3 +52,6 @@ local.properties
 key2
 key3
 /Share2ArchiveToday/app/release
+*.kts
+*.dm
+*.der

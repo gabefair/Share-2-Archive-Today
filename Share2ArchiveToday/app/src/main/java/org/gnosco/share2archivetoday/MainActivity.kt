@@ -46,13 +46,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun cleanTrackingParamsFromUrl(url: String): String {
-        val uri = Uri.parse(url)
-        if (uri.queryParameterNames.isEmpty()) {
-            return url
-        }
-
-        // List of common tracking parameters to be removed
+    private fun isTrackingParam(param: String): Boolean {
         val trackingParams = setOf(
             "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
             "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "tclid",
@@ -61,14 +55,21 @@ class MainActivity : ComponentActivity() {
             "mc_eid", "mc_cid", "si", "icid", "_ga", "_gid", "scid", "click_id",
             "trk", "track", "trk_sid", "sid", "mibextid", "fb_action_ids",
             "fb_action_types", "twclid", "igshid", "s_kwcid", "sxsrf", "sca_esv",
-            "source", "tbo", "sa", "ved" //sxsrf might be needed on some sites, but google uses it for tracking
+            "source", "tbo", "sa", "ved", "pi" //sxsrf might be needed on some sites, but google uses it for tracking
         )
+        return param in trackingParams
+    }
 
+    private fun cleanTrackingParamsFromUrl(url: String): String {
+        val uri = Uri.parse(url)
+        if (uri.queryParameterNames.isEmpty()) {
+            return url
+        }
 
         val newUriBuilder = uri.buildUpon().clearQuery()
         uri.queryParameterNames.forEach { param ->
-            // Skip adding tracking parameters
-            if (param !in trackingParams) {
+            // Add only non-tracking parameters to the new URL
+            if (!isTrackingParam(param)) {
                 newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
             }
         }
@@ -89,6 +90,12 @@ class MainActivity : ComponentActivity() {
 
             newUriBuilder.path(uri.path?.replace("/shorts/", "/v/") ?: uri.path)
         }
+
+        else if(uri.host?.endsWith(".substack.com") == true) {
+            // Add "?no_cover=true" to the URL path
+            newUriBuilder.path(uri.path + "/?no_cover=true")
+        }
+
 
         return newUriBuilder.build().toString()
     }
