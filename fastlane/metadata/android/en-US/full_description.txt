@@ -1,0 +1,4 @@
+Simple Android app to add an icon to your share menu to publically archive a url on Archive.today and Archive.Is
+
+It does not spy on you or collect any data.
+
