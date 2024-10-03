@@ -1,13 +1,13 @@
 package org.gnosco.share2archivetoday
 
+import WebURLMatcher
+import android.app.Activity
 import android.content.Intent
-import android.os.Bundle
-import androidx.activity.ComponentActivity
 import android.net.Uri
+import android.os.Bundle
 import android.util.Log
-import androidx.core.util.PatternsCompat
 
-class MainActivity : ComponentActivity() {
+class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleShareIntent(intent)
@@ -101,7 +101,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun extractUrl(text: String): String? {
-        val matcher = PatternsCompat.WEB_URL.matcher(text)
+        val matcher = WebURLMatcher.matcher(text)
         return if (matcher.find()) {
             var url = matcher.group(0)
             // Clean the URL by removing erroneous prefixes
@@ -111,7 +111,6 @@ class MainActivity : ComponentActivity() {
             null
         }
     }
-
 
     private fun cleanUrl(url: String): String {
         // Find the last occurrence of "https://" in the URL, which should be the start of the valid part
