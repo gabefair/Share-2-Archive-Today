@@ -27,7 +27,7 @@ class MainActivity : Activity() {
                 if (url != null) {
                     val processedUrl = processArchiveUrl(url)
                     val cleanedUrl = cleanTrackingParamsFromUrl(processedUrl)
-                    openInBrowser("https://archive.is/?run=1&url=${Uri.encode(cleanedUrl)}")
+                    openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
                 }
             }
         }
@@ -60,6 +60,13 @@ class MainActivity : Activity() {
         return param in trackingParams
     }
 
+    private fun isUnwantedYoutubeParam(param: String): Boolean {
+        val youtubeParams = setOf(
+            "feature"
+        )
+        return param in youtubeParams
+    }
+
     private fun cleanTrackingParamsFromUrl(url: String): String {
         val uri = Uri.parse(url)
         if (uri.queryParameterNames.isEmpty()) {
@@ -67,15 +74,11 @@ class MainActivity : Activity() {
         }
 
         val newUriBuilder = uri.buildUpon().clearQuery()
-        uri.queryParameterNames.forEach { param ->
-            // Add only non-tracking parameters to the new URL
-            if (!isTrackingParam(param)) {
-                newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
-            }
-        }
+        var RemoveYouTubeParams = false
 
         // Additional handling for YouTube URLs
         if (uri.host?.contains("youtube.com") == true || uri.host?.contains("youtu.be") == true) {
+            RemoveYouTubeParams = true
             val nestedQueryParams = uri.getQueryParameter("q")
             if (nestedQueryParams != null) {
                 val nestedUri = Uri.parse(nestedQueryParams)
@@ -88,14 +91,23 @@ class MainActivity : Activity() {
                 newUriBuilder.appendQueryParameter("q", newNestedUriBuilder.build().toString())
             }
 
+            val modifiedHost = uri.host?.removePrefix("music.")
+            newUriBuilder.authority(modifiedHost)
+
             newUriBuilder.path(uri.path?.replace("/shorts/", "/v/") ?: uri.path)
         }
-
+        
         else if(uri.host?.endsWith(".substack.com") == true) {
             // Add "?no_cover=true" to the URL path
             newUriBuilder.path(uri.path + "/?no_cover=true")
         }
 
+        uri.queryParameterNames.forEach { param ->
+            // Add only non-tracking parameters to the new URL
+            if (!isTrackingParam(param) || (RemoveYouTubeParams && !isUnwantedYoutubeParam(param))) {
+                newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
+            }
+        }
 
         return newUriBuilder.build().toString()
     }
