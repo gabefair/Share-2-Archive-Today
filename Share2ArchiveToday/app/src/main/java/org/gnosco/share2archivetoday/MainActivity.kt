@@ -74,11 +74,11 @@ class MainActivity : Activity() {
         }
 
         val newUriBuilder = uri.buildUpon().clearQuery()
-        var RemoveYouTubeParams = false
+        var removeYouTubeParams = false
 
         // Additional handling for YouTube URLs
         if (uri.host?.contains("youtube.com") == true || uri.host?.contains("youtu.be") == true) {
-            RemoveYouTubeParams = true
+            removeYouTubeParams = true
             val nestedQueryParams = uri.getQueryParameter("q")
             if (nestedQueryParams != null) {
                 val nestedUri = Uri.parse(nestedQueryParams)
@@ -96,7 +96,7 @@ class MainActivity : Activity() {
 
             newUriBuilder.path(uri.path?.replace("/shorts/", "/v/") ?: uri.path)
         }
-        
+
         else if(uri.host?.endsWith(".substack.com") == true) {
             // Add "?no_cover=true" to the URL path
             newUriBuilder.path(uri.path + "/?no_cover=true")
@@ -104,7 +104,7 @@ class MainActivity : Activity() {
 
         uri.queryParameterNames.forEach { param ->
             // Add only non-tracking parameters to the new URL
-            if (!isTrackingParam(param) || (RemoveYouTubeParams && !isUnwantedYoutubeParam(param))) {
+            if (!isTrackingParam(param) && !(removeYouTubeParams && isUnwantedYoutubeParam(param))) {
                 newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
             }
         }
