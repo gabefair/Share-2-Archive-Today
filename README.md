@@ -19,6 +19,7 @@ It does not spy on you or collect any data. Find it on the [Google Play Store](h
 Find the companion chrome browser app on the [Chrome Web Store](https://chromewebstore.google.com/detail/archive-webpage/falfcajjjjfjjlfabnfaadepcoagegip).
 
 ## _Features_
+ - ⭐️ Finds the first link in any shared text, no need to select just the url
  - ⭐️ Protect your privacy by removing tracking tokens in URL
  - ⭐️ Substack email nag screens are now bypassed
  - ⭐️ Outlinks can be archived directly from archived pages
