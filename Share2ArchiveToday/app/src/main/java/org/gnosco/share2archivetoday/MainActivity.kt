@@ -69,11 +69,11 @@ class MainActivity : Activity() {
 
     private fun cleanTrackingParamsFromUrl(url: String): String {
         val uri = Uri.parse(url)
-        if (uri.queryParameterNames.isEmpty()) {
+        if (uri.legacyGetQueryParameterNames().isEmpty()) {
             return url
         }
 
-        val newUriBuilder = uri.buildUpon().clearQuery()
+        val newUriBuilder = uri.buildUpon().legacyClearQuery()
         var removeYouTubeParams = false
 
         // Additional handling for YouTube URLs
@@ -82,9 +82,9 @@ class MainActivity : Activity() {
             val nestedQueryParams = uri.getQueryParameter("q")
             if (nestedQueryParams != null) {
                 val nestedUri = Uri.parse(nestedQueryParams)
-                val newNestedUriBuilder = nestedUri.buildUpon().clearQuery()
+                val newNestedUriBuilder = nestedUri.buildUpon().legacyClearQuery()
 
-                nestedUri.queryParameterNames.forEach { nestedParam ->
+                nestedUri.legacyGetQueryParameterNames().forEach { nestedParam ->
                     newNestedUriBuilder.appendQueryParameter(nestedParam, nestedUri.getQueryParameter(nestedParam))
                 }
 
@@ -102,7 +102,7 @@ class MainActivity : Activity() {
             newUriBuilder.path(uri.path + "/?no_cover=true")
         }
 
-        uri.queryParameterNames.forEach { param ->
+        uri.legacyGetQueryParameterNames().forEach { param ->
             // Add only non-tracking parameters to the new URL
             if (!isTrackingParam(param) && !(removeYouTubeParams && isUnwantedYoutubeParam(param))) {
                 newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
