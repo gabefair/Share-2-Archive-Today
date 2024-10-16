@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "org.gnosco.share2archivetoday"
-        minSdk = 1 // Updated to support Android KitKat (API 1)
+        minSdk = 1
         targetSdk = 34
         versionCode = 18
         versionName = "2.8"
