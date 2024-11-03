@@ -99,7 +99,7 @@ class MainActivity : Activity() {
 
         else if(uri.host?.endsWith(".substack.com") == true) {
             // Add "?no_cover=true" to the URL path
-            newUriBuilder.path(uri.path + "/?no_cover=true")
+            newUriBuilder.appendQueryParameter("no_cover", "true")
         }
 
         uri.legacyGetQueryParameterNames().forEach { param ->
