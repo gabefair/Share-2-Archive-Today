@@ -216,33 +216,51 @@ class MainActivity : Activity() {
     }
 
     private fun extractUrl(text: String): String? {
-        val matcher = WebURLMatcher.matcher(text)
-        return if (matcher.find()) {
-            var url = matcher.group(0)
-            // Clean the URL by removing erroneous prefixes
-            url = cleanUrl(url)
-            url
-        } else {
-            null
+        // First try to find URLs with protocols
+        val protocolMatcher = WebURLMatcher.matcher(text)
+        if (protocolMatcher.find()) {
+            return cleanUrl(protocolMatcher.group(0))
         }
+
+        // If no URL with protocol is found, look for potential bare domains
+        val domainPattern = Regex(
+            "(?:^|\\s+)(" +  // Start of string or whitespace
+                    "(?:[a-zA-Z0-9][a-zA-Z0-9-]*\\.)+?" + // Subdomains and domain name
+                    "[a-zA-Z]{2,}" +  // TLD
+                    "(?:/[^\\s]*)?" + // Optional path
+                    ")(?:\\s+|\$)"    // End of string or whitespace
+        )
+
+        val domainMatch = domainPattern.find(text)
+        if (domainMatch != null) {
+            val bareUrl = domainMatch.groupValues[1].trim()
+            // Add https:// prefix and clean the URL
+            return cleanUrl("https://$bareUrl")
+        }
+
+        return null
     }
 
     private fun cleanUrl(url: String): String {
-        // Find the last occurrence of "https://" in the URL, which should be the start of the valid part
         val lastHttpsIndex = url.lastIndexOf("https://")
         val lastHttpIndex = url.lastIndexOf("http://")
         val lastValidUrlIndex = maxOf(lastHttpsIndex, lastHttpIndex)
 
-        return if (lastValidUrlIndex != -1) {
-            // Extract the portion from the last valid "https://" and clean any remaining %09 sequences
+        val cleanedUrl = if (lastValidUrlIndex != -1) {
+            // Extract the portion from the last valid protocol and clean any remaining %09 sequences
             url.substring(lastValidUrlIndex).replace(Regex("%09+"), "")
         } else {
-            // If no valid "https://" is found, return the original URL cleaned of %09 sequences
-            url.replace(Regex("%09+"), "")
+            // If no valid protocol is found, ensure it has one and clean %09 sequences
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                "https://${url.replace(Regex("%09+"), "")}"
+            } else {
+                url.replace(Regex("%09+"), "")
+            }
         }
+
+        // Remove any trailing punctuation that might have been caught
+        return cleanedUrl.removeSuffix(".").removeSuffix(",").removeSuffix(";").removeSuffix(")")
     }
-
-
 
     private fun openInBrowser(url: String) {
         Log.d("MainActivity", "Opening URL: $url")
