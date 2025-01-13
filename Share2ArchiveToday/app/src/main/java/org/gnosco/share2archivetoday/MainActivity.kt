@@ -7,6 +7,12 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import com.google.zxing.*
+import com.google.zxing.common.HybridBinarizer
+import kotlin.math.max
+
 class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -19,19 +25,109 @@ class MainActivity : Activity() {
     }
 
     private fun handleShareIntent(intent: Intent?) {
-        if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
-            intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText ->
-                Log.d("MainActivity", "Shared text: $sharedText")
-                val url = extractUrl(sharedText)
+        if (intent?.action == Intent.ACTION_SEND) {
+            when (intent.type) {
+                "text/plain" -> {
+                    intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText ->
+                        Log.d("MainActivity", "Shared text: $sharedText")
+                        val url = extractUrl(sharedText)
 
-                if (url != null) {
-                    val processedUrl = processArchiveUrl(url)
-                    val cleanedUrl = cleanTrackingParamsFromUrl(processedUrl)
-                    openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
+                        if (url != null) {
+                            val processedUrl = processArchiveUrl(url)
+                            val cleanedUrl = cleanTrackingParamsFromUrl(processedUrl)
+                            openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
+                        }
+                    }
+                }
+                else -> {
+                    // Handle image shares
+                    if (intent.type?.startsWith("image/") == true) {
+                        try {
+                            intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { imageUri ->
+                                handleImageShare(imageUri)
+                            }
+                        } catch (e: Exception) {
+                            Log.e("MainActivity", "Error handling image share", e)
+                            finish()
+                        }
+                    }
                 }
             }
         }
         finish()
+    }
+
+    private fun handleImageShare(imageUri: Uri) {
+        try {
+            val qrUrl = extractQRCodeFromImage(imageUri)
+            if (qrUrl != null) {
+                val processedUrl = processArchiveUrl(qrUrl)
+                val cleanedUrl = cleanTrackingParamsFromUrl(processedUrl)
+                openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
+            } else {
+                Log.d("MainActivity", "No QR code found in image")
+                finish()
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error processing QR code", e)
+            finish()
+        }
+    }
+
+    private fun extractQRCodeFromImage(imageUri: Uri): String? {
+        val inputStream = contentResolver.openInputStream(imageUri) ?: return null
+
+        // Read image dimensions first
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        BitmapFactory.decodeStream(inputStream, null, options)
+        inputStream.close()
+
+        // Calculate sample size to avoid OOM
+        val maxDimension = max(options.outWidth, options.outHeight)
+        val sampleSize = max(1, maxDimension / 2048)
+
+        // Read the actual bitmap with sampling
+        val scaledOptions = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+
+        contentResolver.openInputStream(imageUri)?.use { stream ->
+            val bitmap = BitmapFactory.decodeStream(stream, null, scaledOptions) ?: return null
+
+            try {
+                // Convert to ZXing format
+                val width = bitmap.width
+                val height = bitmap.height
+                val pixels = IntArray(width * height)
+                bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+
+                val source = RGBLuminanceSource(width, height, pixels)
+                val binarizer = HybridBinarizer(source)
+                val binaryBitmap = BinaryBitmap(binarizer)
+
+                // Try to decode QR code
+                val reader = MultiFormatReader()
+                val hints = mapOf(
+                    DecodeHintType.POSSIBLE_FORMATS to arrayListOf(BarcodeFormat.QR_CODE),
+                    DecodeHintType.TRY_HARDER to true
+                )
+
+                try {
+                    val result = reader.decode(binaryBitmap, hints)
+                    return result.text
+                } catch (e: NotFoundException) {
+                    // No QR code found
+                    Log.d("MainActivity", "No QR code found in image")
+                    return null
+                }
+            } finally {
+                bitmap.recycle()
+            }
+        }
+        return null
     }
 
     private fun processArchiveUrl(url: String): String {
@@ -127,6 +223,7 @@ class MainActivity : Activity() {
     private fun cleanUrl(url: String): String {
         // Find the last occurrence of "https://" in the URL, which should be the start of the valid part
         val lastValidUrlIndex = url.lastIndexOf("https://")
+
         return if (lastValidUrlIndex != -1) {
             // Extract the portion from the last valid "https://" and clean any remaining %09 sequences
             url.substring(lastValidUrlIndex).replace(Regex("%09+"), "")
