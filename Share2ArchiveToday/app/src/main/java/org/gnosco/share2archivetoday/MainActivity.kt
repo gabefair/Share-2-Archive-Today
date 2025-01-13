@@ -12,6 +12,7 @@ import android.graphics.BitmapFactory
 import com.google.zxing.*
 import com.google.zxing.common.HybridBinarizer
 import kotlin.math.max
+import android.widget.Toast
 
 class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,6 +37,9 @@ class MainActivity : Activity() {
                             val processedUrl = processArchiveUrl(url)
                             val cleanedUrl = cleanTrackingParamsFromUrl(processedUrl)
                             openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
+                        } else {
+                            Toast.makeText(this, "No URL found in shared text", Toast.LENGTH_SHORT).show()
+                            finish()
                         }
                     }
                 }
@@ -48,6 +52,7 @@ class MainActivity : Activity() {
                             }
                         } catch (e: Exception) {
                             Log.e("MainActivity", "Error handling image share", e)
+                            Toast.makeText(this, "Share 2 Archive did not like that image", Toast.LENGTH_SHORT).show()
                             finish()
                         }
                     }
@@ -66,10 +71,12 @@ class MainActivity : Activity() {
                 openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
             } else {
                 Log.d("MainActivity", "No QR code found in image")
+                Toast.makeText(this, "No QR code found in image", Toast.LENGTH_SHORT).show()
                 finish()
             }
         } catch (e: Exception) {
             Log.e("MainActivity", "Error processing QR code", e)
+            Toast.makeText(this, "Error processing QR code", Toast.LENGTH_SHORT).show()
             finish()
         }
     }
