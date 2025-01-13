@@ -222,7 +222,9 @@ class MainActivity : Activity() {
 
     private fun cleanUrl(url: String): String {
         // Find the last occurrence of "https://" in the URL, which should be the start of the valid part
-        val lastValidUrlIndex = url.lastIndexOf("https://")
+        val lastHttpsIndex = url.lastIndexOf("https://")
+        val lastHttpIndex = url.lastIndexOf("http://")
+        val lastValidUrlIndex = maxOf(lastHttpsIndex, lastHttpIndex)
 
         return if (lastValidUrlIndex != -1) {
             // Extract the portion from the last valid "https://" and clean any remaining %09 sequences

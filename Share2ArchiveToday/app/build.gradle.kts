@@ -12,8 +12,8 @@ android {
         applicationId = "org.gnosco.share2archivetoday"
         minSdk = 1
         targetSdk = 34
-        versionCode = 19
-        versionName = "2.9"
+        versionCode = 20
+        versionName = "3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
