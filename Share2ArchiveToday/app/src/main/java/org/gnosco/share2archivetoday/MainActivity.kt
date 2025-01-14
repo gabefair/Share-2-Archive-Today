@@ -1,4 +1,5 @@
 package org.gnosco.share2archivetoday
+// This file is: MainActivity.kt
 
 import WebURLMatcher
 import android.app.Activity
@@ -69,6 +70,7 @@ class MainActivity : Activity() {
                 val processedUrl = processArchiveUrl(qrUrl)
                 val cleanedUrl = cleanTrackingParamsFromUrl(processedUrl)
                 openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
+                Toast.makeText(this, "URL found in QR code", Toast.LENGTH_SHORT).show()
             } else {
                 Log.d("MainActivity", "No QR code found in image")
                 Toast.makeText(this, "No QR code found in image", Toast.LENGTH_SHORT).show()
