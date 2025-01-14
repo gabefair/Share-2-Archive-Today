@@ -12,7 +12,7 @@ android {
         applicationId = "org.gnosco.share2archivetoday"
         minSdk = 1
         targetSdk = 34
-        versionCode = 20
+        versionCode = 30
         versionName = "3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
