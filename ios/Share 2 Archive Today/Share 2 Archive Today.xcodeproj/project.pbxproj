@@ -39,23 +39,6 @@
 		B094ED492D58071D00F66DEA /* URLShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = URLShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		B094ED542D58071D00F66DEA /* Exceptions for "URLShareExtension" folder in "URLShareExtension" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = B094ED482D58071D00F66DEA /* URLShareExtension */;
-		};
-		B094ED642D581D2800F66DEA /* Exceptions for "SharedFramework" folder in "URLShareExtension" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				URLHandlerService.swift,
-			);
-			target = B094ED482D58071D00F66DEA /* URLShareExtension */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B094ED352D58067300F66DEA /* Share 2 Archive Today */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -64,17 +47,11 @@
 		};
 		B094ED4A2D58071D00F66DEA /* URLShareExtension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				B094ED542D58071D00F66DEA /* Exceptions for "URLShareExtension" folder in "URLShareExtension" target */,
-			);
 			path = URLShareExtension;
 			sourceTree = "<group>";
 		};
 		B094ED622D581BF400F66DEA /* SharedFramework */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				B094ED642D581D2800F66DEA /* Exceptions for "SharedFramework" folder in "URLShareExtension" target */,
-			);
 			path = SharedFramework;
 			sourceTree = "<group>";
 		};
