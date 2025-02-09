@@ -16,6 +16,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return true
     }
     
+    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
+        checkPendingURL()
+        return true
+    }
+    
     private func checkPendingURL() {
         let appGroupID = "group.org.Gnosco.Share-2-Archive-Today"
         if let userDefaults = UserDefaults(suiteName: appGroupID),

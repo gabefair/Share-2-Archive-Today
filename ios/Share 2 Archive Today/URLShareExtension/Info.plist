@@ -40,6 +40,17 @@
         <string>Copyright © 2024 Gnosco. All rights reserved.</string>
         <key>NSPhotoLibraryUsageDescription</key>
         <string>Access is needed to scan QR codes for urls from shared images.</string>
+        <key>CFBundleURLTypes</key>
+        <array>
+            <dict>
+                <key>CFBundleURLSchemes</key>
+                <array>
+                    <string>Share-2-Archive-Today</string>
+                </array>
+                <key>CFBundleURLName</key>
+                <string>org.Gnosco.Share-2-Archive-Today</string>
+            </dict>
+        </array>
 </dict>
 </plist>
 

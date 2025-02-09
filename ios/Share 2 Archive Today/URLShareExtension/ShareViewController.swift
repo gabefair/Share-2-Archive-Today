@@ -37,6 +37,33 @@ class ShareViewController: UIViewController {
         }
     }
     
+    private func processUrl(_ urlString: String) {
+            // Clean the URL of tracking parameters
+            let cleanedUrl = cleanTrackingParamsFromUrl(urlString)
+            
+            // Create the Archive.today URL
+            guard let encodedUrl = cleanedUrl.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                  let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
+                completeRequest()
+                return
+            }
+            
+            // Store the URL in UserDefaults for the main app to handle
+            if let userDefaults = UserDefaults(suiteName: appGroupID) {
+                userDefaults.set(archiveUrl.absoluteString, forKey: "pendingArchiveURL")
+                userDefaults.synchronize()
+                
+                // Save the original URL to the list of saved URLs
+                urlHandler.saveURL(cleanedUrl)
+            }
+            
+            // Open the main app using the extension context
+            let url = URL(string: "Share-2-Archive-Today://")!
+            extensionContext?.open(url) { success in
+                self.completeRequest()
+            }
+        }
+    
     private func handleUrlShare(_ itemProvider: NSItemProvider) {
         itemProvider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { [weak self] (item, error) in
             guard let url = item as? URL else {
@@ -45,9 +72,7 @@ class ShareViewController: UIViewController {
             }
             
             DispatchQueue.main.async {
-                let processedUrl = self?.processArchiveUrl(url.absoluteString) ?? url.absoluteString
-                let cleanedUrl = self?.cleanTrackingParamsFromUrl(processedUrl) ?? processedUrl
-                self?.openInBrowser(cleanedUrl)
+                self?.processUrl(url.absoluteString)
             }
         }
     }
@@ -204,20 +229,23 @@ class ShareViewController: UIViewController {
         return components.url?.absoluteString ?? urlString
     }
     
-    private func openInBrowser(_ url: String) {
-        guard let encodedUrl = url.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
-            completeRequest()
-            return
-        }
+    @objc @discardableResult private func openInBrowser(_ url: URL) -> Bool {
+        //let encodedUrl = url.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+        //let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)")
         
-        // Save the URL to UserDefaults in the app group
-        if let userDefaults = UserDefaults(suiteName: appGroupID) {
-            userDefaults.set(archiveUrl.absoluteString, forKey: "pendingArchiveURL")
-            userDefaults.synchronize()
-        }
-        
-        completeRequest()
+        var responder: UIResponder? = self
+            while responder != nil {
+                if let application = responder as? UIApplication {
+                    if #available(iOS 18.0, *) {
+                        application.open(url, options: [:], completionHandler: nil)
+                        return true
+                    } else {
+                        return application.perform(#selector(openURL(_:)), with: url) != nil
+                    }
+                }
+                responder = responder?.next
+            }
+            return false
     }
     
     private func completeRequest() {
