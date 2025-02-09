@@ -54,6 +54,13 @@
 			);
 			target = B094EDE92D59406400F66DEA /* URLShareExtension */;
 		};
+		B094EDFE2D5947C900F66DEA /* Exceptions for "attempt4" folder in "URLShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				URLStore.swift,
+			);
+			target = B094EDE92D59406400F66DEA /* URLShareExtension */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -61,6 +68,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				B094EDDF2D59402400F66DEA /* Exceptions for "attempt4" folder in "attempt4" target */,
+				B094EDFE2D5947C900F66DEA /* Exceptions for "attempt4" folder in "URLShareExtension" target */,
 			);
 			path = attempt4;
 			sourceTree = "<group>";
