@@ -47,6 +47,14 @@
 			);
 			target = B094ED482D58071D00F66DEA /* URLShareExtension */;
 		};
+		B094ED8A2D58583900F66DEA /* Exceptions for "URLShareExtension" folder in "URLShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"/Localized: MainInterface.storyboard",
+				Info.plist,
+			);
+			target = B094ED482D58071D00F66DEA /* URLShareExtension */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -57,6 +65,9 @@
 		};
 		B094ED4A2D58071D00F66DEA /* URLShareExtension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B094ED8A2D58583900F66DEA /* Exceptions for "URLShareExtension" folder in "URLShareExtension" target */,
+			);
 			path = URLShareExtension;
 			sourceTree = "<group>";
 		};
@@ -369,6 +380,7 @@
 				DEVELOPMENT_TEAM = NR87AJVD3K;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -405,6 +417,7 @@
 				DEVELOPMENT_TEAM = NR87AJVD3K;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

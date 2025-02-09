@@ -229,18 +229,20 @@ class ShareViewController: UIViewController {
         return components.url?.absoluteString ?? urlString
     }
     
-    @objc @discardableResult private func openInBrowser(_ url: URL) -> Bool {
-        //let encodedUrl = url.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
-        //let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)")
+    @objc @discardableResult private func openInBrowser(_ urlString: String) -> Bool {
+        guard let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                      let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
+                    return false
+                }
         
         var responder: UIResponder? = self
             while responder != nil {
                 if let application = responder as? UIApplication {
                     if #available(iOS 18.0, *) {
-                        application.open(url, options: [:], completionHandler: nil)
+                        application.open(archiveUrl, options: [:], completionHandler: nil)
                         return true
                     } else {
-                        return application.perform(#selector(openURL(_:)), with: url) != nil
+                        return application.perform(#selector(UIApplication.openURL(_:)), with: archiveUrl) != nil
                     }
                 }
                 responder = responder?.next
