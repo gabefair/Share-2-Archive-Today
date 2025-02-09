@@ -1,12 +1,4 @@
-//
-//  URLHandlerService.swift
-//  Share 2 Archive Today
-//
-//  Created by Gabirel Fair on 2/8/25.
-//
-
-
-// URLHandlerService.swift
+// SharedFramework/URLHandlerService.swift
 import Foundation
 import UIKit
 

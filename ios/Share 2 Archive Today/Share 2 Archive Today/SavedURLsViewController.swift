@@ -21,6 +21,7 @@ class SavedURLsViewController: UIViewController, UITableViewDataSource, UITableV
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        view.backgroundColor = .systemBackground
         setupUI()
         checkFirstLaunch()
         loadSavedURLs()

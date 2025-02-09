@@ -1,4 +1,4 @@
-// AppDelegate.swift
+// 'Share 2 Archive Today/AppDelegate.swift'
 import UIKit
 
 @main
@@ -6,8 +6,30 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // Create window with the correct frame
         window = UIWindow(frame: UIScreen.main.bounds)
-        window?.rootViewController = UINavigationController(rootViewController: SavedURLsViewController())
+        
+        // Create the root view controller
+        let savedURLsViewController = SavedURLsViewController()
+        
+        // Create navigation controller with proper styling
+        let navigationController = UINavigationController(rootViewController: savedURLsViewController)
+        navigationController.navigationBar.prefersLargeTitles = true
+        
+        // Configure navigation bar appearance
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = .systemBackground
+        appearance.titleTextAttributes = [.foregroundColor: UIColor.label]
+        appearance.largeTitleTextAttributes = [.foregroundColor: UIColor.label]
+        
+        navigationController.navigationBar.standardAppearance = appearance
+        navigationController.navigationBar.scrollEdgeAppearance = appearance
+        navigationController.navigationBar.compactAppearance = appearance
+        
+        // Set the root view controller
+        window?.rootViewController = navigationController
+        window?.backgroundColor = .systemBackground
         window?.makeKeyAndVisible()
         
         // Check for pending URLs
@@ -41,4 +63,3 @@ extension AppDelegate {
         checkPendingURL()
     }
 }
-
