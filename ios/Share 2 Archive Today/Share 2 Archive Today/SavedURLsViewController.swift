@@ -21,9 +21,12 @@ class SavedURLsViewController: UIViewController, UITableViewDataSource, UITableV
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
         setupUI()
-        checkFirstLaunch()
+        
+        // Delay the tutorial check to ensure view is properly laid out
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.checkFirstLaunch()
+        }
         loadSavedURLs()
     }
     
@@ -59,6 +62,7 @@ class SavedURLsViewController: UIViewController, UITableViewDataSource, UITableV
                 ]
                 userDefaults.set(exampleURLs, forKey: "SavedURLs")
                 showTutorial()
+                loadSavedURLs()
             }
         }
     }
@@ -87,28 +91,37 @@ class SavedURLsViewController: UIViewController, UITableViewDataSource, UITableV
         dismissButton.setTitle("Got it!", for: .normal)
         dismissButton.addTarget(self, action: #selector(dismissTutorial), for: .touchUpInside)
         
-        tutorialView.addSubview(tutorialLabel)
-        tutorialView.addSubview(dismissButton)
-        view.addSubview(tutorialView)
-        
-        // Layout constraints
-        tutorialView.translatesAutoresizingMaskIntoConstraints = false
-        tutorialLabel.translatesAutoresizingMaskIntoConstraints = false
-        dismissButton.translatesAutoresizingMaskIntoConstraints = false
-        
-        NSLayoutConstraint.activate([
-            tutorialView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            tutorialView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            tutorialView.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.85),
-            
-            tutorialLabel.topAnchor.constraint(equalTo: tutorialView.topAnchor, constant: 20),
-            tutorialLabel.leadingAnchor.constraint(equalTo: tutorialView.leadingAnchor, constant: 20),
-            tutorialLabel.trailingAnchor.constraint(equalTo: tutorialView.trailingAnchor, constant: -20),
-            
-            dismissButton.topAnchor.constraint(equalTo: tutorialLabel.bottomAnchor, constant: 20),
-            dismissButton.centerXAnchor.constraint(equalTo: tutorialView.centerXAnchor),
-            dismissButton.bottomAnchor.constraint(equalTo: tutorialView.bottomAnchor, constant: -20)
-        ])
+        // Remove any existing tutorial view
+       tutorialView.subviews.forEach { $0.removeFromSuperview() }
+       
+       tutorialView.addSubview(tutorialLabel)
+       tutorialView.addSubview(dismissButton)
+       view.addSubview(tutorialView)
+       
+       // Layout constraints
+       tutorialView.translatesAutoresizingMaskIntoConstraints = false
+       tutorialLabel.translatesAutoresizingMaskIntoConstraints = false
+       dismissButton.translatesAutoresizingMaskIntoConstraints = false
+       
+       NSLayoutConstraint.activate([
+           tutorialView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+           tutorialView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+           tutorialView.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.85),
+           
+           tutorialLabel.topAnchor.constraint(equalTo: tutorialView.topAnchor, constant: 20),
+           tutorialLabel.leadingAnchor.constraint(equalTo: tutorialView.leadingAnchor, constant: 20),
+           tutorialLabel.trailingAnchor.constraint(equalTo: tutorialView.trailingAnchor, constant: -20),
+           
+           dismissButton.topAnchor.constraint(equalTo: tutorialLabel.bottomAnchor, constant: 20),
+           dismissButton.centerXAnchor.constraint(equalTo: tutorialView.centerXAnchor),
+           dismissButton.bottomAnchor.constraint(equalTo: tutorialView.bottomAnchor, constant: -20)
+       ])
+       
+       // Add initial animation
+       tutorialView.alpha = 0
+       UIView.animate(withDuration: 0.3) {
+           self.tutorialView.alpha = 1
+       }
     }
     
     @objc private func dismissTutorial() {

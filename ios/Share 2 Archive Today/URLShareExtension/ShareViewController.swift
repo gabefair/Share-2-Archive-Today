@@ -40,29 +40,35 @@ class ShareViewController: UIViewController {
     private func processUrl(_ urlString: String) {
             // Clean the URL of tracking parameters
             let cleanedUrl = cleanTrackingParamsFromUrl(urlString)
-            
-            // Create the Archive.today URL
-            guard let encodedUrl = cleanedUrl.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-                  let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
-                completeRequest()
-                return
-            }
+            urlHandler.saveURL(cleanedUrl)
             
             // Store the URL in UserDefaults for the main app to handle
             if let userDefaults = UserDefaults(suiteName: appGroupID) {
-                userDefaults.set(archiveUrl.absoluteString, forKey: "pendingArchiveURL")
+                userDefaults.set(cleanedUrl, forKey: "pendingArchiveURL")
                 userDefaults.synchronize()
-                
-                // Save the original URL to the list of saved URLs
-                urlHandler.saveURL(cleanedUrl)
             }
             
             // Open the main app using the extension context
-            let url = URL(string: "Share-2-Archive-Today://")!
-            extensionContext?.open(url) { success in
-                self.completeRequest()
+        // Use the extension context to open the main app
+        var responder: UIResponder? = self
+        while responder != nil {
+            if let application = responder as? UIApplication {
+                let url = URL(string: "Share-2-Archive-Today://")!
+                application.open(url, options: [:]) { success in
+                    if success {
+                        self.completeRequest()
+                    }
+                }
+                break
             }
+            responder = responder?.next
         }
+        
+        // Ensure we complete the request even if opening the app fails
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.completeRequest()
+        }
+    }
     
     private func handleUrlShare(_ itemProvider: NSItemProvider) {
         itemProvider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { [weak self] (item, error) in

@@ -50,7 +50,6 @@
 		B094ED8A2D58583900F66DEA /* Exceptions for "URLShareExtension" folder in "URLShareExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				"/Localized: MainInterface.storyboard",
 				Info.plist,
 			);
 			target = B094ED482D58071D00F66DEA /* URLShareExtension */;

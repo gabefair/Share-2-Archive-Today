@@ -7,7 +7,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Create window with the correct frame
-        window = UIWindow(frame: UIScreen.main.bounds)
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        self.window = window
         
         // Create the root view controller
         let savedURLsViewController = SavedURLsViewController()
@@ -17,23 +18,22 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         navigationController.navigationBar.prefersLargeTitles = true
         
         // Configure navigation bar appearance
-        let appearance = UINavigationBarAppearance()
-        appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = .systemBackground
-        appearance.titleTextAttributes = [.foregroundColor: UIColor.label]
-        appearance.largeTitleTextAttributes = [.foregroundColor: UIColor.label]
-        
-        navigationController.navigationBar.standardAppearance = appearance
-        navigationController.navigationBar.scrollEdgeAppearance = appearance
-        navigationController.navigationBar.compactAppearance = appearance
+        if #available(iOS 15.0, *) {
+            let appearance = UINavigationBarAppearance()
+            appearance.configureWithOpaqueBackground()
+            appearance.backgroundColor = .systemBackground
+            appearance.titleTextAttributes = [.foregroundColor: UIColor.label]
+            appearance.largeTitleTextAttributes = [.foregroundColor: UIColor.label]
+            
+            navigationController.navigationBar.standardAppearance = appearance
+            navigationController.navigationBar.scrollEdgeAppearance = appearance
+            navigationController.navigationBar.compactAppearance = appearance
+        }
         
         // Set the root view controller
-        window?.rootViewController = navigationController
-        window?.backgroundColor = .systemBackground
-        window?.makeKeyAndVisible()
-        
-        // Check for pending URLs
-        checkPendingURL()
+        window.rootViewController = navigationController
+        window.backgroundColor = .systemBackground
+        window.makeKeyAndVisible()
         
         return true
     }
@@ -53,7 +53,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             userDefaults.synchronize()
             
             // Open the URL
-            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            UIApplication.shared.open(url)
         }
     }
 }
