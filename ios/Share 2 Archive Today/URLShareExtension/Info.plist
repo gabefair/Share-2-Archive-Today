@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSExtension</key>
+    <dict>
+        <key>NSExtensionAttributes</key>
+        <dict>
+            <key>NSExtensionActivationRule</key>
+            <dict>
+                <key>NSExtensionActivationSupportsImageWithMaxCount</key>
+                <integer>1</integer>
+                <key>NSExtensionActivationSupportsWebURLWithMaxCount</key>
+                <integer>1</integer>
+                <key>NSExtensionActivationSupportsWebPageWithMaxCount</key>
+                <integer>1</integer>
+                <key>NSExtensionActivationSupportsFileWithMaxCount</key>
+                <integer>0</integer>
+                <key>NSExtensionActivationSupportsText</key>
+                <true/>
+                <key>NSExtensionActivationSupportsAttachmentsWithMaxCount</key>
+                <integer>0</integer>
+                <key>NSExtensionActivationSupportsAttachmentsWithMinCount</key>
+                <integer>0</integer>
+                <key>NSExtensionActivationDomainURLSchemes</key>
+                <array>
+                    <string>http</string>
+                    <string>https</string>
+                </array>
+            </dict>
+        </dict>
+        <key>NSExtensionPointIdentifier</key>
+        <string>com.apple.share-services</string>
+        <key>NSExtensionPrincipalClass</key>
+        <string>$(PRODUCT_MODULE_NAME).ShareViewController</string>
+    </dict>
+    <key>CFBundleDisplayName</key>
+        <string>Share 2 Archive Today</string>
+        <key>NSHumanReadableCopyright</key>
+        <string>Copyright © 2024 Gnosco. All rights reserved.</string>
+        <key>NSPhotoLibraryUsageDescription</key>
+        <string>Access is needed to scan QR codes for urls from shared images.</string>
+</dict>
+</plist>
+
