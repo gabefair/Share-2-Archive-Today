@@ -33,12 +33,14 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
               url.scheme == "share2archivetoday",
               let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
               let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
-              let urlString = urlQueryItem.value,
-              let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(urlString)") else {
+              let urlString = urlQueryItem.value
+        else {
             return
         }
-        
-        UIApplication.shared.open(archiveUrl)
+        if let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") {
+            UIApplication.shared.open(archiveUrl)
+        }
     }
     
     /// Handles opening URLs in the scene
@@ -51,12 +53,14 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
               url.scheme == "share2archivetoday",
               let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
               let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
-              let urlString = urlQueryItem.value,
-              let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(urlString)") else {
+              let urlString = urlQueryItem.value
+        else {
             return
         }
-        
-        UIApplication.shared.open(archiveUrl)
+        if let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") {
+            UIApplication.shared.open(archiveUrl)
+        }
     }
 
     /// Called when the scene is being released by the system

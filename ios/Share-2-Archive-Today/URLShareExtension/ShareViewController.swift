@@ -16,14 +16,14 @@ import SafariServices
 class ShareViewController: UIViewController {
     /// Text view for optional user notes
     @IBOutlet weak var textView: UITextView!
-    
     /// Shared instance of URLStore for managing saved URLs
     private let urlStore = URLStore.shared
     
     /// Sets up the initial state of the view controller
     override func viewDidLoad() {
         super.viewDidLoad()
-        textView?.placeholder = "Add a note (optional)"
+        textView?.isHidden = true
+        processSharedContent()
     }
 
     /// Handles the cancellation of the share extension
@@ -35,7 +35,7 @@ class ShareViewController: UIViewController {
     /// Processes the shared content when the user taps done
     /// - Parameter sender: The object that initiated the action
     @IBAction func doneTapped(_ sender: Any) {
-        processSharedContent()
+        processSharedContent() //Not called but method kept for proper lifecycle management
     }
     
     // MARK: - URL Processing Methods
@@ -120,20 +120,12 @@ class ShareViewController: UIViewController {
             return
         }
         
-        let group = DispatchGroup()
-        var foundURL = false
-        
         for itemProvider in attachments {
             if itemProvider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
-                group.enter()
-                
                 itemProvider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { [weak self] (item, error) in
-                    defer { group.leave() }
-                    
                     guard let self = self else { return }
                     
                     var urlString: String?
-                    
                     if let url = item as? URL {
                         urlString = url.absoluteString
                     } else if let urlStr = item as? String {
@@ -141,73 +133,36 @@ class ShareViewController: UIViewController {
                     }
                     
                     if let urlStr = urlString {
-                        foundURL = true
                         let processedUrl = self.processArchiveUrl(urlStr)
                         let cleanedUrl = self.cleanTrackingParamsFromUrl(processedUrl)
                         
-                        URLStore.shared.saveURL(cleanedUrl)
+                        // Save the URL to shared storage
+                        self.urlStore.saveURL(cleanedUrl)
                         
                         DispatchQueue.main.async {
-                            self.openUrlInMainApp(cleanedUrl)
+                            // Create the archive.today URL
+                            if let encodedUrl = cleanedUrl.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                               let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") {
+                                
+                                // Present the SFSafariViewController
+                                let safariVC = SFSafariViewController(url: archiveUrl)
+                                safariVC.preferredBarTintColor = .systemBackground
+                                safariVC.preferredControlTintColor = .systemBlue
+                                
+                                // Present the view controller
+                                self.present(safariVC, animated: true) {
+                                    // Complete the extension request after a short delay
+                                    // to allow the user to see the page loading
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                        self.completeRequest()
+                                    }
+                                }
+                            } else {
+                                self.completeRequest()
+                            }
                         }
                     }
                 }
-            }
-        }
-        
-        group.notify(queue: .main) { [weak self] in
-            if !foundURL {
-                let alert = UIAlertController(
-                    title: "No URL Found",
-                    message: "No valid URL was found in the shared content.",
-                    preferredStyle: .alert
-                )
-                alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
-                    self?.completeRequest()
-                })
-                self?.present(alert, animated: true)
-            }
-        }
-    }
-    
-    /// Opens a URL in the main app or falls back to Safari
-    /// - Parameter urlString: The URL string to open
-    /// This method attempts to open the URL in the main app first, and if that fails,
-    /// falls back to opening it in Safari
-    private func openUrlInMainApp(_ urlString: String) {
-        guard let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
-            completeRequest()
-            return
-        }
-        
-        // Create the URL for opening in the main app
-        let mainAppUrl = URL(string: "share2archivetoday://open?url=\(encodedUrl)")
-        
-        if let mainAppUrl = mainAppUrl {
-            // Create an NSUserActivity to open the URL in the main app
-            let userActivity = NSUserActivity(activityType: "org.Gnosco.Share-2-Archive-Today.openURL")
-            userActivity.webpageURL = mainAppUrl
-            
-            // Complete the extension request with the activity
-            let item = NSExtensionItem()
-            item.attachments = []
-            item.userInfo = ["activity": userActivity]
-            
-            extensionContext?.completeRequest(returningItems: [item]) { success in
-                if !success {
-                    // Fallback to Safari if we can't open the main app
-                    DispatchQueue.main.async { [weak self] in
-                        let safariVC = SFSafariViewController(url: archiveUrl)
-                        self?.present(safariVC, animated: true)
-                    }
-                }
-            }
-        } else {
-            // Fallback to Safari if we can't create the main app URL
-            let safariVC = SFSafariViewController(url: archiveUrl)
-            present(safariVC, animated: true) { [weak self] in
-                self?.completeRequest()
             }
         }
     }
