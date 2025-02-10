@@ -14,11 +14,31 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     /// The window instance for the app when not using scenes
     /// The window instance for the app when not using scenes
     var window: UIWindow?
-    private var pendingURL: URL?
         
-        /// Processes a URL to extract and open it in the archive service
+    // MARK: - URL Handling Methods
+        
+        /// Handles URLs when the app is opened via a URL scheme
+        /// - Parameters:
+        ///   - scene: The UIScene instance that received the URL
+        ///   - URLContexts: A set of URL contexts containing the URLs to handle
+        func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+            guard let urlContext = URLContexts.first else { return }
+            processURL(from: urlContext.url)
+        }
+        
+        /// Handles continuation of user activity, typically from Universal Links or Handoff
+        /// - Parameters:
+        ///   - scene: The UIScene instance that will continue the activity
+        ///   - userActivity: The user activity to continue
+        func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+            if let url = userActivity.webpageURL {
+                processURL(from: url)
+            }
+        }
+        
+        /// Processes a URL and opens it in archive.today
         /// - Parameter url: The URL to process
-        private func processAndOpenUrl(_ url: URL) {
+        private func processURL(from url: URL) {
             guard let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
                   let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
                   let urlString = urlQueryItem.value,
@@ -27,50 +47,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 return
             }
             
+            // Immediately open the URL in archive.today
             UIApplication.shared.open(archiveUrl, options: [:], completionHandler: nil)
         }
-        
-    // MARK: - URL Handling Methods
-    
-    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-        guard let urlContext = URLContexts.first,
-              let components = URLComponents(url: urlContext.url, resolvingAgainstBaseURL: true),
-              let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
-              let urlString = urlQueryItem.value else {
-            return
-        }
-        
-        // Create URL for archive.today
-        if let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-           let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") {
-            // If scene is active, open immediately; otherwise store for later
-            if scene.activationState == .foregroundActive {
-                openArchivedURL(archiveUrl)
-            } else {
-                pendingURL = archiveUrl
-            }
-        }
-    }
-    
-    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
-        guard let url = userActivity.webpageURL,
-              let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
-              let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
-              let urlString = urlQueryItem.value else {
-            return
-        }
-        
-        // Create URL for archive.today
-        if let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-           let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") {
-            // If scene is active, open immediately; otherwise store for later
-            if scene.activationState == .foregroundActive {
-                openArchivedURL(archiveUrl)
-            } else {
-                pendingURL = archiveUrl
-            }
-        }
-    }
     
     // MARK: - Helper Methods
     
@@ -106,10 +85,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Called when the scene has moved from an inactive state to an active state.
         // Use this method to restart any tasks that were paused (or not yet started) when the scene was inactive.
         // Restart any tasks that were paused while the scene was inactive
-        if let url = pendingURL {
-                    openArchivedURL(url)
-                    pendingURL = nil
-                }
+
     }
 
     /// Called when the scene is about to move from an active state to an inactive state
@@ -128,10 +104,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Called as the scene transitions from the background to the foreground.
         // Use this method to undo the changes made on entering the background.
         // Undo any changes made when entering the background
-        if let url = pendingURL {
-            openArchivedURL(url)
-            pendingURL = nil
-        }
+
     }
 
     /// Called as the scene transitions from the foreground to the background
