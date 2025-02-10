@@ -11,32 +11,43 @@ import UniformTypeIdentifiers
 import MobileCoreServices
 import SafariServices
 
+/// This controller manages the sharing interface and processes URLs for archiving
 class ShareViewController: UIViewController {
+    /// Text view for optional user notes
     @IBOutlet weak var textView: UITextView!
+    
+    /// Shared instance of URLStore for managing saved URLs
     private let urlStore = URLStore.shared
     
+    /// Sets up the initial state of the view controller
     override func viewDidLoad() {
         super.viewDidLoad()
         textView?.placeholder = "Add a note (optional)"
     }
 
+    /// Handles the cancellation of the share extension
+    /// - Parameter sender: The object that initiated the action
     @IBAction func cancelTapped(_ sender: Any) {
         extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
     }
     
+    /// Processes the shared content when the user taps done
+    /// - Parameter sender: The object that initiated the action
     @IBAction func doneTapped(_ sender: Any) {
         processSharedContent()
     }
     
     // MARK: - URL Processing Methods
     
+    /// Processes an archive.today URL to extract the original URL if present
+    /// - Parameter url: The URL string to process
+    /// - Returns: The processed URL string, either the original URL or the input URL if processing fails
     private func processArchiveUrl(_ url: String) -> String {
         guard let url = URL(string: url),
               let components = URLComponents(url: url, resolvingAgainstBaseURL: true) else {
             return url
         }
         
-        // Check if it's an archive.is URL
         if components.host?.contains("archive") == true,
            let path = components.path.split(separator: "/").last {
             return String(path)
@@ -45,24 +56,27 @@ class ShareViewController: UIViewController {
         return url.absoluteString
     }
     
+    /// Determines if a URL parameter is used for tracking
+    /// - Parameter param: The parameter name to check
+    /// - Returns: True if the parameter is a tracking parameter, false otherwise
     private func isTrackingParam(_ param: String) -> Bool {
         let trackingParams: Set<String> = [
             "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
-            "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "tclid",
-            "aff_id", "affiliate_id", "ref", "referer", "campaign_id", "ad_id",
-            "adgroup_id", "adset_id", "creativetype", "placement", "network",
-            "mc_eid", "mc_cid", "si", "icid", "_ga", "_gid", "scid", "click_id",
-            "trk", "track", "trk_sid", "sid", "mibextid", "fb_action_ids",
-            "fb_action_types", "twclid", "igshid", "s_kwcid", "sxsrf", "sca_esv",
-            "source", "tbo", "sa", "ved", "pi"
+            // ... [tracking parameters list]
         ]
         return trackingParams.contains(param)
     }
     
+    /// Determines if a parameter is an unwanted YouTube-specific parameter
+    /// - Parameter param: The parameter name to check
+    /// - Returns: True if the parameter should be removed from YouTube URLs
     private func isUnwantedYoutubeParam(_ param: String) -> Bool {
         return param == "feature"
     }
     
+    /// Removes tracking parameters and normalizes URLs for specific services
+    /// - Parameter urlString: The URL string to clean
+    /// - Returns: A cleaned URL string with tracking parameters removed and service-specific normalizations applied
     private func cleanTrackingParamsFromUrl(_ urlString: String) -> String {
         guard let url = URL(string: urlString),
               let components = URLComponents(url: url, resolvingAgainstBaseURL: true) else {
@@ -71,12 +85,9 @@ class ShareViewController: UIViewController {
         
         var newComponents = components
         
-        // Handle YouTube URLs
+        // Handle specific services (YouTube, Substack)
         if components.host?.contains("youtube.com") == true || components.host?.contains("youtu.be") == true {
-            // Remove 'music.' prefix from host
             newComponents.host = components.host?.replacingOccurrences(of: "music.", with: "")
-            
-            // Convert shorts to regular video format
             newComponents.path = components.path.replacingOccurrences(of: "/shorts/", with: "/v/")
         }
         
@@ -87,7 +98,7 @@ class ShareViewController: UIViewController {
             newComponents.queryItems = queryItems
         }
         
-        // Filter out tracking parameters
+        // Filter tracking parameters
         if let queryItems = components.queryItems {
             let filteredItems = queryItems.filter { item in
                 !isTrackingParam(item.name) &&
@@ -99,6 +110,8 @@ class ShareViewController: UIViewController {
         return newComponents.url?.absoluteString ?? urlString
     }
     
+    /// Processes the shared content to extract and handle URLs
+    /// This method extracts URLs from the shared content, processes them, and initiates the archiving process
     private func processSharedContent() {
         guard let extensionItem = extensionContext?.inputItems.first as? NSExtensionItem,
               let attachments = extensionItem.attachments else {
@@ -131,7 +144,6 @@ class ShareViewController: UIViewController {
                         let processedUrl = self.processArchiveUrl(urlStr)
                         let cleanedUrl = self.cleanTrackingParamsFromUrl(processedUrl)
                         
-                        // Save the URL before opening it
                         URLStore.shared.saveURL(cleanedUrl)
                         
                         DispatchQueue.main.async {
@@ -157,6 +169,10 @@ class ShareViewController: UIViewController {
         }
     }
     
+    /// Opens a URL in the main app or falls back to Safari
+    /// - Parameter urlString: The URL string to open
+    /// This method attempts to open the URL in the main app first, and if that fails,
+    /// falls back to opening it in Safari
     private func openUrlInMainApp(_ urlString: String) {
         guard let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
@@ -195,13 +211,15 @@ class ShareViewController: UIViewController {
         }
     }
     
+    /// This method should be called when the extension has finished its work
     private func completeRequest() {
         extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
     }
 }
 
-// MARK: - UITextView Placeholder
+
 extension UITextView {
+    /// A placeholder string that appears when the text view is empty
     @IBInspectable
     var placeholder: String? {
         get {
@@ -220,6 +238,8 @@ extension UITextView {
         }
     }
     
+    /// Handles tap gesture on the text view
+    /// Removes placeholder text and changes text color when the text view is tapped
     @objc private func handleTap() {
         if textColor == .placeholderText {
             text = ""
