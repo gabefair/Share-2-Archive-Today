@@ -45,15 +45,17 @@ class ShareViewController: UIViewController {
         guard let item = extensionContext?.inputItems.first as? NSExtensionItem,
               let itemProvider = item.attachments?.first,
               itemProvider.hasItemConformingToTypeIdentifier(UTType.url.identifier) else {
-            // No valid URL, dismiss immediately
-            extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+            // No valid URL, dismiss
             return
         }
         
-        // Start URL loading and immediately dismiss the share sheet
+        // Start URL loading and dismiss the share sheet
         itemProvider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { [weak self] (item, error) in
             guard let self = self,
                   let url = item as? URL ?? (item as? String).flatMap(URL.init) else {
+                DispatchQueue.main.async {
+                            self?.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+                        }
                 return
             }
             

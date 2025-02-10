@@ -35,8 +35,8 @@ class URLStore {
     /// - Note: If the URL already exists in storage, it will not be added again
     func saveURL(_ urlString: String) {
         var urls = getSavedURLs()
-        // Only add if not already present
-        if !urls.contains(urlString) {
+        // Ensure the URL is not already stored
+        if !urls.contains(where: { $0.caseInsensitiveCompare(urlString) == .orderedSame }) {
             urls.append(urlString)
             defaults.set(urls, forKey: urlsKey)
         }

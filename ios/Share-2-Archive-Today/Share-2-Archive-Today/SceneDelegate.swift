@@ -38,18 +38,25 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         
         /// Processes a URL and opens it in archive.today
         /// - Parameter url: The URL to process
-        private func processURL(from url: URL) {
-            guard let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
-                  let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
-                  let urlString = urlQueryItem.value,
-                  let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-                  let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
-                return
-            }
-            
-            // Immediately open the URL in archive.today
-            UIApplication.shared.open(archiveUrl, options: [:], completionHandler: nil)
+    private func processURL(from url: URL) {
+        var finalUrlString: String? = nil
+        
+        if let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
+           let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }) {
+            finalUrlString = urlQueryItem.value
+        } else {
+            // Direct URL case
+            finalUrlString = url.absoluteString
         }
+
+        guard let urlString = finalUrlString,
+              let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
+            return
+        }
+
+        UIApplication.shared.open(archiveUrl, options: [:], completionHandler: nil)
+    }
     
     // MARK: - Helper Methods
     
