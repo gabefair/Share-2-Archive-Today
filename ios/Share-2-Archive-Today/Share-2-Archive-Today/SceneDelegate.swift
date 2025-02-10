@@ -17,41 +17,29 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
-        guard let url = userActivity.webpageURL,
-              url.scheme == "share2archivetoday",
-              let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
-              let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
-              let urlString = urlQueryItem.value,
-              let decodedUrl = urlString.removingPercentEncoding,
-              let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(urlString)") else {
-            return
+            guard let url = userActivity.webpageURL,
+                  url.scheme == "share2archivetoday",
+                  let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
+                  let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
+                  let urlString = urlQueryItem.value,
+                  let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(urlString)") else {
+                return
+            }
+            
+            UIApplication.shared.open(archiveUrl)
         }
-        
-        // Present the archive.today URL in Safari
-        if let windowScene = scene as? UIWindowScene,
-           let viewController = windowScene.windows.first?.rootViewController {
-            let safariVC = SFSafariViewController(url: archiveUrl)
-            viewController.present(safariVC, animated: true, completion: nil)
-        }
-    }
-
+    
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         guard let url = URLContexts.first?.url,
               url.scheme == "share2archivetoday",
               let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
               let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
               let urlString = urlQueryItem.value,
-              let decodedUrl = urlString.removingPercentEncoding,
               let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(urlString)") else {
             return
         }
         
-        // Present the archive.today URL in Safari
-        if let windowScene = scene as? UIWindowScene,
-           let viewController = windowScene.windows.first?.rootViewController {
-            let safariVC = SFSafariViewController(url: archiveUrl)
-            viewController.present(safariVC, animated: true, completion: nil)
-        }
+        UIApplication.shared.open(archiveUrl)
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {
