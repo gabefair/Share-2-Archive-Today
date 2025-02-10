@@ -11,17 +11,21 @@ import UniformTypeIdentifiers
 import MobileCoreServices
 import SafariServices
 
-class ShareViewController: SLComposeServiceViewController {
+class ShareViewController: UIViewController {
+    @IBOutlet weak var textView: UITextView!
     private let urlStore = URLStore.shared
-    
-    override func isContentValid() -> Bool {
-        // We'll validate the content in didSelectPost
-        return true
-    }
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        placeholder = "Add a note (optional)"
+        textView?.placeholder = "Add a note (optional)"
+    }
+
+    @IBAction func cancelTapped(_ sender: Any) {
+        extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+    }
+    
+    @IBAction func doneTapped(_ sender: Any) {
+        processSharedContent()
     }
     
     // MARK: - URL Processing Methods
@@ -60,60 +64,42 @@ class ShareViewController: SLComposeServiceViewController {
     }
     
     private func cleanTrackingParamsFromUrl(_ urlString: String) -> String {
-            guard let url = URL(string: urlString),
-                  let components = URLComponents(url: url, resolvingAgainstBaseURL: true) else {
-                return urlString
-            }
-            
-            var newComponents = components
-            
-            // Handle YouTube URLs
-            if components.host?.contains("youtube.com") == true || components.host?.contains("youtu.be") == true {
-                // Remove 'music.' prefix from host
-                newComponents.host = components.host?.replacingOccurrences(of: "music.", with: "")
-                
-                // Convert shorts to regular video format
-                // path is a non-optional String, so we can use it directly
-                newComponents.path = components.path.replacingOccurrences(of: "/shorts/", with: "/v/")
-            }
-            
-            // Handle Substack URLs
-            if components.host?.hasSuffix(".substack.com") == true {
-                var queryItems = components.queryItems ?? []
-                queryItems.append(URLQueryItem(name: "no_cover", value: "true"))
-                newComponents.queryItems = queryItems
-            }
-            
-            // Filter out tracking parameters
-            if let queryItems = components.queryItems {
-                let filteredItems = queryItems.filter { item in
-                    !isTrackingParam(item.name) &&
-                    !(components.host?.contains("youtube.com") == true && isUnwantedYoutubeParam(item.name))
-                }
-                newComponents.queryItems = filteredItems.isEmpty ? nil : filteredItems
-            }
-            
-            return newComponents.url?.absoluteString ?? urlString
-        }
-    
-    private func openInBrowser(_ urlString: String) {
-        guard let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
-            completeRequest()
-            return
+        guard let url = URL(string: urlString),
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: true) else {
+            return urlString
         }
         
-        // Save the original URL to our list
-        urlStore.saveURL(urlString)
+        var newComponents = components
         
-        // Open the archive URL in Safari
-        let safariVC = SFSafariViewController(url: archiveUrl)
-        present(safariVC, animated: true) { [weak self] in
-            self?.completeRequest()
+        // Handle YouTube URLs
+        if components.host?.contains("youtube.com") == true || components.host?.contains("youtu.be") == true {
+            // Remove 'music.' prefix from host
+            newComponents.host = components.host?.replacingOccurrences(of: "music.", with: "")
+            
+            // Convert shorts to regular video format
+            newComponents.path = components.path.replacingOccurrences(of: "/shorts/", with: "/v/")
         }
+        
+        // Handle Substack URLs
+        if components.host?.hasSuffix(".substack.com") == true {
+            var queryItems = components.queryItems ?? []
+            queryItems.append(URLQueryItem(name: "no_cover", value: "true"))
+            newComponents.queryItems = queryItems
+        }
+        
+        // Filter out tracking parameters
+        if let queryItems = components.queryItems {
+            let filteredItems = queryItems.filter { item in
+                !isTrackingParam(item.name) &&
+                !(components.host?.contains("youtube.com") == true && isUnwantedYoutubeParam(item.name))
+            }
+            newComponents.queryItems = filteredItems.isEmpty ? nil : filteredItems
+        }
+        
+        return newComponents.url?.absoluteString ?? urlString
     }
-
-    override func didSelectPost() {
+    
+    private func processSharedContent() {
         guard let extensionItem = extensionContext?.inputItems.first as? NSExtensionItem,
               let attachments = extensionItem.attachments else {
             completeRequest()
@@ -145,8 +131,11 @@ class ShareViewController: SLComposeServiceViewController {
                         let processedUrl = self.processArchiveUrl(urlStr)
                         let cleanedUrl = self.cleanTrackingParamsFromUrl(processedUrl)
                         
+                        // Save the URL before opening it
+                        URLStore.shared.saveURL(cleanedUrl)
+                        
                         DispatchQueue.main.async {
-                            self.openInBrowser(cleanedUrl)
+                            self.openUrlInMainApp(cleanedUrl)
                         }
                     }
                 }
@@ -168,11 +157,74 @@ class ShareViewController: SLComposeServiceViewController {
         }
     }
     
+    private func openUrlInMainApp(_ urlString: String) {
+        guard let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
+            completeRequest()
+            return
+        }
+        
+        // Create the URL for opening in the main app
+        let mainAppUrl = URL(string: "share2archivetoday://open?url=\(encodedUrl)")
+        
+        if let mainAppUrl = mainAppUrl {
+            // Create an NSUserActivity to open the URL in the main app
+            let userActivity = NSUserActivity(activityType: "org.Gnosco.Share-2-Archive-Today.openURL")
+            userActivity.webpageURL = mainAppUrl
+            
+            // Complete the extension request with the activity
+            let item = NSExtensionItem()
+            item.attachments = []
+            item.userInfo = ["activity": userActivity]
+            
+            extensionContext?.completeRequest(returningItems: [item]) { success in
+                if !success {
+                    // Fallback to Safari if we can't open the main app
+                    DispatchQueue.main.async { [weak self] in
+                        let safariVC = SFSafariViewController(url: archiveUrl)
+                        self?.present(safariVC, animated: true)
+                    }
+                }
+            }
+        } else {
+            // Fallback to Safari if we can't create the main app URL
+            let safariVC = SFSafariViewController(url: archiveUrl)
+            present(safariVC, animated: true) { [weak self] in
+                self?.completeRequest()
+            }
+        }
+    }
+    
     private func completeRequest() {
         extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
     }
+}
 
-    override func configurationItems() -> [Any]! {
-        return []
+// MARK: - UITextView Placeholder
+extension UITextView {
+    @IBInspectable
+    var placeholder: String? {
+        get {
+            return nil
+        }
+        set {
+            text = newValue
+            textColor = .placeholderText
+            
+            if let existingGesture = gestureRecognizers?.first(where: { $0 is UITapGestureRecognizer }) {
+                removeGestureRecognizer(existingGesture)
+            }
+            
+            let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+            addGestureRecognizer(tapGesture)
+        }
+    }
+    
+    @objc private func handleTap() {
+        if textColor == .placeholderText {
+            text = ""
+            textColor = .label
+        }
+        becomeFirstResponder()
     }
 }

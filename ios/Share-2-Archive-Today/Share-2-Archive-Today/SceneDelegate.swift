@@ -6,17 +6,52 @@
 //
 
 import UIKit
+import SafariServices
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     var window: UIWindow?
 
-
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-        // Use this method to optionally configure and attach the UIWindow `window` to the provided UIWindowScene `scene`.
-        // If using a storyboard, the `window` property will automatically be initialized and attached to the scene.
-        // This delegate does not imply the connecting scene or session are new (see `application:configurationForConnectingSceneSession` instead).
         guard let _ = (scene as? UIWindowScene) else { return }
+    }
+
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        guard let url = userActivity.webpageURL,
+              url.scheme == "share2archivetoday",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
+              let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
+              let urlString = urlQueryItem.value,
+              let decodedUrl = urlString.removingPercentEncoding,
+              let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(urlString)") else {
+            return
+        }
+        
+        // Present the archive.today URL in Safari
+        if let windowScene = scene as? UIWindowScene,
+           let viewController = windowScene.windows.first?.rootViewController {
+            let safariVC = SFSafariViewController(url: archiveUrl)
+            viewController.present(safariVC, animated: true, completion: nil)
+        }
+    }
+
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        guard let url = URLContexts.first?.url,
+              url.scheme == "share2archivetoday",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
+              let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
+              let urlString = urlQueryItem.value,
+              let decodedUrl = urlString.removingPercentEncoding,
+              let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(urlString)") else {
+            return
+        }
+        
+        // Present the archive.today URL in Safari
+        if let windowScene = scene as? UIWindowScene,
+           let viewController = windowScene.windows.first?.rootViewController {
+            let safariVC = SFSafariViewController(url: archiveUrl)
+            viewController.present(safariVC, animated: true, completion: nil)
+        }
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {
@@ -46,7 +81,4 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Use this method to save data, release shared resources, and store enough scene-specific state information
         // to restore the scene back to its current state.
     }
-
-
 }
-
