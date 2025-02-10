@@ -23,44 +23,32 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let _ = (scene as? UIWindowScene) else { return }
     }
 
-    /// Handles continuing user activity in the scene
-    /// - Parameters:
-    ///   - scene: The scene handling the activity
-    ///   - userActivity: The activity to continue
-    /// Opens the URL in archive.today if it's a valid share2archivetoday URL
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
         guard let url = userActivity.webpageURL,
               url.scheme == "share2archivetoday",
               let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
               let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
-              let urlString = urlQueryItem.value
-        else {
+              let urlString = urlQueryItem.value,
+              let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
             return
         }
-        if let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-           let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") {
-            UIApplication.shared.open(archiveUrl)
-        }
+        
+        UIApplication.shared.open(archiveUrl)
     }
     
-    /// Handles opening URLs in the scene
-    /// - Parameters:1) 1
-    ///   - scene: The scene handling the URLs
-    ///   - URLContexts: Set of URL contexts to handle
-    /// Opens the URL in archive.today if it's a valid share2archivetoday URL
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         guard let url = URLContexts.first?.url,
               url.scheme == "share2archivetoday",
               let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
               let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
-              let urlString = urlQueryItem.value
-        else {
+              let urlString = urlQueryItem.value,
+              let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
             return
         }
-        if let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-           let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") {
-            UIApplication.shared.open(archiveUrl)
-        }
+        
+        UIApplication.shared.open(archiveUrl)
     }
 
     /// Called when the scene is being released by the system

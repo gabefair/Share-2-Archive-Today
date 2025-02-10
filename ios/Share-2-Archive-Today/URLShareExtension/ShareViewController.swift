@@ -136,30 +136,25 @@ class ShareViewController: UIViewController {
                         let processedUrl = self.processArchiveUrl(urlStr)
                         let cleanedUrl = self.cleanTrackingParamsFromUrl(processedUrl)
                         
-                        // Save the URL to shared storage
+                        // Save URL to shared storage
                         self.urlStore.saveURL(cleanedUrl)
                         
-                        DispatchQueue.main.async {
-                            // Create the archive.today URL
-                            if let encodedUrl = cleanedUrl.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-                               let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") {
-                                
-                                // Present the SFSafariViewController
-                                let safariVC = SFSafariViewController(url: archiveUrl)
-                                safariVC.preferredBarTintColor = .systemBackground
-                                safariVC.preferredControlTintColor = .systemBlue
-                                
-                                // Present the view controller
-                                self.present(safariVC, animated: true) {
-                                    // Complete the extension request after a short delay
-                                    // to allow the user to see the page loading
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                                        self.completeRequest()
-                                    }
-                                }
-                            } else {
-                                self.completeRequest()
-                            }
+                        // Prepare URL for main app
+                        if let encodedUrl = cleanedUrl.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                           let mainAppUrl = URL(string: "share2archivetoday://open?url=\(encodedUrl)") {
+                            
+                            // Create activity to pass to main app
+                            let userActivity = NSUserActivity(activityType: "org.Gnosco.Share-2-Archive-Today.openURL")
+                            userActivity.webpageURL = mainAppUrl
+                            
+                            // Create extension item with activity
+                            let item = NSExtensionItem()
+                            item.userInfo = ["activity": userActivity]
+                            
+                            // Complete request with activity
+                            self.extensionContext?.completeRequest(returningItems: [item])
+                        } else {
+                            self.completeRequest()
                         }
                     }
                 }
