@@ -6,8 +6,37 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		B094EE2F2D59A0B600F66DEA /* URLShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B094EE252D59A0B600F66DEA /* URLShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B094EE2D2D59A0B600F66DEA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B094EE002D5950AA00F66DEA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B094EE242D59A0B600F66DEA;
+			remoteInfo = URLShareExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B094EE342D59A0B600F66DEA /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B094EE2F2D59A0B600F66DEA /* URLShareExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		B094EE082D5950AA00F66DEA /* Share-2-Archive-Today.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Share-2-Archive-Today.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B094EE252D59A0B600F66DEA /* URLShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = URLShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -18,6 +47,20 @@
 			);
 			target = B094EE072D5950AA00F66DEA /* Share-2-Archive-Today */;
 		};
+		B094EE332D59A0B600F66DEA /* Exceptions for "URLShareExtension" folder in "URLShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B094EE242D59A0B600F66DEA /* URLShareExtension */;
+		};
+		B094EE3F2D59AB0B00F66DEA /* Exceptions for "Share-2-Archive-Today" folder in "URLShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				URLStore.swift,
+			);
+			target = B094EE242D59A0B600F66DEA /* URLShareExtension */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -25,14 +68,30 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				B094EE1A2D5950AD00F66DEA /* Exceptions for "Share-2-Archive-Today" folder in "Share-2-Archive-Today" target */,
+				B094EE3F2D59AB0B00F66DEA /* Exceptions for "Share-2-Archive-Today" folder in "URLShareExtension" target */,
 			);
 			path = "Share-2-Archive-Today";
+			sourceTree = "<group>";
+		};
+		B094EE262D59A0B600F66DEA /* URLShareExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B094EE332D59A0B600F66DEA /* Exceptions for "URLShareExtension" folder in "URLShareExtension" target */,
+			);
+			path = URLShareExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		B094EE052D5950AA00F66DEA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B094EE222D59A0B600F66DEA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -46,6 +105,7 @@
 			isa = PBXGroup;
 			children = (
 				B094EE0A2D5950AA00F66DEA /* Share-2-Archive-Today */,
+				B094EE262D59A0B600F66DEA /* URLShareExtension */,
 				B094EE092D5950AA00F66DEA /* Products */,
 			);
 			sourceTree = "<group>";
@@ -54,6 +114,7 @@
 			isa = PBXGroup;
 			children = (
 				B094EE082D5950AA00F66DEA /* Share-2-Archive-Today.app */,
+				B094EE252D59A0B600F66DEA /* URLShareExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -68,10 +129,12 @@
 				B094EE042D5950AA00F66DEA /* Sources */,
 				B094EE052D5950AA00F66DEA /* Frameworks */,
 				B094EE062D5950AA00F66DEA /* Resources */,
+				B094EE342D59A0B600F66DEA /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B094EE2E2D59A0B600F66DEA /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				B094EE0A2D5950AA00F66DEA /* Share-2-Archive-Today */,
@@ -82,6 +145,28 @@
 			productName = "Share-2-Archive-Today";
 			productReference = B094EE082D5950AA00F66DEA /* Share-2-Archive-Today.app */;
 			productType = "com.apple.product-type.application";
+		};
+		B094EE242D59A0B600F66DEA /* URLShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B094EE302D59A0B600F66DEA /* Build configuration list for PBXNativeTarget "URLShareExtension" */;
+			buildPhases = (
+				B094EE212D59A0B600F66DEA /* Sources */,
+				B094EE222D59A0B600F66DEA /* Frameworks */,
+				B094EE232D59A0B600F66DEA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B094EE262D59A0B600F66DEA /* URLShareExtension */,
+			);
+			name = URLShareExtension;
+			packageProductDependencies = (
+			);
+			productName = URLShareExtension;
+			productReference = B094EE252D59A0B600F66DEA /* URLShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -94,6 +179,9 @@
 				LastUpgradeCheck = 1610;
 				TargetAttributes = {
 					B094EE072D5950AA00F66DEA = {
+						CreatedOnToolsVersion = 16.1;
+					};
+					B094EE242D59A0B600F66DEA = {
 						CreatedOnToolsVersion = 16.1;
 					};
 				};
@@ -113,12 +201,20 @@
 			projectRoot = "";
 			targets = (
 				B094EE072D5950AA00F66DEA /* Share-2-Archive-Today */,
+				B094EE242D59A0B600F66DEA /* URLShareExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		B094EE062D5950AA00F66DEA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B094EE232D59A0B600F66DEA /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -135,7 +231,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B094EE212D59A0B600F66DEA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B094EE2E2D59A0B600F66DEA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B094EE242D59A0B600F66DEA /* URLShareExtension */;
+			targetProxy = B094EE2D2D59A0B600F66DEA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		B094EE1C2D5950AD00F66DEA /* Debug */ = {
@@ -143,6 +254,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Share-2-Archive-Today/Share-2-Archive-Today.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = NR87AJVD3K;
@@ -153,6 +265,7 @@
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -160,6 +273,10 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "org.Gnosco.Share-2-Archive-Today";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -171,6 +288,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Share-2-Archive-Today/Share-2-Archive-Today.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = NR87AJVD3K;
@@ -181,6 +299,7 @@
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -188,6 +307,10 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "org.Gnosco.Share-2-Archive-Today";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -313,6 +436,68 @@
 			};
 			name = Release;
 		};
+		B094EE312D59A0B600F66DEA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = URLShareExtension/URLShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = NR87AJVD3K;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = URLShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = URLShareExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "org.Gnosco.Share-2-Archive-Today.URLShareExtension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B094EE322D59A0B600F66DEA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = URLShareExtension/URLShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = NR87AJVD3K;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = URLShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = URLShareExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "org.Gnosco.Share-2-Archive-Today.URLShareExtension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -330,6 +515,15 @@
 			buildConfigurations = (
 				B094EE1C2D5950AD00F66DEA /* Debug */,
 				B094EE1D2D5950AD00F66DEA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B094EE302D59A0B600F66DEA /* Build configuration list for PBXNativeTarget "URLShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B094EE312D59A0B600F66DEA /* Debug */,
+				B094EE322D59A0B600F66DEA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
