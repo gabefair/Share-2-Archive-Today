@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 import MobileCoreServices
 import SafariServices
 
+/// A view controller that handles the share extension functionality for archiving URLs
 /// This controller manages the sharing interface and processes URLs for archiving
 class ShareViewController: UIViewController {
     /// Text view for optional user notes
@@ -211,12 +212,14 @@ class ShareViewController: UIViewController {
         }
     }
     
+    /// Completes the share extension request
     /// This method should be called when the extension has finished its work
     private func completeRequest() {
         extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
     }
 }
 
+// MARK: - UITextView Placeholder Extension
 
 extension UITextView {
     /// A placeholder string that appears when the text view is empty
