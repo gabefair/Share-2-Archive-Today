@@ -11,45 +11,80 @@ import SafariServices
 /// This delegate is responsible for managing the app's window scene lifecycle and URL-based interactions,
 /// including handling URLs opened from the share extension
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
-    /// The window associated with the scene
+    /// The window instance for the app when not using scenes
+    /// The window instance for the app when not using scenes
     var window: UIWindow?
-
-    /// Called when a new scene is being configured
-    /// - Parameters:
-    ///   - scene: The scene that is being configured
-    ///   - session: The session containing scene details
-    ///   - connectionOptions: Options for configuring the scene connection
-    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-        guard let _ = (scene as? UIWindowScene) else { return }
-    }
-
-    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
-        guard let url = userActivity.webpageURL,
-              url.scheme == "share2archivetoday",
-              let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
-              let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
-              let urlString = urlQueryItem.value,
-              let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
-            return
+    private var pendingURL: URL?
+        
+        /// Processes a URL to extract and open it in the archive service
+        /// - Parameter url: The URL to process
+        private func processAndOpenUrl(_ url: URL) {
+            guard let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
+                  let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
+                  let urlString = urlQueryItem.value,
+                  let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                  let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
+                return
+            }
+            
+            UIApplication.shared.open(archiveUrl, options: [:], completionHandler: nil)
         }
         
-        UIApplication.shared.open(archiveUrl)
-    }
+    // MARK: - URL Handling Methods
     
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-        guard let url = URLContexts.first?.url,
-              url.scheme == "share2archivetoday",
-              let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
+        guard let urlContext = URLContexts.first,
+              let components = URLComponents(url: urlContext.url, resolvingAgainstBaseURL: true),
               let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
-              let urlString = urlQueryItem.value,
-              let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
+              let urlString = urlQueryItem.value else {
             return
         }
         
-        UIApplication.shared.open(archiveUrl)
+        // Create URL for archive.today
+        if let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") {
+            // If scene is active, open immediately; otherwise store for later
+            if scene.activationState == .foregroundActive {
+                openArchivedURL(archiveUrl)
+            } else {
+                pendingURL = archiveUrl
+            }
+        }
     }
+    
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        guard let url = userActivity.webpageURL,
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
+              let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
+              let urlString = urlQueryItem.value else {
+            return
+        }
+        
+        // Create URL for archive.today
+        if let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") {
+            // If scene is active, open immediately; otherwise store for later
+            if scene.activationState == .foregroundActive {
+                openArchivedURL(archiveUrl)
+            } else {
+                pendingURL = archiveUrl
+            }
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func openArchivedURL(_ url: URL) {
+        UIApplication.shared.open(url, options: [:], completionHandler: nil)
+    }
+        
+        /// Called when scene sessions are discarded
+        /// - Parameters:
+        ///   - application: The singleton app instance
+        ///   - sceneSessions: The set of scenes that were discarded
+        func application(_ application: UIApplication, didDiscardSceneSessions sceneSessions: Set<UISceneSession>) {
+            // Clean up any resources associated with discarded scenes
+        }
 
     /// Called when the scene is being released by the system
     /// - Parameter scene: The scene that is being released
@@ -71,6 +106,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Called when the scene has moved from an inactive state to an active state.
         // Use this method to restart any tasks that were paused (or not yet started) when the scene was inactive.
         // Restart any tasks that were paused while the scene was inactive
+        if let url = pendingURL {
+                    openArchivedURL(url)
+                    pendingURL = nil
+                }
     }
 
     /// Called when the scene is about to move from an active state to an inactive state
@@ -89,6 +128,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Called as the scene transitions from the background to the foreground.
         // Use this method to undo the changes made on entering the background.
         // Undo any changes made when entering the background
+        if let url = pendingURL {
+            openArchivedURL(url)
+            pendingURL = nil
+        }
     }
 
     /// Called as the scene transitions from the foreground to the background
