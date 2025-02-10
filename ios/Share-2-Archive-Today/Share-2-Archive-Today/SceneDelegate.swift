@@ -42,7 +42,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
     
     /// Handles opening URLs in the scene
-    /// - Parameters:
+    /// - Parameters:1) 1
     ///   - scene: The scene handling the URLs
     ///   - URLContexts: Set of URL contexts to handle
     /// Opens the URL in archive.today if it's a valid share2archivetoday URL
