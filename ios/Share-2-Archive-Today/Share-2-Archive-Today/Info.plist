@@ -11,6 +11,10 @@
             </array>
             <key>CFBundleURLName</key>
             <string>org.Gnosco.Share-2-Archive-Today</string>
+            <key>CFBundleURLSchemes</key>
+                    <array>
+                        <string>share2archivetoday</string>
+                    </array>
         </dict>
     </array>
 	<key>UIApplicationSceneManifest</key>
@@ -32,5 +36,9 @@
 			</array>
 		</dict>
 	</dict>
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+        <string>share2archivetoday</string>
+    </array>
 </dict>
 </plist>

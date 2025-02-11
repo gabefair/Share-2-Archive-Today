@@ -21,10 +21,21 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         /// - Parameters:
         ///   - scene: The UIScene instance that received the URL
         ///   - URLContexts: A set of URL contexts containing the URLs to handle
-        func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-            guard let urlContext = URLContexts.first else { return }
-            processURL(from: urlContext.url)
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        guard let urlContext = URLContexts.first else { return }
+        
+        let incomingURL = urlContext.url
+        if incomingURL.scheme == "share2archivetoday",
+           let components = URLComponents(url: incomingURL, resolvingAgainstBaseURL: true),
+           let queryItem = components.queryItems?.first(where: { $0.name == "url" }),
+           let receivedUrlString = queryItem.value,
+           let receivedUrl = URL(string: receivedUrlString) {
+            
+            DispatchQueue.main.async {
+                UIApplication.shared.open(receivedUrl, options: [:], completionHandler: nil)
+            }
         }
+    }
         
         /// Handles continuation of user activity, typically from Universal Links or Handoff
         /// - Parameters:
