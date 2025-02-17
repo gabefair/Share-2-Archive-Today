@@ -1,13 +1,14 @@
 # Share 2 Archive Today
+[<img src="https://play.google.com/intl/en_us/badges/images/generic/en-play-badge.png"
+alt="Get it on Google Play"
+height="80">](https://play.google.com/store/apps/details?id=org.gnosco.share2archivetoday)
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
 alt="Get it on F-Droid"
 height="80">](https://f-droid.org/en/packages/org.gnosco.share2archivetoday/)
 [<img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png"
 alt="Get it on IzzyOnDroid"
 height="80">](https://apt.izzysoft.de/fdroid/index/apk/test)
-[<img src="https://play.google.com/intl/en_us/badges/images/generic/en-play-badge.png"
-alt="Get it on Google Play"
-height="80">](https://play.google.com/store/apps/details?id=org.gnosco.share2archivetoday)
+
 
 [![Moonlight for ChromeOS](https://moonlight-stream.org/images/chrome_webstore.png)](https://chromewebstore.google.com/detail/archive-webpage/falfcajjjjfjjlfabnfaadepcoagegip)
 
