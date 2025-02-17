@@ -10,51 +10,80 @@ import Foundation
 
 /// A singleton class that manages the storage and retrieval of URLs using UserDefaults
 /// This class provides thread-safe access to a shared URL storage that persists across app launches
+/// Manages the storage and retrieval of archived URLs using UserDefaults with App Groups
 class URLStore {
-    /// The shared instance of URLStore
+    /// Shared instance for singleton access
     static let shared = URLStore()
     
-    /// UserDefaults instance for storing URLs
-    private let defaults: UserDefaults
+    /// UserDefaults suite for sharing data between app and extension
+    private let defaults: UserDefaults?
     
-    /// Key used to store URLs in UserDefaults
-    private let urlsKey = "saved_urls"
+    /// Key for storing URLs in UserDefaults
+    private let urlStorageKey = "saved_urls"
     
-    /// Private initializer to enforce singleton pattern
-    /// - Throws: fatalError if UserDefaults cannot be initialized with the app group
+    /// Group identifier for sharing data between app and extension
+    private let appGroupIdentifier = "group.your.app.identifier" // Update this with your app group identifier
+    
+    /// Private initializer for singleton pattern
     private init() {
-        // Initialize with the specified app group identifier
-        guard let defaults = UserDefaults(suiteName: "group.org.Gnosco.Share-2-Archive-Today") else {
-            fatalError("Failed to initialize UserDefaults with app group")
-        }
-        self.defaults = defaults
+        defaults = UserDefaults(suiteName: appGroupIdentifier)
     }
     
     /// Saves a URL to persistent storage
     /// - Parameter urlString: The URL string to save
-    /// - Note: If the URL already exists in storage, it will not be added again
-    func saveURL(_ urlString: String) {
-        var urls = getSavedURLs()
-        // Ensure the URL is not already stored
-        if !urls.contains(where: { $0.caseInsensitiveCompare(urlString) == .orderedSame }) {
-            urls.append(urlString)
-            defaults.set(urls, forKey: urlsKey)
+    /// - Returns: Boolean indicating success of the save operation
+    @discardableResult
+    func saveURL(_ urlString: String) -> Bool {
+        guard let defaults = defaults else { return false }
+        
+        var savedURLs = getSavedURLs()
+        
+        // Avoid duplicates
+        if !savedURLs.contains(urlString) {
+            savedURLs.append(urlString)
+            defaults.set(savedURLs, forKey: urlStorageKey)
+            defaults.synchronize()
+            return true
         }
+        
+        return false
     }
     
-    /// Retrieves all saved URLs from storage
-    /// - Returns: An array of URL strings, or an empty array if no URLs are saved
+    /// Retrieves all saved URLs from persistent storage
+    /// - Returns: Array of saved URL strings
     func getSavedURLs() -> [String] {
-        return defaults.stringArray(forKey: urlsKey) ?? []
+        guard let defaults = defaults else { return [] }
+        return defaults.stringArray(forKey: urlStorageKey) ?? []
     }
     
-    /// Removes a URL from storage at the specified index
-    /// - Parameter index: The index of the URL to remove
-    /// - Note: If the index is out of bounds, this method does nothing
-    func removeURL(at index: Int) {
-        var urls = getSavedURLs()
-        guard index < urls.count else { return }
-        urls.remove(at: index)
-        defaults.set(urls, forKey: urlsKey)
+    /// Removes a URL from persistent storage
+    /// - Parameter urlString: The URL string to remove
+    /// - Returns: Boolean indicating success of the removal operation
+    @discardableResult
+    func removeURL(_ urlString: String) -> Bool {
+        guard let defaults = defaults else { return false }
+        
+        var savedURLs = getSavedURLs()
+        if let index = savedURLs.firstIndex(of: urlString) {
+            savedURLs.remove(at: index)
+            defaults.set(savedURLs, forKey: urlStorageKey)
+            defaults.synchronize()
+            return true
+        }
+        
+        return false
+    }
+    
+    /// Removes all saved URLs from persistent storage
+    func clearAllURLs() {
+        defaults?.removeObject(forKey: urlStorageKey)
+        defaults?.synchronize()
+    }
+    
+    /// Checks if a URL exists in persistent storage
+    /// - Parameter urlString: The URL string to check
+    /// - Returns: Boolean indicating if the URL exists
+    func urlExists(_ urlString: String) -> Bool {
+        return getSavedURLs().contains(urlString)
     }
 }
