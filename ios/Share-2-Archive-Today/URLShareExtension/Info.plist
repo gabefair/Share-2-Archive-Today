@@ -7,34 +7,20 @@
         <key>NSExtensionAttributes</key>
         <dict>
             <key>NSExtensionActivationRule</key>
-            <dict>
-                <key>NSExtensionActivationDictionaryVersion</key>
-                <integer>2</integer>
-                <key>NSExtensionActivationSupportsImageWithMaxCount</key>
-                <integer>1</integer>
-                <key>NSExtensionActivationSupportsWebURLWithMaxCount</key>
-                <integer>1</integer>
-                <key>NSExtensionActivationSupportsWebPageWithMaxCount</key>
-                <integer>1</integer>
-                <key>NSExtensionActivationSupportsFileWithMaxCount</key>
-                <integer>0</integer>
-                <key>NSExtensionActivationSupportsText</key>
-                <true/>
-                <key>NSExtensionActivationSupportsAttachmentsWithMaxCount</key>
-                <integer>0</integer>
-                <key>NSExtensionActivationSupportsAttachmentsWithMinCount</key>
-                <integer>0</integer>
-                <key>NSExtensionActivationDomainURLSchemes</key>
-                <array>
-                    <string>http</string>
-                    <string>https</string>
-                </array>
-            </dict>
+                <string>TRUEPREDICATE</string>
         </dict>
         <key>NSExtensionMainStoryboard</key>
         <string>MainInterface</string>
         <key>NSExtensionPointIdentifier</key>
         <string>com.apple.share-services</string>
     </dict>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.org.Gnosco.Share-2-Archive-Today</string>
+    </array>
+    <key>NSUserActivityTypes</key>
+    <array>
+        <string>org.Gnosco.Share-2-Archive-Today.openURL</string>
+    </array>
 </dict>
 </plist>
