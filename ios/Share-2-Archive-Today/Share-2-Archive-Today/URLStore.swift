@@ -22,7 +22,7 @@ class URLStore {
     private let urlStorageKey = "saved_urls"
     
     /// Group identifier for sharing data between app and extension
-    private let appGroupIdentifier = "group.your.app.identifier" // Update this with your app group identifier
+    private let appGroupIdentifier = "group.org.Gnosco.Share-2-Archive-Today" 
     
     /// Private initializer for singleton pattern
     private init() {
