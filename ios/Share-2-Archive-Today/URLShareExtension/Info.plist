@@ -22,5 +22,14 @@
     <array>
         <string>org.Gnosco.Share-2-Archive-Today.openURL</string>
     </array>
+    <key>OSLogPreferences</key>
+    <dict>
+        <key>Subsystem</key>
+        <string>org.Gnosco.Share-2-Archive-Today</string>
+        <key>Category</key>
+        <string>ShareExtension</string>
+        <key>Default</key>
+        <string>Debug</string>
+    </dict>
 </dict>
 </plist>
