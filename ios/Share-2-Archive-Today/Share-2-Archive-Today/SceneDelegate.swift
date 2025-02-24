@@ -6,133 +6,187 @@
 //
 import UIKit
 import SafariServices
+import os.log
 
 /// Manages the app's window scene and handles URL-based interactions
 /// This delegate is responsible for managing the app's window scene lifecycle and URL-based interactions,
 /// including handling URLs opened from the share extension
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     /// The window instance for the app when not using scenes
-    /// The window instance for the app when not using scenes
     var window: UIWindow?
+    
+    /// Logger for debugging
+    private let logger = Logger(subsystem: "org.Gnosco.Share-2-Archive-Today", category: "SceneDelegate")
         
     // MARK: - URL Handling Methods
         
-        /// Handles URLs when the app is opened via a URL scheme
-        /// - Parameters:
-        ///   - scene: The UIScene instance that received the URL
-        ///   - URLContexts: A set of URL contexts containing the URLs to handle
+    /// Handles URLs when the app is opened via a URL scheme
+    /// - Parameters:
+    ///   - scene: The UIScene instance that received the URL
+    ///   - URLContexts: A set of URL contexts containing the URLs to handle
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-        guard let urlContext = URLContexts.first else { return }
+        guard let urlContext = URLContexts.first else {
+            logger.error("No URL contexts provided")
+            return
+        }
         
         let incomingURL = urlContext.url
-        if incomingURL.scheme == "share2archivetoday",
-           let components = URLComponents(url: incomingURL, resolvingAgainstBaseURL: true),
-           let queryItem = components.queryItems?.first(where: { $0.name == "url" }),
-           let receivedUrlString = queryItem.value,
-           let receivedUrl = URL(string: receivedUrlString) {
+        logger.info("Received URL in scene: \(incomingURL)")
+        
+        if incomingURL.scheme == "share2archivetoday" {
+            if let components = URLComponents(url: incomingURL, resolvingAgainstBaseURL: true),
+               let queryItem = components.queryItems?.first(where: { $0.name == "url" }),
+               let receivedUrlString = queryItem.value,
+               let decodedURL = receivedUrlString.removingPercentEncoding {
+                
+                // Process the URL directly from the URL parameters
+                processArchivedURL(decodedURL)
+            } else {
+                // No URL in parameters, check if we need to process a pending URL
+                checkForPendingURL()
+            }
+        } else {
+            logger.error("Unsupported URL scheme: \(incomingURL.scheme ?? "nil")")
+        }
+    }
+    
+    /// Processes a URL that needs to be archived
+    /// - Parameter urlString: The URL string to process
+    private func processArchivedURL(_ urlString: String) {
+        logger.info("Processing URL for archiving: \(urlString)")
+        
+        // Create and open archive.today URL
+        if let archiveURL = createArchiveURL(from: urlString) {
+            presentArchivePage(with: archiveURL)
+        } else {
+            logger.error("Failed to create archive URL from: \(urlString)")
+        }
+    }
+    
+    /// Checks if there's a pending URL from the share extension that needs to be processed
+    private func checkForPendingURL() {
+        logger.info("Checking for pending URL from share extension")
+        
+        if let defaults = UserDefaults(suiteName: "group.org.Gnosco.Share-2-Archive-Today") {
+            let hasPendingURL = defaults.bool(forKey: "pendingArchiveURL")
             
-            DispatchQueue.main.async {
-                UIApplication.shared.open(receivedUrl, options: [:], completionHandler: nil)
+            if hasPendingURL, let urlString = defaults.string(forKey: "lastSharedURL") {
+                logger.info("Found pending URL: \(urlString)")
+                
+                // Clear the pending flag
+                defaults.set(false, forKey: "pendingArchiveURL")
+                
+                // Process the URL
+                processArchivedURL(urlString)
+            } else {
+                logger.info("No pending URL found")
             }
         }
     }
-        
-        /// Handles continuation of user activity, typically from Universal Links or Handoff
-        /// - Parameters:
-        ///   - scene: The UIScene instance that will continue the activity
-        ///   - userActivity: The user activity to continue
-        func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
-            if let url = userActivity.webpageURL {
-                processURL(from: url)
-            }
+    
+    /// Creates an archive.today URL from a given URL string
+    /// - Parameter urlString: The URL to archive
+    /// - Returns: A URL for the archive.today service, if creation was successful
+    private func createArchiveURL(from urlString: String) -> URL? {
+        guard let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            logger.error("Failed to encode URL: \(urlString)")
+            return nil
         }
         
-        /// Processes a URL and opens it in archive.today
-        /// - Parameter url: The URL to process
+        let archiveUrlString = "https://archive.today/?run=1&url=\(encodedUrl)"
+        logger.debug("Created archive URL: \(archiveUrlString)")
+        return URL(string: archiveUrlString)
+    }
+    
+    /// Presents the archive.today page in a Safari View Controller
+    /// - Parameter url: The archive.today URL to present
+    private func presentArchivePage(with url: URL) {
+        guard let windowScene = window?.windowScene,
+              let rootViewController = windowScene.windows.first?.rootViewController else {
+            logger.error("Could not get root view controller")
+            return
+        }
+        
+        let safariVC = SFSafariViewController(url: url)
+        safariVC.preferredControlTintColor = .systemBlue
+        
+        logger.info("Presenting Safari View Controller with URL: \(url)")
+        
+        if let presented = rootViewController.presentedViewController {
+            logger.debug("Dismissing existing presented view controller")
+            presented.dismiss(animated: true) {
+                rootViewController.present(safariVC, animated: true)
+            }
+        } else {
+            rootViewController.present(safariVC, animated: true)
+        }
+    }
+    
+    /// Called when the scene becomes active to check for pending URLs
+    /// - Parameter scene: The scene that became active
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        logger.debug("Scene became active")
+        
+        // Check for pending URLs from share extension
+        checkForPendingURL()
+    }
+        
+    /// Handles continuation of user activity, typically from Universal Links or Handoff
+    /// - Parameters:
+    ///   - scene: The UIScene instance that will continue the activity
+    ///   - userActivity: The user activity to continue
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        if let url = userActivity.webpageURL {
+            logger.info("Continuing user activity with URL: \(url)")
+            processURL(from: url)
+        }
+    }
+        
+    /// Processes a URL and opens it in archive.today
+    /// - Parameter url: The URL to process
     private func processURL(from url: URL) {
         var finalUrlString: String? = nil
         
         if let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
            let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }) {
             finalUrlString = urlQueryItem.value
+            logger.debug("Extracted URL from query parameters: \(urlQueryItem.value ?? "nil")")
         } else {
             // Direct URL case
             finalUrlString = url.absoluteString
+            logger.debug("Using direct URL: \(url.absoluteString)")
         }
 
-        guard let urlString = finalUrlString,
-              let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
+        guard let urlString = finalUrlString else {
+            logger.error("Could not extract URL string")
             return
         }
 
-        UIApplication.shared.open(archiveUrl, options: [:], completionHandler: nil)
-    }
-    
-    // MARK: - Helper Methods
-    
-    private func openArchivedURL(_ url: URL) {
-        UIApplication.shared.open(url, options: [:], completionHandler: nil)
-    }
+        // Save the URL to URLStore before archiving
+        URLStore.shared.saveURL(urlString)
+        logger.info("URL saved to store: \(urlString)")
         
-        /// Called when scene sessions are discarded
-        /// - Parameters:
-        ///   - application: The singleton app instance
-        ///   - sceneSessions: The set of scenes that were discarded
-        func application(_ application: UIApplication, didDiscardSceneSessions sceneSessions: Set<UISceneSession>) {
-            // Clean up any resources associated with discarded scenes
-        }
+        // Process the URL for archiving
+        processArchivedURL(urlString)
+    }
 
     /// Called when the scene is being released by the system
-    /// - Parameter scene: The scene that is being released
-    /// This occurs shortly after the scene enters the background, or when its session is discarded.
-    /// Use this method to release any resources associated with the scene that can be recreated when the scene reconnects.
     func sceneDidDisconnect(_ scene: UIScene) {
-        // Called as the scene is being released by the system.
-        // This occurs shortly after the scene enters the background, or when its session is discarded.
-        // Release any resources associated with this scene that can be re-created the next time the scene connects.
-        // The scene may re-connect later, as its session was not necessarily discarded (see `application:didDiscardSceneSessions` instead).
-        // Resources associated with the scene should be released here
-        // The scene may reconnect later, as its session was not necessarily discarded
-    }
-
-    /// Called when the scene transitions from an inactive state to an active state
-    /// - Parameter scene: The scene that became active
-    /// Use this method to restart any tasks that were paused (or not yet started) when the scene was inactive
-    func sceneDidBecomeActive(_ scene: UIScene) {
-        // Called when the scene has moved from an inactive state to an active state.
-        // Use this method to restart any tasks that were paused (or not yet started) when the scene was inactive.
-        // Restart any tasks that were paused while the scene was inactive
-
+        logger.debug("Scene disconnected")
     }
 
     /// Called when the scene is about to move from an active state to an inactive state
-    /// - Parameter scene: The scene that will resign active
-    /// This may occur due to temporary interruptions (for example, an incoming phone call)
     func sceneWillResignActive(_ scene: UIScene) {
-        // Called when the scene will move from an active state to an inactive state.
-        // This may occur due to temporary interruptions (ex. an incoming phone call).
-        // Pause any ongoing tasks or disable any timers
+        logger.debug("Scene will resign active")
     }
 
     /// Called as the scene transitions from the background to the foreground
-    /// - Parameter scene: The scene that will enter the foreground
-    /// Use this method to undo the changes made when entering the background
     func sceneWillEnterForeground(_ scene: UIScene) {
-        // Called as the scene transitions from the background to the foreground.
-        // Use this method to undo the changes made on entering the background.
-        // Undo any changes made when entering the background
-
+        logger.debug("Scene will enter foreground")
     }
 
     /// Called as the scene transitions from the foreground to the background
-    /// - Parameter scene: The scene that will enter the background
-    /// Use this method to save data, release shared resources, and store enough scene-specific state information
-    /// to restore the scene back to its current state
     func sceneDidEnterBackground(_ scene: UIScene) {
-        // Called as the scene transitions from the foreground to the background.
-        // Use this method to save data, release shared resources, and store enough scene-specific state information
-        // to restore the scene back to its current state.
-        // Save data and release shared resources
+        logger.debug("Scene did enter background")
     }
 }
