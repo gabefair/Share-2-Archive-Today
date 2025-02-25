@@ -3,6 +3,7 @@
 import UIKit
 import Social
 import os.log
+import MobileCoreServices
 
 /// A view controller that handles the share extension functionality for archiving URLs
 /// This implementation follows a bottom sheet presentation style with proper error handling
@@ -35,7 +36,7 @@ class ShareViewController: UIViewController {
         
         logger.info("ShareViewController loaded")
         setupUI()
-        getSharedUrl()
+        extractSharedContent()
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -56,6 +57,9 @@ private extension ShareViewController {
         archiveButton.layer.cornerRadius = 12
         archiveButton.isEnabled = false
         
+        // Set close button tint
+        closeButton.tintColor = .systemGray
+        
         logger.debug("UI setup complete")
     }
     
@@ -72,36 +76,115 @@ private extension ShareViewController {
         logger.debug("Bottom sheet animation started")
     }
     
-    func getSharedUrl() {
-        guard let item = extensionContext?.inputItems.first as? NSExtensionItem,
-              let itemProvider = item.attachments?.first else {
-            handleError(message: "No URL found")
+    func extractSharedContent() {
+        guard let extensionItems = extensionContext?.inputItems as? [NSExtensionItem] else {
+            handleError(message: "No shared content found")
             return
         }
         
-        logger.info("Processing share extension item")
+        logger.info("Processing \(extensionItems.count) extension items")
+        var foundURL = false
         
-        // Use String type identifier instead of UTType for better compatibility
-        let urlTypeIdentifier = "public.url"
-        
-        itemProvider.loadItem(forTypeIdentifier: urlTypeIdentifier, options: nil) { [weak self] (item, error) in
-            guard let self = self else { return }
+        // Process all extension items
+        for extensionItem in extensionItems {
+            guard let attachments = extensionItem.attachments else { continue }
             
-            DispatchQueue.main.async {
-                if let url = item as? URL {
-                    self.urlString = url.absoluteString
-                    self.urlLabel.text = url.absoluteString
-                    self.archiveButton.isEnabled = true
-                    self.logger.info("URL loaded: \(url.absoluteString)")
-                } else if let error = error {
-                    self.logger.error("Error loading URL: \(error.localizedDescription)")
-                    self.handleError(message: error.localizedDescription)
-                } else {
-                    self.logger.error("Unknown error loading URL")
-                    self.handleError(message: "Could not load URL")
-                }
+            // Process all attachments
+            for attachment in attachments {
+                // Try different types of content
+                processAttachment(attachment)
+                foundURL = !urlString.isEmpty
+                if foundURL { break }
+            }
+            if foundURL { break }
+        }
+        
+        // If we still haven't found a URL, check after a delay
+        if !foundURL {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self = self, self.urlString.isEmpty else { return }
+                self.handleError(message: "Unable to extract URL from shared content")
             }
         }
+    }
+    
+    func processAttachment(_ attachment: NSItemProvider) {
+        // Check for URL
+        if attachment.hasItemConformingToTypeIdentifier(kUTTypeURL as String) {
+            attachment.loadItem(forTypeIdentifier: kUTTypeURL as String, options: nil) { [weak self] (item, error) in
+                self?.handleLoadedItem(item, error: error)
+            }
+            return
+        }
+        
+        // Check for web URL specifically
+        if attachment.hasItemConformingToTypeIdentifier("public.url") {
+            attachment.loadItem(forTypeIdentifier: "public.url", options: nil) { [weak self] (item, error) in
+                self?.handleLoadedItem(item, error: error)
+            }
+            return
+        }
+        
+        // Check for text that might contain a URL
+        if attachment.hasItemConformingToTypeIdentifier(kUTTypePlainText as String) {
+            attachment.loadItem(forTypeIdentifier: kUTTypePlainText as String, options: nil) { [weak self] (item, error) in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    
+                    if let text = item as? String {
+                        // Try to extract a URL from the text
+                        if let url = self.extractURLFromText(text) {
+                            self.updateUI(with: url.absoluteString)
+                        } else {
+                            self.logger.warning("Text content does not contain a valid URL: \(text)")
+                        }
+                    } else if let error = error {
+                        self.logger.error("Error loading text: \(error.localizedDescription)")
+                    }
+                }
+            }
+            return
+        }
+    }
+    
+    func handleLoadedItem(_ item: Any?, error: Error?) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if let url = item as? URL {
+                self.updateUI(with: url.absoluteString)
+            } else if let urlString = item as? String, let url = URL(string: urlString) {
+                self.updateUI(with: url.absoluteString)
+            } else if let data = item as? Data, let urlString = String(data: data, encoding: .utf8),
+                      let url = URL(string: urlString) {
+                self.updateUI(with: url.absoluteString)
+            } else if let error = error {
+                self.logger.error("Error loading URL: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    func extractURLFromText(_ text: String) -> URL? {
+        // Try to create a URL directly
+        if let url = URL(string: text), url.scheme != nil && url.host != nil {
+            return url
+        }
+        
+        // Try to detect URLs using NSDataDetector
+        let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        let matches = detector?.matches(in: text, options: [], range: NSRange(location: 0, length: text.utf16.count))
+        
+        if let match = matches?.first, let url = match.url {
+            return url
+        }
+        
+        return nil
+    }
+    
+    func updateUI(with urlString: String) {
+        self.urlString = urlString
+        self.urlLabel.text = urlString
+        self.archiveButton.isEnabled = true
+        self.logger.info("URL loaded: \(urlString)")
     }
     
     func handleError(message: String) {
@@ -142,17 +225,17 @@ private extension ShareViewController {
             logger.info("Pending archive flag set in UserDefaults")
         }
         
-        // 3. Redirect to main app using custom URL scheme
-        if let appUrl = URL(string: "share2archivetoday://") {
-            logger.info("Redirecting to main app")
+        // 3. Prepare encoded URL for custom scheme
+        let encodedUrl = self.urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        
+        // 4. Redirect to main app using custom URL scheme
+        if let appUrl = URL(string: "share2archivetoday://?url=\(encodedUrl)") {
+            logger.info("Redirecting to main app with URL: \(appUrl)")
             
             // Complete the extension request and redirect to the main app
             self.extensionContext?.completeRequest(returningItems: nil) { [weak self] _ in
-                guard let self = self else { return }
-                
-                // Use modern extensionContext API to open the URL
-                self.extensionContext?.open(appUrl, completionHandler: { success in
-                    self.logger.info("Open main app success: \(success)")
+                self?.extensionContext?.open(appUrl, completionHandler: { success in
+                    self?.logger.info("Open main app success: \(success)")
                 })
             }
         } else {
