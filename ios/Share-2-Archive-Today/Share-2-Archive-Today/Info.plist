@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>org.Gnosco.Share-2-Archive-Today</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>share2archivetoday</string>
+            </array>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+        </dict>
+    </array>
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key>
+        <false/>
+        <key>UISceneConfigurations</key>
+        <dict>
+            <key>UIWindowSceneSessionRoleApplication</key>
+            <array>
+                <dict>
+                    <key>UISceneConfigurationName</key>
+                    <string>Default Configuration</string>
+                    <key>UISceneDelegateClassName</key>
+                    <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+                    <key>UISceneStoryboardFile</key>
+                    <string>Main</string>
+                </dict>
+            </array>
+        </dict>
+    </dict>
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+        <string>share2archivetoday</string>
+    </array>
+    <key>NSUserActivityTypes</key>
+    <array>
+        <string>org.Gnosco.Share-2-Archive-Today.openURL</string>
+    </array>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.org.Gnosco.Share-2-Archive-Today</string>
+    </array>
+</dict>
+</plist>
