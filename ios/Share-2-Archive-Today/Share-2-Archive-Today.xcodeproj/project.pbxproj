@@ -39,14 +39,45 @@
 		B094EE252D59A0B600F66DEA /* URLShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = URLShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B094EE1A2D5950AD00F66DEA /* Exceptions for "Share-2-Archive-Today" folder in "Share-2-Archive-Today" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B094EE072D5950AA00F66DEA /* Share-2-Archive-Today */;
+		};
+		B094EE332D59A0B600F66DEA /* Exceptions for "URLShareExtension" folder in "URLShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B094EE242D59A0B600F66DEA /* URLShareExtension */;
+		};
+		B094EE3F2D59AB0B00F66DEA /* Exceptions for "Share-2-Archive-Today" folder in "URLShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				URLStore.swift,
+			);
+			target = B094EE242D59A0B600F66DEA /* URLShareExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B094EE0A2D5950AA00F66DEA /* Share-2-Archive-Today */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B094EE1A2D5950AD00F66DEA /* Exceptions for "Share-2-Archive-Today" folder in "Share-2-Archive-Today" target */,
+				B094EE3F2D59AB0B00F66DEA /* Exceptions for "Share-2-Archive-Today" folder in "URLShareExtension" target */,
+			);
 			path = "Share-2-Archive-Today";
 			sourceTree = "<group>";
 		};
 		B094EE262D59A0B600F66DEA /* URLShareExtension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B094EE332D59A0B600F66DEA /* Exceptions for "URLShareExtension" folder in "URLShareExtension" target */,
+			);
 			path = URLShareExtension;
 			sourceTree = "<group>";
 		};
