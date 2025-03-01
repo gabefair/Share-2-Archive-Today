@@ -13,7 +13,7 @@ height="80">](https://apt.izzysoft.de/fdroid/index/apk/test)
 [![Moonlight for ChromeOS](https://moonlight-stream.org/images/chrome_webstore.png)](https://chromewebstore.google.com/detail/archive-webpage/falfcajjjjfjjlfabnfaadepcoagegip)
 
  
- Simple Android app to add an icon to your share menu to publically archive a URL on Archive.today and Archive.Is
+ Simple app to add an icon to your share menu to publically archive a URL on Archive.today and Archive.Is
 
 It does not spy on you or collect any data. Find it on the [Google Play Store](https://play.google.com/store/apps/details?id=org.gnosco.share2archivetoday).
 
