@@ -24,11 +24,38 @@ class ViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         setupRefreshControl()
+        
+        // Check if we should show the welcome message
+        checkForFirstLaunch()
     }
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         refreshUrls()
+    }
+    
+    /// Checks if this is the first launch and shows welcome overlay if needed
+    private func checkForFirstLaunch() {
+        let welcomeShownKey = "org.Gnosco.Share-2-Archive-Today.welcomeShown"
+        let welcomeShown = UserDefaults.standard.bool(forKey: welcomeShownKey)
+        
+        if !welcomeShown {
+            // Wait for the view to fully load before showing welcome overlay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.showWelcomeMessage()
+                UserDefaults.standard.set(true, forKey: welcomeShownKey)
+            }
+        }
+    }
+    
+    /// Shows the welcome overlay to first-time users
+    private func showWelcomeMessage() {
+        let welcomeView = WelcomeOverlayView(frame: .zero)
+        welcomeView.onDismiss = { [weak self] in
+            // Refresh URLs after welcome is dismissed to ensure sample URL is shown
+            self?.refreshUrls()
+        }
+        welcomeView.show(in: self.view)
     }
     
     // MARK: - Setup Methods

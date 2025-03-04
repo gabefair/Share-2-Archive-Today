@@ -6,6 +6,30 @@
     <dict>
         <key>NSExtensionAttributes</key>
         <dict>
+            <!-- Enable for URLs shared from browsers, apps etc. -->
+             <key>NSExtensionActivationSupportsWebURLWithMaxCount</key>
+                <integer>1</integer>
+             
+             <!-- Enable for text that might contain URLs -->
+             <key>NSExtensionActivationSupportsText</key>
+             <true/>
+             
+             <!-- Enable for web page content -->
+             <key>NSExtensionActivationSupportsWebPageWithMaxCount</key>
+                <integer>1</integer>
+             
+             <!-- Support HTML content -->
+             <key>NSExtensionActivationSupportsHTMLWithMaxCount</key>
+                <integer>1</integer>
+             
+             <!-- Support file URLs -->
+             <key>NSExtensionActivationSupportsFileURLWithMaxCount</key>
+                <integer>1</integer>
+             
+             <!-- Enable for News app articles -->
+             <key>NSExtensionActivationDictionaryVersion</key>
+                <integer>2</integer>
+                
             <key>NSExtensionActivationRule</key>
             <string>
                 SUBQUERY (
@@ -16,6 +40,11 @@
                         $attachment,
                         ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.data"
                         OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url"
+                        OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.text"
+                        OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.html"
+                        OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.plain-text"
+                        OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.safari.bookmark"
+                        OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.webarchive"
                         OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.pkpass"
                     ).@count &gt;= 1
                 ).@count == 1
@@ -28,6 +57,9 @@
                             $attachment,
                             ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.data"
                             OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url"
+                            OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.text"
+                            OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.html"
+                            OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.safari.bookmark"
                             OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.pkpass"
                         ).@count &gt;= 1
                     ).@count == 2

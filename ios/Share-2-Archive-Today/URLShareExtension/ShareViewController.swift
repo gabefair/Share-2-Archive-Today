@@ -125,6 +125,50 @@ private extension ShareViewController {
             return
         }
         
+        // Check for web page with URL
+        if attachment.hasItemConformingToTypeIdentifier("com.apple.webpageURL") {
+            attachment.loadItem(forTypeIdentifier: "com.apple.webpageURL", options: nil) { [weak self] (item, error) in
+                self?.handleLoadedItem(item, error: error)
+            }
+            return
+        }
+        
+        // Check for Safari bookmark
+        if attachment.hasItemConformingToTypeIdentifier("com.apple.safari.bookmark") {
+            attachment.loadItem(forTypeIdentifier: "com.apple.safari.bookmark", options: nil) { [weak self] (item, error) in
+                if let bookmarkDict = item as? [String: Any],
+                   let urlString = bookmarkDict["URL"] as? String {
+                    DispatchQueue.main.async {
+                        self?.updateUI(with: urlString)
+                    }
+                } else {
+                    self?.handleLoadedItem(item, error: error)
+                }
+            }
+            return
+        }
+        
+        // Check for HTML content
+        if attachment.hasItemConformingToTypeIdentifier(kUTTypeHTML as String) {
+            attachment.loadItem(forTypeIdentifier: kUTTypeHTML as String, options: nil) { [weak self] (item, error) in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    
+                    if let htmlString = item as? String,
+                       let url = self.extractURLFromHTML(htmlString) {
+                        self.updateUI(with: url.absoluteString)
+                    } else if let data = item as? Data,
+                              let htmlString = String(data: data, encoding: .utf8),
+                              let url = self.extractURLFromHTML(htmlString) {
+                        self.updateUI(with: url.absoluteString)
+                    } else if let error = error {
+                        self.logger.error("Error loading HTML: \(error.localizedDescription)")
+                    }
+                }
+            }
+            return
+        }
+        
         // Check for text that might contain a URL
         if attachment.hasItemConformingToTypeIdentifier(kUTTypePlainText as String) {
             attachment.loadItem(forTypeIdentifier: kUTTypePlainText as String, options: nil) { [weak self] (item, error) in
@@ -142,6 +186,14 @@ private extension ShareViewController {
                         self.logger.error("Error loading text: \(error.localizedDescription)")
                     }
                 }
+            }
+            return
+        }
+        
+        // Try as a file URL that might point to a webpage
+        if attachment.hasItemConformingToTypeIdentifier(kUTTypeFileURL as String) {
+            attachment.loadItem(forTypeIdentifier: kUTTypeFileURL as String, options: nil) { [weak self] (item, error) in
+                self?.handleLoadedItem(item, error: error)
             }
             return
         }
@@ -178,6 +230,32 @@ private extension ShareViewController {
         }
         
         return nil
+    }
+    
+    /// Attempts to extract a URL from HTML content
+    /// - Parameter html: The HTML string to parse
+    /// - Returns: URL if found, nil otherwise
+    private func extractURLFromHTML(_ html: String) -> URL? {
+        // Try to find an og:url meta tag
+        if let range = html.range(of: "property=\"og:url\" content=\""),
+           let endRange = html.range(of: "\"", range: range.upperBound..<html.endIndex) {
+            let urlString = String(html[range.upperBound..<endRange.lowerBound])
+            if let url = URL(string: urlString) {
+                return url
+            }
+        }
+        
+        // Try to find a canonical link
+        if let range = html.range(of: "rel=\"canonical\" href=\""),
+           let endRange = html.range(of: "\"", range: range.upperBound..<html.endIndex) {
+            let urlString = String(html[range.upperBound..<endRange.lowerBound])
+            if let url = URL(string: urlString) {
+                return url
+            }
+        }
+        
+        // Use URL detector as fallback
+        return extractURLFromText(html)
     }
     
     func updateUI(with urlString: String) {
