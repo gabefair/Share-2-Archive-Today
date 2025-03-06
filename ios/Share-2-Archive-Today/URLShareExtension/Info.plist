@@ -30,6 +30,10 @@
              <key>NSExtensionActivationDictionaryVersion</key>
                 <integer>2</integer>
                 
+            <!-- Add specific Safari support -->
+                <key>NSExtensionActivationSupportsSafariWebPageWithMaxCount</key>
+                <integer>1</integer>
+                
             <key>NSExtensionActivationRule</key>
             <string>
                 SUBQUERY (
@@ -86,6 +90,7 @@
     </array>
     <key>NSUserActivityTypes</key>
     <array>
+        <string>NSUserActivityTypeBrowsingWeb</string>
         <string>org.Gnosco.Share-2-Archive-Today.openURL</string>
     </array>
 </dict>

@@ -125,6 +125,19 @@ private extension ShareViewController {
             return
         }
         
+        if attachment.hasItemConformingToTypeIdentifier("com.apple.safari.safariPageSnapshot") {
+            attachment.loadItem(forTypeIdentifier: "com.apple.safari.safariPageSnapshot", options: nil) { [weak self] (item, error) in
+                // Process Safari snapshot from iPad
+                if let dictionary = item as? [String: Any],
+                   let urlString = dictionary["URL"] as? String {
+                    DispatchQueue.main.async {
+                        self?.updateUI(with: urlString)
+                    }
+                }
+            }
+            return
+        }
+        
         // Check for web page with URL
         if attachment.hasItemConformingToTypeIdentifier("com.apple.webpageURL") {
             attachment.loadItem(forTypeIdentifier: "com.apple.webpageURL", options: nil) { [weak self] (item, error) in
