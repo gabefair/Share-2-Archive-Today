@@ -184,7 +184,7 @@ class URLProcessor {
     /// - Parameter text: The text string that might contain a URL
     /// - Returns: An extracted URL string or nil if none is found
     static func extractURL(from text: String) -> String? {
-        // Try to find URLs with protocols using NSDataDetector
+        // First, try NSDataDetector for URLs (most accurate)
         let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
         
         if let detector = detector {
@@ -192,20 +192,38 @@ class URLProcessor {
             
             if let match = matches.first, let range = Range(match.range, in: text) {
                 let urlString = String(text[range])
-                return cleanURL(urlString)
+                return urlString
             }
         }
         
-        // If no URL with protocol is found, look for potential bare domains
-        let domainPattern = "(?:^|\\s+)([a-zA-Z0-9][a-zA-Z0-9-]*\\.[a-zA-Z0-9][a-zA-Z0-9-]*\\.[a-zA-Z]{2,}|[a-zA-Z0-9][a-zA-Z0-9-]*\\.[a-zA-Z]{2,})(?:/[^\\s]*)?(?:\\s+|$)"
+        // Fallback: If NSDataDetector doesn't find a URL, use regex to look for common URL patterns
+        // This regex looks for URLs with either http/https or www prefixes
+        let urlPattern = "(https?://(?:www\\.)?|www\\.)[a-zA-Z0-9][a-zA-Z0-9-]*(?:\\.[a-zA-Z0-9][a-zA-Z0-9-]*)+(?:/[^\\s]*)?"
+        
+        if let regex = try? NSRegularExpression(pattern: urlPattern, options: []) {
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            if let match = regex.firstMatch(in: text, options: [], range: range) {
+                if let matchRange = Range(match.range, in: text) {
+                    let extractedUrl = String(text[matchRange])
+                    
+                    // Ensure the URL has a scheme
+                    if extractedUrl.hasPrefix("www.") {
+                        return "https://" + extractedUrl
+                    }
+                    return extractedUrl
+                }
+            }
+        }
+        
+        // Last resort: look for bare domain patterns
+        let domainPattern = "(?:^|\\s+)([a-zA-Z0-9][a-zA-Z0-9-]*\\.[a-zA-Z0-9][a-zA-Z0-9-]*\\.[a-zA-Z]{2,}|[a-zA-Z0-9][a-zA-Z0-9-]*\\.[a-zA-Z]{2,})(/[^\\s]*)?"
         
         if let regex = try? NSRegularExpression(pattern: domainPattern, options: []) {
             let range = NSRange(text.startIndex..<text.endIndex, in: text)
             if let match = regex.firstMatch(in: text, options: [], range: range) {
                 if let matchRange = Range(match.range(at: 1), in: text) {
                     let bareUrl = String(text[matchRange])
-                    // Add https:// prefix and clean the URL
-                    return cleanURL("https://\(bareUrl)")
+                    return "https://" + bareUrl
                 }
             }
         }

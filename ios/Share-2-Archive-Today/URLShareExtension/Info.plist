@@ -9,6 +9,10 @@
             <!-- Enable for URLs shared from browsers, apps etc. -->
              <key>NSExtensionActivationSupportsWebURLWithMaxCount</key>
                 <integer>1</integer>
+                
+            <!-- Enable for images that might contain QR codes -->
+            <key>NSExtensionActivationSupportsImageWithMaxCount</key>
+            <integer>1</integer>
              
              <!-- Enable for text that might contain URLs -->
              <key>NSExtensionActivationSupportsText</key>
@@ -34,25 +38,8 @@
                 <key>NSExtensionActivationSupportsSafariWebPageWithMaxCount</key>
                 <integer>1</integer>
                 
-            <key>NSExtensionActivationRule</key>
-            <string>
-                SUBQUERY (
-                    extensionItems,
-                    $extensionItem,
-                    SUBQUERY (
-                        $extensionItem.attachments,
-                        $attachment,
-                        ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.data"
-                        OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url"
-                        OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.text"
-                        OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.html"
-                        OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.plain-text"
-                        OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.safari.bookmark"
-                        OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.webarchive"
-                        OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.pkpass"
-                    ).@count &gt;= 1
-                ).@count == 1
-                OR (
+                <key>NSExtensionActivationRule</key>
+                <string>
                     SUBQUERY (
                         extensionItems,
                         $extensionItem,
@@ -63,21 +50,41 @@
                             OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url"
                             OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.text"
                             OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.html"
+                            OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.plain-text"
+                            OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.image"
                             OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.safari.bookmark"
+                            OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.webarchive"
                             OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.pkpass"
                         ).@count &gt;= 1
-                    ).@count == 2
-                    AND SUBQUERY (
-                        extensionItems,
-                        $extensionItem,
-                        SUBQUERY (
-                            $extensionItem.attachments,
-                            $attachment,
-                            ANY $attachment.registeredTypeIdentifiers UTI-EQUALS "public.url"
-                        ).@count &gt;= 1
                     ).@count == 1
-                )
-            </string>
+                    OR (
+                        SUBQUERY (
+                            extensionItems,
+                            $extensionItem,
+                            SUBQUERY (
+                                $extensionItem.attachments,
+                                $attachment,
+                                ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.data"
+                                OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url"
+                                OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.text"
+                                OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.html"
+                                OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.image"
+                                OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.safari.bookmark"
+                                OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.pkpass"
+                            ).@count &gt;= 1
+                        ).@count == 2
+                        AND SUBQUERY (
+                            extensionItems,
+                            $extensionItem,
+                            SUBQUERY (
+                                $extensionItem.attachments,
+                                $attachment,
+                                ANY $attachment.registeredTypeIdentifiers UTI-EQUALS "public.url"
+                                OR ANY $attachment.registeredTypeIdentifiers UTI-EQUALS "public.image"
+                            ).@count &gt;= 1
+                        ).@count == 1
+                    )
+                </string>
         </dict>
         <key>NSExtensionMainStoryboard</key>
         <string>MainInterface</string>

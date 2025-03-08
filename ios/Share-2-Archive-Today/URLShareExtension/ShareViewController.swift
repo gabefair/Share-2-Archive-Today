@@ -79,9 +79,13 @@ private extension ShareViewController {
         logger.debug("Bottom sheet animation started")
     }
     
-    func extractSharedContent() {
+    private func extractSharedContent() {
         guard let extensionItems = extensionContext?.inputItems as? [NSExtensionItem] else {
-            handleError(message: "No shared content found")
+            logger.error("No shared content found")
+            showToast(message: "No shared content found")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                self.dismissShareSheet()
+            }
             return
         }
         
@@ -91,6 +95,8 @@ private extension ShareViewController {
         // Process all extension items
         for extensionItem in extensionItems {
             guard let attachments = extensionItem.attachments else { continue }
+            
+            logger.info("Processing \(attachments.count) attachments")
             
             // Process all attachments
             for attachment in attachments {
@@ -106,14 +112,34 @@ private extension ShareViewController {
         if !foundURL {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 guard let self = self, self.urlString.isEmpty else { return }
-                self.handleError(message: "Unable to extract URL from shared content")
+                
+                self.logger.warning("No URL found after processing all content")
+                self.showToast(message: "Unable to find a URL in the shared content")
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    self.dismissShareSheet()
+                }
             }
         }
     }
     
-    func processAttachment(_ attachment: NSItemProvider) {
+    private func processAttachment(_ attachment: NSItemProvider) {
+        logger.info("Processing attachment with types: \(attachment.registeredTypeIdentifiers)")
+        
+        // First check for image types to scan for QR codes
+        let imageTypes = [kUTTypeImage as String, kUTTypeJPEG as String, kUTTypePNG as String, "public.image"]
+        
+        for imageType in imageTypes {
+            if attachment.hasItemConformingToTypeIdentifier(imageType) {
+                logger.info("Found image attachment, processing for QR code")
+                processImageAttachment(attachment)
+                return
+            }
+        }
+        
         // Check for URL
         if attachment.hasItemConformingToTypeIdentifier(kUTTypeURL as String) {
+            logger.info("Found URL attachment")
             attachment.loadItem(forTypeIdentifier: kUTTypeURL as String, options: nil) { [weak self] (item, error) in
                 self?.handleLoadedItem(item, error: error)
             }
@@ -122,6 +148,7 @@ private extension ShareViewController {
         
         // Check for web URL specifically
         if attachment.hasItemConformingToTypeIdentifier("public.url") {
+            logger.info("Found public.url attachment")
             attachment.loadItem(forTypeIdentifier: "public.url", options: nil) { [weak self] (item, error) in
                 self?.handleLoadedItem(item, error: error)
             }
@@ -129,6 +156,7 @@ private extension ShareViewController {
         }
         
         if attachment.hasItemConformingToTypeIdentifier("com.apple.safari.safariPageSnapshot") {
+            logger.info("Found Safari page snapshot")
             attachment.loadItem(forTypeIdentifier: "com.apple.safari.safariPageSnapshot", options: nil) { [weak self] (item, error) in
                 // Process Safari snapshot from iPad
                 if let dictionary = item as? [String: Any],
@@ -143,6 +171,7 @@ private extension ShareViewController {
         
         // Check for web page with URL
         if attachment.hasItemConformingToTypeIdentifier("com.apple.webpageURL") {
+            logger.info("Found web page URL")
             attachment.loadItem(forTypeIdentifier: "com.apple.webpageURL", options: nil) { [weak self] (item, error) in
                 self?.handleLoadedItem(item, error: error)
             }
@@ -151,6 +180,7 @@ private extension ShareViewController {
         
         // Check for Safari bookmark
         if attachment.hasItemConformingToTypeIdentifier("com.apple.safari.bookmark") {
+            logger.info("Found Safari bookmark")
             attachment.loadItem(forTypeIdentifier: "com.apple.safari.bookmark", options: nil) { [weak self] (item, error) in
                 if let bookmarkDict = item as? [String: Any],
                    let urlString = bookmarkDict["URL"] as? String {
@@ -166,6 +196,7 @@ private extension ShareViewController {
         
         // Check for HTML content
         if attachment.hasItemConformingToTypeIdentifier(kUTTypeHTML as String) {
+            logger.info("Found HTML content")
             attachment.loadItem(forTypeIdentifier: kUTTypeHTML as String, options: nil) { [weak self] (item, error) in
                 DispatchQueue.main.async {
                     guard let self = self else { return }
@@ -185,18 +216,28 @@ private extension ShareViewController {
             return
         }
         
-        // Check for text that might contain a URL
+        // Check for text that might contain a URL - improved text scanning
         if attachment.hasItemConformingToTypeIdentifier(kUTTypePlainText as String) {
+            logger.info("Found plain text, checking for URLs")
             attachment.loadItem(forTypeIdentifier: kUTTypePlainText as String, options: nil) { [weak self] (item, error) in
                 DispatchQueue.main.async {
                     guard let self = self else { return }
                     
                     if let text = item as? String {
+                        self.logger.info("Processing text for URL: \(text)")
+                        
                         // Try to extract a URL from the text
                         if let extractedUrl = URLProcessor.extractURL(from: text) {
+                            self.logger.info("URL found in text: \(extractedUrl)")
                             self.updateUI(with: extractedUrl)
                         } else {
-                            self.logger.warning("Text content does not contain a valid URL: \(text)")
+                            self.logger.warning("No URL found in text")
+                            self.showToast(message: "No URL found in the shared text")
+                            
+                            // Dismiss after delay
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                self.dismissShareSheet()
+                            }
                         }
                     } else if let error = error {
                         self.logger.error("Error loading text: \(error.localizedDescription)")
@@ -208,6 +249,7 @@ private extension ShareViewController {
         
         // Try as a file URL that might point to a webpage
         if attachment.hasItemConformingToTypeIdentifier(kUTTypeFileURL as String) {
+            logger.info("Found file URL")
             attachment.loadItem(forTypeIdentifier: kUTTypeFileURL as String, options: nil) { [weak self] (item, error) in
                 self?.handleLoadedItem(item, error: error)
             }
@@ -259,6 +301,129 @@ private extension ShareViewController {
         }
         
         return nil
+    }
+    
+    // MARK: - Image Processing
+
+    /// Processes image attachments to look for QR codes
+    /// - Parameter attachment: The NSItemProvider containing the image
+    private func processImageAttachment(_ attachment: NSItemProvider) {
+        // Check for image types
+        let imageTypes = [kUTTypeImage as String, kUTTypeJPEG as String, kUTTypePNG as String, "public.image"]
+        
+        for imageType in imageTypes {
+            if attachment.hasItemConformingToTypeIdentifier(imageType) {
+                attachment.loadItem(forTypeIdentifier: imageType, options: nil) { [weak self] (item, error) in
+                    DispatchQueue.main.async {
+                        guard let self = self else { return }
+                        
+                        var image: UIImage? = nil
+                        
+                        // Handle different item types
+                        if let imageURL = item as? URL {
+                            self.logger.info("Processing image from URL: \(imageURL)")
+                            image = UIImage(contentsOfFile: imageURL.path)
+                        } else if let imageData = item as? Data {
+                            self.logger.info("Processing image from data (\(imageData.count) bytes)")
+                            image = UIImage(data: imageData)
+                        } else if let actualImage = item as? UIImage {
+                            self.logger.info("Processing UIImage directly")
+                            image = actualImage
+                        }
+                        
+                        // Process the image if we got one
+                        if let validImage = image {
+                            self.scanQRCodeFromImage(validImage)
+                        } else {
+                            self.logger.error("Failed to extract image from attachment")
+                            self.showToast(message: "Could not process the image")
+                            
+                            // Dismiss after delay
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                self.dismissShareSheet()
+                            }
+                        }
+                    }
+                }
+                return
+            }
+        }
+    }
+
+    /// Scans an image for QR codes containing URLs
+    /// - Parameter image: The UIImage to scan
+    private func scanQRCodeFromImage(_ image: UIImage) {
+        self.logger.info("Scanning image for QR codes")
+        
+        QRCodeScanner.scanQRCode(from: image) { [weak self] urlString in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                
+                if let urlString = urlString {
+                    self.logger.info("QR code URL found: \(urlString)")
+                    self.updateUI(with: urlString)
+                } else {
+                    self.logger.warning("No URL found in QR code")
+                    self.showToast(message: "No URL found in the QR code")
+                    
+                    // Dismiss after showing the toast
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        self.dismissShareSheet()
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Toast Message
+
+    /// Shows a toast message
+    /// - Parameter message: The message to display
+    private func showToast(message: String) {
+        // First, make sure the view is loaded
+        loadViewIfNeeded()
+        
+        let toastContainer = UIView()
+        toastContainer.backgroundColor = UIColor.black.withAlphaComponent(0.7)
+        toastContainer.layer.cornerRadius = 16
+        toastContainer.clipsToBounds = true
+        toastContainer.translatesAutoresizingMaskIntoConstraints = false
+        
+        let toastLabel = UILabel()
+        toastLabel.textColor = UIColor.white
+        toastLabel.textAlignment = .center
+        toastLabel.font = UIFont.systemFont(ofSize: 14)
+        toastLabel.text = message
+        toastLabel.clipsToBounds = true
+        toastLabel.numberOfLines = 0
+        toastLabel.translatesAutoresizingMaskIntoConstraints = false
+        
+        toastContainer.addSubview(toastLabel)
+        view.addSubview(toastContainer)
+        
+        NSLayoutConstraint.activate([
+            toastLabel.leadingAnchor.constraint(equalTo: toastContainer.leadingAnchor, constant: 16),
+            toastLabel.trailingAnchor.constraint(equalTo: toastContainer.trailingAnchor, constant: -16),
+            toastLabel.topAnchor.constraint(equalTo: toastContainer.topAnchor, constant: 10),
+            toastLabel.bottomAnchor.constraint(equalTo: toastContainer.bottomAnchor, constant: -10),
+            
+            toastContainer.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 20),
+            toastContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -20),
+            toastContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            toastContainer.bottomAnchor.constraint(equalTo: bottomSheetView.topAnchor, constant: -20)
+        ])
+        
+        toastContainer.alpha = 0.0
+        
+        UIView.animate(withDuration: 0.2, delay: 0.0, options: .curveEaseIn, animations: {
+            toastContainer.alpha = 1.0
+        }, completion: { _ in
+            UIView.animate(withDuration: 0.2, delay: 2.0, options: .curveEaseOut, animations: {
+                toastContainer.alpha = 0.0
+            }, completion: { _ in
+                toastContainer.removeFromSuperview()
+            })
+        })
     }
     
     func updateUI(with urlString: String) {

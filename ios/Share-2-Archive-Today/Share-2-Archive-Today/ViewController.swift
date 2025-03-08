@@ -16,6 +16,8 @@ class ViewController: UIViewController {
     /// Array of saved URL strings, displayed in reverse chronological order
     private var urls: [String] = []
     
+    private var helpButton: FloatingButton!
+    
     /// Shared instance of URLStore for managing saved URLs
     private let urlStore = URLStore.shared
     
@@ -32,6 +34,25 @@ class ViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         refreshUrls()
+    }
+    
+    private func setupHelpButton() {
+        helpButton = FloatingButton()
+        view.addSubview(helpButton)
+        
+        NSLayoutConstraint.activate([
+            helpButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+            helpButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20)
+        ])
+        
+        helpButton.addTarget(self, action: #selector(showHelpFAQ), for: .touchUpInside)
+    }
+    
+    @objc private func showHelpFAQ() {
+        let faqVC = FAQViewController()
+        let navController = UINavigationController(rootViewController: faqVC)
+        navController.modalPresentationStyle = .formSheet
+        present(navController, animated: true)
     }
     
     /// Checks if this is the first launch and shows welcome overlay if needed
