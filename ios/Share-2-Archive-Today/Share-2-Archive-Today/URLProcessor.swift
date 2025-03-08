@@ -41,7 +41,7 @@ class URLProcessor {
     /// - Returns: The original URL if it was an archive URL, otherwise the original string
     static func processArchiveURL(_ urlString: String) -> String {
         guard let url = URL(string: urlString) else {
-            return urlString
+            return "" //If unable to processURL, reutrn nothing
         }
         
         // Check if this is an archive.today URL
@@ -76,16 +76,15 @@ class URLProcessor {
         var isYouTube = false
         var isSubstack = false
         
-        // Check for YouTube and Substack domains
         if let host = components.host {
-            if host.contains("youtube.com") || host.contains("youtu.be") {
+            if host == "youtube.com" || host.hasSuffix(".youtube.com") || host == "youtu.be" {
                 isYouTube = true
                 
                 // Handle music.youtube.com -> youtube.com
                 if host.hasPrefix("music.") {
                     components.host = host.replacingOccurrences(of: "music.", with: "")
                 }
-            } else if host.hasSuffix(".substack.com") {
+            } else if host == "substack.com" || host.hasSuffix(".substack.com") {
                 isSubstack = true
             }
         }
@@ -165,7 +164,8 @@ class URLProcessor {
             
             // Skip no_cover if we've already added it for Substack
             if isSubstack && item.name == "no_cover" {
-                continue
+                newQueryItems.append(item);
+                continue;
             }
             
             // Keep all other parameters
