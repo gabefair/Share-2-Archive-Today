@@ -72,7 +72,10 @@ class ViewController: UIViewController {
     /// Opens a URL in Archive.today service
     /// - Parameter urlString: The URL to archive
     private func openInArchiveToday(_ urlString: String) {
-        guard let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+        // Process the URL to clean tracking parameters
+        let processedURL = URLProcessor.processURL(urlString)
+        
+        guard let encodedUrl = processedURL.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
             showError(message: "Could not create archive URL")
             return

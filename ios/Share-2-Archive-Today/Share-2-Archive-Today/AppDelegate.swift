@@ -2,8 +2,6 @@
 //  AppDelegate.swift
 //  Share-2-Archive-Today
 //
-//  Created by Gabirel Fair on 2/9/25.
-//
 import UIKit
 import SafariServices
 import os.log
@@ -60,16 +58,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
            let urlString = urlQueryItem.value,
            let decodedURL = urlString.removingPercentEncoding {
             
-            // Save the URL to the URLStore first
-            URLStore.shared.saveURL(decodedURL)
-            logger.info("URL saved to store: \(decodedURL)")
+            // Process the URL to clean tracking parameters if needed
+            let processedURL = URLProcessor.processURL(decodedURL)
             
-            if let archiveURL = createArchiveURL(from: decodedURL) {
+            // Save the processed URL to the URLStore
+            URLStore.shared.saveURL(processedURL)
+            logger.info("Processed URL saved to store: \(processedURL)")
+            
+            if let archiveURL = createArchiveURL(from: processedURL) {
                 // Present the archive.today page in Safari View Controller
                 logger.info("Opening archive.today URL: \(archiveURL)")
                 presentArchivePage(with: archiveURL)
             } else {
-                logger.error("Failed to create archive URL from: \(decodedURL)")
+                logger.error("Failed to create archive URL from: \(processedURL)")
             }
         } else {
             logger.error("Could not extract URL from components: \(url)")
