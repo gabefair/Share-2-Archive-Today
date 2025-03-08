@@ -89,7 +89,10 @@ class ViewController: UIViewController {
     /// Opens the original URL in Safari
     /// - Parameter urlString: The URL to open
     private func openOriginalUrl(_ urlString: String) {
-        guard let url = URL(string: urlString) else {
+        // We still process the URL to ensure consistent behavior
+        let processedURL = URLProcessor.processURL(urlString)
+        
+        guard let url = URL(string: processedURL) else {
             showError(message: "Invalid URL")
             return
         }
