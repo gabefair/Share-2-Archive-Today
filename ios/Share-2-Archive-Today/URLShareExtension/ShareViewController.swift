@@ -23,6 +23,9 @@ class ShareViewController: UIViewController {
     /// The URL string to be archived
     private var urlString: String = ""
     
+    /// The processed URL string (after cleaning)
+    private var processedUrlString: String = ""
+    
     /// Logger for debugging
     private let logger = Logger(subsystem: "org.Gnosco.Share-2-Archive-Today", category: "ShareExtension")
     
@@ -190,8 +193,8 @@ private extension ShareViewController {
                     
                     if let text = item as? String {
                         // Try to extract a URL from the text
-                        if let url = self.extractURLFromText(text) {
-                            self.updateUI(with: url.absoluteString)
+                        if let extractedUrl = URLProcessor.extractURL(from: text) {
+                            self.updateUI(with: extractedUrl)
                         } else {
                             self.logger.warning("Text content does not contain a valid URL: \(text)")
                         }
@@ -228,23 +231,6 @@ private extension ShareViewController {
         }
     }
     
-    func extractURLFromText(_ text: String) -> URL? {
-        // Try to create a URL directly
-        if let url = URL(string: text), url.scheme != nil && url.host != nil {
-            return url
-        }
-        
-        // Try to detect URLs using NSDataDetector
-        let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
-        let matches = detector?.matches(in: text, options: [], range: NSRange(location: 0, length: text.utf16.count))
-        
-        if let match = matches?.first, let url = match.url {
-            return url
-        }
-        
-        return nil
-    }
-    
     /// Attempts to extract a URL from HTML content
     /// - Parameter html: The HTML string to parse
     /// - Returns: URL if found, nil otherwise
@@ -267,15 +253,33 @@ private extension ShareViewController {
             }
         }
         
-        // Use URL detector as fallback
-        return extractURLFromText(html)
+        // Use URL extractor as fallback
+        if let extractedUrl = URLProcessor.extractURL(from: html) {
+            return URL(string: extractedUrl)
+        }
+        
+        return nil
     }
     
     func updateUI(with urlString: String) {
+        // Store original URL
         self.urlString = urlString
-        self.urlLabel.text = urlString
+        
+        // Process the URL to clean tracking parameters - this is the ONLY place we should process the URL
+        self.processedUrlString = URLProcessor.processURL(urlString)
+        
+        // Show the processed URL as the primary URL in the UI
+        if self.processedUrlString != urlString {
+            // Show both URLs if they're different
+            self.urlLabel.text = "Processed URL to archive:\n\(self.processedUrlString)\n\nOriginal: \(urlString)"
+            self.logger.info("URL processed: \(urlString) -> \(self.processedUrlString)")
+        } else {
+            // Just show the URL if no changes were made
+            self.urlLabel.text = self.processedUrlString
+            self.logger.info("URL loaded (no processing needed): \(urlString)")
+        }
+        
         self.archiveButton.isEnabled = true
-        self.logger.info("URL loaded: \(urlString)")
     }
     
     func handleError(message: String) {
@@ -300,9 +304,19 @@ private extension ShareViewController {
     }
     
     func saveAndRedirectToApp() {
-        // Save data, set flags in UserDefaults as before
+        // Save ONLY the processed URL to the store - it was already processed in updateUI
+        if !processedUrlString.isEmpty {
+            urlStore.saveURL(processedUrlString)
+            logger.info("Saved processed URL to store: \(self.processedUrlString)")
+        } else if !urlString.isEmpty {
+            // Fallback in case something went wrong with processing
+            logger.warning("Using original URL as fallback: \(self.urlString)")
+            urlStore.saveURL(urlString)
+        }
         
-        let encodedUrl = self.urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        // Always use the processed URL for redirecting to the app
+        let finalUrl = !processedUrlString.isEmpty ? processedUrlString : urlString
+        let encodedUrl = finalUrl.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         let appUrl = URL(string: "share2archivetoday://?url=\(encodedUrl)")!
         
         // Complete the extension request first
@@ -313,33 +327,6 @@ private extension ShareViewController {
             }
         }
     }
-
-    // Helper to try to access UIApplication shared
-    private func openURLUsingUIApplication(_ url: URL) {
-        // Warning: This may not work in extensions and could be rejected in App Store review
-        // It's included here for completeness but use with caution
-        logger.info("Attempting to access UIApplication.shared indirectly")
-        
-        let sharedApplicationString = "sharedApplication"
-        let sharedSelector = NSSelectorFromString(sharedApplicationString)
-        
-        guard let applicationClass = NSClassFromString("UIApplication"),
-              applicationClass.responds(to: sharedSelector) else {
-            logger.error("Cannot access UIApplication class")
-            return
-        }
-        
-        // Be careful with using UIApplication.shared in extensions
-        let openURLOptionsKey = UIApplication.OpenExternalURLOptionsKey.universalLinksOnly
-        let options: [UIApplication.OpenExternalURLOptionsKey: Any] = [openURLOptionsKey: false]
-        
-        // Try using performSelector directly
-        let selectorName = "openURL:options:completionHandler:"
-        let selector = NSSelectorFromString(selectorName)
-        
-        logger.info("Attempted to use UIApplication methods")
-    }
-
     
     // MARK: - Action Methods
     
@@ -353,7 +340,7 @@ private extension ShareViewController {
     }
     
     @IBAction func archiveButtonTapped(_ sender: Any) {
-        logger.info("Archive button tapped for URL: \(self.urlString)")
+        logger.info("Archive button tapped for URL: \(self.processedUrlString.isEmpty ? self.urlString : self.processedUrlString)")
         
         // Disable the button to prevent multiple taps
         archiveButton.isEnabled = false
@@ -377,9 +364,8 @@ private extension ShareViewController {
         
         present(feedbackAlert, animated: true)
     }
-    
-    
 }
+
 extension UIApplication {
     static func openAppWithURL(_ url: URL) {
         // Use this workaround to access UIApplication.shared from extension

@@ -57,6 +57,7 @@
 		B094EE3F2D59AB0B00F66DEA /* Exceptions for "Share-2-Archive-Today" folder in "URLShareExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				URLProcessor.swift,
 				URLStore.swift,
 			);
 			target = B094EE242D59A0B600F66DEA /* URLShareExtension */;
@@ -256,7 +257,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Share-2-Archive-Today/Share-2-Archive-Today.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = NR87AJVD3K;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Share-2-Archive-Today/Info.plist";
@@ -270,7 +271,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.6;
+				MARKETING_VERSION = 2.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "org.Gnosco.Share-2-Archive-Today";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -290,7 +291,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Share-2-Archive-Today/Share-2-Archive-Today.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = NR87AJVD3K;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Share-2-Archive-Today/Info.plist";
@@ -304,7 +305,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.6;
+				MARKETING_VERSION = 2.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "org.Gnosco.Share-2-Archive-Today";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -441,7 +442,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = URLShareExtension/URLShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = NR87AJVD3K;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = URLShareExtension/Info.plist;
@@ -453,7 +454,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.6;
+				MARKETING_VERSION = 2.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "org.Gnosco.Share-2-Archive-Today.URLShareExtension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -472,7 +473,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = URLShareExtension/URLShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = NR87AJVD3K;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = URLShareExtension/Info.plist;
@@ -484,7 +485,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.6;
+				MARKETING_VERSION = 2.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "org.Gnosco.Share-2-Archive-Today.URLShareExtension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

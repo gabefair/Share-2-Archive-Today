@@ -55,11 +55,15 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     private func processArchivedURL(_ urlString: String) {
         logger.info("Processing URL for archiving: \(urlString)")
         
-        // Create and open archive.today URL
-        if let archiveURL = createArchiveURL(from: urlString) {
+        // Process the URL to clean tracking parameters
+        let processedURL = URLProcessor.processURL(urlString)
+        logger.info("URL processed: \(urlString) -> \(processedURL)")
+        
+        // Create and open archive.today URL with processed URL
+        if let archiveURL = createArchiveURL(from: processedURL) {
             presentArchivePage(with: archiveURL)
         } else {
-            logger.error("Failed to create archive URL from: \(urlString)")
+            logger.error("Failed to create archive URL from: \(processedURL)")
         }
     }
     
@@ -162,12 +166,15 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             return
         }
 
-        // Save the URL to URLStore before archiving
-        URLStore.shared.saveURL(urlString)
-        logger.info("URL saved to store: \(urlString)")
+        // Process the URL to clean tracking parameters
+        let processedURL = URLProcessor.processURL(urlString)
+        
+        // Save the processed URL to URLStore before archiving
+        URLStore.shared.saveURL(processedURL)
+        logger.info("Processed URL saved to store: \(processedURL)")
         
         // Process the URL for archiving
-        processArchivedURL(urlString)
+        processArchivedURL(processedURL)
     }
 
     /// Called when the scene is being released by the system
