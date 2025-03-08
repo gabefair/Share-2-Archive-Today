@@ -17,7 +17,8 @@ class URLProcessor {
         "mc_eid", "mc_cid", "si", "icid", "_ga", "_gid", "scid", "click_id",
         "trk", "track", "trk_sid", "sid", "mibextid", "fb_action_ids",
         "fb_action_types", "twclid", "igshid", "s_kwcid", "sxsrf", "sca_esv",
-        "source", "tbo", "sa", "ved", "pi", "fbs", "fbc", "fb_ref", "client"
+        "source", "tbo", "sa", "ved", "pi", "fbs", "fbc", "fb_ref", "client", "ei",
+        "gs_lp", "sclient", "oq", "uact", "bih", "biw"
     ]
     
     /// Set of YouTube-specific parameters that should be removed
@@ -238,5 +239,18 @@ class URLProcessor {
         }
         
         return cleanedUrl
+    }
+}
+extension String {
+    /// Double-encodes a URL string to ensure parameters are properly preserved
+    /// when the URL is used as a parameter in another URL
+    func doubleEncodedForURLParameter() -> String {
+        // First encode - converts & to %26, = to %3D, etc.
+        let firstEncoding = self.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? self
+        
+        // Second encode - converts % to %25
+        let secondEncoding = firstEncoding.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? firstEncoding
+        
+        return secondEncoding
     }
 }
