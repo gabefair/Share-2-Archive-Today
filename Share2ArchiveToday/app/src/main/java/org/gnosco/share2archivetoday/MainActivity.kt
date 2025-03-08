@@ -160,7 +160,8 @@ class MainActivity : Activity() {
             "mc_eid", "mc_cid", "si", "icid", "_ga", "_gid", "scid", "click_id",
             "trk", "track", "trk_sid", "sid", "mibextid", "fb_action_ids",
             "fb_action_types", "twclid", "igshid", "s_kwcid", "sxsrf", "sca_esv",
-            "source", "tbo", "sa", "ved", "pi" //sxsrf might be needed on some sites, but google uses it for tracking
+            "source", "tbo", "sa", "ved", "pi", "fbs", "fbc", "fb_ref", "client", "ei",
+            "gs_lp", "sclient", "oq", "uact", "bih", "biw" //sxsrf might be needed on some sites, but google uses it for tracking
         )
         return param in trackingParams
     }
