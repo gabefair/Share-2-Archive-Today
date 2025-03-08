@@ -17,7 +17,7 @@ class URLProcessor {
         "mc_eid", "mc_cid", "si", "icid", "_ga", "_gid", "scid", "click_id",
         "trk", "track", "trk_sid", "sid", "mibextid", "fb_action_ids",
         "fb_action_types", "twclid", "igshid", "s_kwcid", "sxsrf", "sca_esv",
-        "source", "tbo", "sa", "ved", "pi"
+        "source", "tbo", "sa", "ved", "pi", "fbs", "fbc", "fb_ref", "client"
     ]
     
     /// Set of YouTube-specific parameters that should be removed
