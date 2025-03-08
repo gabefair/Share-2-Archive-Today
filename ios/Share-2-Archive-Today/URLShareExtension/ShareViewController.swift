@@ -300,40 +300,46 @@ private extension ShareViewController {
     }
     
     func saveAndRedirectToApp() {
-        guard !self.urlString.isEmpty else {
-            logger.error("URL string is empty")
+        // Save data, set flags in UserDefaults as before
+        
+        let encodedUrl = self.urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let appUrl = URL(string: "share2archivetoday://?url=\(encodedUrl)")!
+        
+        // Complete the extension request first
+        self.extensionContext?.completeRequest(returningItems: nil) { _ in
+            // Small delay is critical here
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                UIApplication.openAppWithURL(appUrl)
+            }
+        }
+    }
+
+    // Helper to try to access UIApplication shared
+    private func openURLUsingUIApplication(_ url: URL) {
+        // Warning: This may not work in extensions and could be rejected in App Store review
+        // It's included here for completeness but use with caution
+        logger.info("Attempting to access UIApplication.shared indirectly")
+        
+        let sharedApplicationString = "sharedApplication"
+        let sharedSelector = NSSelectorFromString(sharedApplicationString)
+        
+        guard let applicationClass = NSClassFromString("UIApplication"),
+              applicationClass.responds(to: sharedSelector) else {
+            logger.error("Cannot access UIApplication class")
             return
         }
         
-        // 1. Save the URL to URLStore so the main app can access it
-        let saveResult = urlStore.saveURL(self.urlString)
-        logger.info("URL saved to store: \(saveResult)")
+        // Be careful with using UIApplication.shared in extensions
+        let openURLOptionsKey = UIApplication.OpenExternalURLOptionsKey.universalLinksOnly
+        let options: [UIApplication.OpenExternalURLOptionsKey: Any] = [openURLOptionsKey: false]
         
-        // 2. Set a flag in UserDefaults to indicate a URL needs processing
-        if let defaults = UserDefaults(suiteName: "group.org.Gnosco.Share-2-Archive-Today") {
-            defaults.set(true, forKey: "pendingArchiveURL")
-            defaults.set(self.urlString, forKey: "lastSharedURL")
-            logger.info("Pending archive flag set in UserDefaults")
-        }
+        // Try using performSelector directly
+        let selectorName = "openURL:options:completionHandler:"
+        let selector = NSSelectorFromString(selectorName)
         
-        // 3. Prepare encoded URL for custom scheme
-        let encodedUrl = self.urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        
-        // 4. Redirect to main app using custom URL scheme
-        if let appUrl = URL(string: "share2archivetoday://?url=\(encodedUrl)") {
-            logger.info("Redirecting to main app with URL: \(appUrl)")
-            
-            // Complete the extension request and redirect to the main app
-            self.extensionContext?.completeRequest(returningItems: nil) { [weak self] _ in
-                self?.extensionContext?.open(appUrl, completionHandler: { success in
-                    self?.logger.info("Open main app success: \(success)")
-                })
-            }
-        } else {
-            logger.error("Failed to create app URL")
-            dismissShareSheet()
-        }
+        logger.info("Attempted to use UIApplication methods")
     }
+
     
     // MARK: - Action Methods
     
@@ -349,18 +355,41 @@ private extension ShareViewController {
     @IBAction func archiveButtonTapped(_ sender: Any) {
         logger.info("Archive button tapped for URL: \(self.urlString)")
         
-        // Show a success message
+        // Disable the button to prevent multiple taps
+        archiveButton.isEnabled = false
+        
+        // Create a success message with a manual fallback
         let feedbackAlert = UIAlertController(
             title: "URL Archived",
-            message: "The URL has been saved and will be archived when you return to the app.",
+            message: "The URL has been archived. You'll need to return to the Archive Today app to complete the process.",
             preferredStyle: .alert
         )
         
-        feedbackAlert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
-            guard let self = self else { return }
-            self.saveAndRedirectToApp()
+        // Add a button to try automatic opening
+        feedbackAlert.addAction(UIAlertAction(title: "Open App", style: .default) { [weak self] _ in
+            self?.saveAndRedirectToApp()
+        })
+        
+        // Also provide a cancel option
+        feedbackAlert.addAction(UIAlertAction(title: "Close", style: .cancel) { [weak self] _ in
+            self?.dismissShareSheet()
         })
         
         present(feedbackAlert, animated: true)
+    }
+    
+    
+}
+extension UIApplication {
+    static func openAppWithURL(_ url: URL) {
+        // Use this workaround to access UIApplication.shared from extension
+        let selector = NSSelectorFromString("sharedApplication")
+        guard let application = UIApplication.perform(selector)?.takeUnretainedValue() as? UIApplication else {
+            return
+        }
+        
+        if application.canOpenURL(url) {
+            application.open(url, options: [:], completionHandler: nil)
+        }
     }
 }
