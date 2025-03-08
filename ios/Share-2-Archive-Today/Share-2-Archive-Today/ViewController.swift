@@ -72,10 +72,8 @@ class ViewController: UIViewController {
     /// Opens a URL in Archive.today service
     /// - Parameter urlString: The URL to archive
     private func openInArchiveToday(_ urlString: String) {
-        // Process the URL to clean tracking parameters
-        let processedURL = URLProcessor.processURL(urlString)
-        
-        guard let encodedUrl = processedURL.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+        // No need to process the URL again - it was processed when saved to URLStore
+        guard let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let archiveUrl = URL(string: "https://archive.today/?run=1&url=\(encodedUrl)") else {
             showError(message: "Could not create archive URL")
             return
@@ -89,10 +87,8 @@ class ViewController: UIViewController {
     /// Opens the original URL in Safari
     /// - Parameter urlString: The URL to open
     private func openOriginalUrl(_ urlString: String) {
-        // We still process the URL to ensure consistent behavior
-        let processedURL = URLProcessor.processURL(urlString)
-        
-        guard let url = URL(string: processedURL) else {
+        // No need to process the URL again - it was processed when saved to URLStore
+        guard let url = URL(string: urlString) else {
             showError(message: "Invalid URL")
             return
         }

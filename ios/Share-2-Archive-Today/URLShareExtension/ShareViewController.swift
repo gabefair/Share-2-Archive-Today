@@ -262,19 +262,20 @@ private extension ShareViewController {
     }
     
     func updateUI(with urlString: String) {
+        // Store original URL
         self.urlString = urlString
         
-        // Process the URL to clean tracking parameters
+        // Process the URL to clean tracking parameters - this is the ONLY place we should process the URL
         self.processedUrlString = URLProcessor.processURL(urlString)
         
-        // Show the processed URL in the UI
+        // Show the processed URL as the primary URL in the UI
         if self.processedUrlString != urlString {
             // Show both URLs if they're different
-            self.urlLabel.text = "Original: \(urlString)\n\nProcessed: \(self.processedUrlString)"
+            self.urlLabel.text = "Processed URL to archive:\n\(self.processedUrlString)\n\nOriginal: \(urlString)"
             self.logger.info("URL processed: \(urlString) -> \(self.processedUrlString)")
         } else {
             // Just show the URL if no changes were made
-            self.urlLabel.text = urlString
+            self.urlLabel.text = self.processedUrlString
             self.logger.info("URL loaded (no processing needed): \(urlString)")
         }
         
@@ -303,16 +304,17 @@ private extension ShareViewController {
     }
     
     func saveAndRedirectToApp() {
-        // Save the processed URL to the URL store
+        // Save ONLY the processed URL to the store - it was already processed in updateUI
         if !processedUrlString.isEmpty {
             urlStore.saveURL(processedUrlString)
             logger.info("Saved processed URL to store: \(self.processedUrlString)")
         } else if !urlString.isEmpty {
+            // Fallback in case something went wrong with processing
+            logger.warning("Using original URL as fallback: \(self.urlString)")
             urlStore.saveURL(urlString)
-            logger.info("Saved original URL to store: \(self.urlString)")
         }
         
-        // Use the processed URL for archiving
+        // Always use the processed URL for redirecting to the app
         let finalUrl = !processedUrlString.isEmpty ? processedUrlString : urlString
         let encodedUrl = finalUrl.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         let appUrl = URL(string: "share2archivetoday://?url=\(encodedUrl)")!
