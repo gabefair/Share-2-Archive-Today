@@ -313,27 +313,30 @@ private extension ShareViewController {
         if let defaults = UserDefaults(suiteName: "group.org.Gnosco.Share-2-Archive-Today") {
             defaults.set(true, forKey: "pendingArchiveURL")
             defaults.set(self.urlString, forKey: "lastSharedURL")
+            defaults.synchronize() // Force immediate write
             logger.info("Pending archive flag set in UserDefaults")
         }
         
         // 3. Prepare encoded URL for custom scheme
         let encodedUrl = self.urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         
-        // 4. Redirect to main app using custom URL scheme
+        // 4. Create URL for main app
         if let appUrl = URL(string: "share2archivetoday://?url=\(encodedUrl)") {
             logger.info("Redirecting to main app with URL: \(appUrl)")
             
-            // Complete the extension request and redirect to the main app
-            self.extensionContext?.completeRequest(returningItems: nil) { [weak self] _ in
-                self?.extensionContext?.open(appUrl, completionHandler: { success in
-                    self?.logger.info("Open main app success: \(success)")
-                })
-            }
+            // Attempt to open the main app first
+            self.extensionContext?.open(appUrl, completionHandler: { [weak self] success in
+                self?.logger.info("Open main app success: \(success)")
+                
+                // Then complete the extension's request
+                self?.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+            })
         } else {
             logger.error("Failed to create app URL")
             dismissShareSheet()
         }
     }
+
     
     // MARK: - Action Methods
     
@@ -349,18 +352,23 @@ private extension ShareViewController {
     @IBAction func archiveButtonTapped(_ sender: Any) {
         logger.info("Archive button tapped for URL: \(self.urlString)")
         
-        // Show a success message
+        // Disable the button to prevent multiple taps
+        archiveButton.isEnabled = false
+        
+        // Show a brief success message
         let feedbackAlert = UIAlertController(
             title: "URL Archived",
-            message: "The URL has been saved and will be archived when you return to the app.",
+            message: "Opening Archive Today app...",
             preferredStyle: .alert
         )
         
-        feedbackAlert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
-            guard let self = self else { return }
-            self.saveAndRedirectToApp()
-        })
-        
         present(feedbackAlert, animated: true)
+        
+        // Dismiss after a short delay and redirect to main app
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            feedbackAlert.dismiss(animated: true) {
+                self?.saveAndRedirectToApp()
+            }
+        }
     }
 }
