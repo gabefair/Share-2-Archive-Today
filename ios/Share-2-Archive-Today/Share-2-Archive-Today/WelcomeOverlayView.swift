@@ -21,7 +21,7 @@ class WelcomeOverlayView: UIView {
     
     private let titleLabel: UILabel = {
         let label = UILabel()
-        label.text = "Welcome to Share 2 Archive.today!"
+        label.text = "Together we can preserve history!"
         label.font = .systemFont(ofSize: 22, weight: .bold)
         label.textAlignment = .center
         label.numberOfLines = 0
@@ -40,7 +40,7 @@ class WelcomeOverlayView: UIView {
     
     private let descriptionLabel: UILabel = {
         let label = UILabel()
-        label.text = "This app helps you archive web pages using archive.today for future reference.\n\nUse the share extension in Safari or other apps to quickly archive links you want to preserve."
+        label.text = "This app helps you save web pages using archive.today for future reference.\n\nUse the share extension in Safari or other apps to quickly archive links you want to preserve."
         label.font = .systemFont(ofSize: 16)
         label.textColor = .secondaryLabel
         label.textAlignment = .center
