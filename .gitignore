@@ -57,3 +57,6 @@ key3
 *.der
 *.pem
 ios/Share-2-Archive-Today/Share-2-Archive-Today.xcodeproj/project.xcworkspace/xcuserdata/gabirelfair.xcuserdatad/UserInterfaceState.xcuserstate
+/ios/Share-2-Archive-Today/Share-2-Archive-Today.xcodeproj/project.xcworkspace
+/ios/Share-2-Archive-Today/Share-2-Archive-Today.xcodeproj/project.xcworkspace/xcuserdata
+ios/Share-2-Archive-Today/Share-2-Archive-Today.xcodeproj/project.xcworkspace/xcuserdata/gabirelfair.xcuserdatad/UserInterfaceState.xcuserstate
