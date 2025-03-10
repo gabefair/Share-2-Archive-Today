@@ -40,7 +40,7 @@ class WelcomeOverlayView: UIView {
     
     private let descriptionLabel: UILabel = {
         let label = UILabel()
-        label.text = "This app helps you save web pages using archive.today for future reference.\n\nUse the share extension in Safari or other apps to quickly archive links you want to preserve. Please note archived websites CAN NOT be deleted."
+        label.text = "This app helps you save web pages using archive.today for future reference.\n\nUse the share extension in Safari or other apps to quickly archive links you want to preserve.\nPlease note archived websites CAN NOT be deleted."
         label.font = .systemFont(ofSize: 16)
         label.textColor = .secondaryLabel
         label.textAlignment = .center
