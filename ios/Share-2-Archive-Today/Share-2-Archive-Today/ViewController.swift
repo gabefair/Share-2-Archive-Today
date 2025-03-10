@@ -227,12 +227,12 @@ extension ViewController: UITableViewDelegate {
         })
         
         // Open Original URL
-        alert.addAction(UIAlertAction(title: "Open Original URL", style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: "Open Cleaned Original URL", style: .default) { [weak self] _ in
             self?.openOriginalUrl(url)
         })
         
         // Copy URL
-        alert.addAction(UIAlertAction(title: "Copy URL", style: .default) { _ in
+        alert.addAction(UIAlertAction(title: "Copy Cleaned URL", style: .default) { _ in
             UIPasteboard.general.string = url
         })
         
