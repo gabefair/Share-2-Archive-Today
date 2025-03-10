@@ -26,6 +26,7 @@ class ViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         setupRefreshControl()
+        setupHelpButton()
         
         // Check if we should show the welcome message
         checkForFirstLaunch()
