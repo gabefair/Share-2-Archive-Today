@@ -74,15 +74,21 @@ class FAQViewController: UIViewController {
         ])
         
         // Add FAQ items
-        addFAQItem(to: stackView, question: "What is Share 2 Archive.today?", answer: "This app allows you to easily archive web pages using archive.today service. It helps preserve web content that might change or disappear in the future.")
+        addFAQItem(to: stackView, question: "What is Share 2 Archive.today?", answer: "This app allows you to easily archive web pages using archive.today service. It helps preserve web content that might change or disappear in the future. Please know that archived websites CAN NOT be deleted.")
         
         addFAQItem(to: stackView, question: "How do I archive a URL?", answer: "There are several ways:\n\n1. Use the share button in Safari or other apps and select 'Share 2 Archive.today'\n2. Share text containing a URL\n3. Share an image containing a QR code with a URL")
+        
+        addFAQItem(to: stackView, question: "Using a VPN?", answer: "If you are uisng a VPN, you might have to solve many captchas, adding this app to your VPN whitelist or split tunnel might help.")
         
         addFAQItem(to: stackView, question: "Why archive URLs?", answer: "Archiving preserves web content in its current state, protecting against changes, removal or link rot. It's useful for research, citations, and preserving digital content.")
         
         addFAQItem(to: stackView, question: "What happens to the URLs I archive?", answer: "The URLs are sent to archive.today for archiving. A copy of the URL is saved in this app for your reference, but the actual archived content is stored on archive.today's servers.")
         
         addFAQItem(to: stackView, question: "Can I archive any URL?", answer: "Most URLs can be archived, but some websites may block archiving services. Additionally, websites requiring login or with dynamic content may not archive properly.")
+        
+        addFAQItem(to: stackView, question: "Can I see the source code?", answer: "Yes, it can be found here: https://github.com/gabefair/share-2-archive-today")
+        
+        addFAQItem(to: stackView, question: "How can I help the project?", answer: "You can help by donating to the Archive.Today project, also using the Chrome/Firefox/Edge extension, or contributing to the source code.")
         
         addFAQItem(to: stackView, question: "How do I contact support?", answer: "If you have any issues or questions, please contact us at support@gnosco.org.")
         

@@ -80,6 +80,9 @@ private extension ShareViewController {
     }
     
     private func extractSharedContent() {
+        // Reset the URL processing manager state at the beginning of extraction
+        URLProcessingManager.shared.reset()
+        
         guard let extensionItems = extensionContext?.inputItems as? [NSExtensionItem] else {
             logger.error("No shared content found")
             showToast(message: "No shared content found")
@@ -90,7 +93,7 @@ private extension ShareViewController {
         }
         
         logger.info("Processing \(extensionItems.count) extension items")
-        var foundURL = false
+        var processStarted = false
         
         // Process all extension items
         for extensionItem in extensionItems {
@@ -100,30 +103,46 @@ private extension ShareViewController {
             
             // Process all attachments
             for attachment in attachments {
-                // Try different types of content
+                // Skip if we've already found a URL
+                if URLProcessingManager.shared.urlFound {
+                    logger.info("Skipping attachment processing as URL was already found")
+                    continue
+                }
+                
                 processAttachment(attachment)
-                foundURL = !urlString.isEmpty
-                if foundURL { break }
+                processStarted = true
             }
-            if foundURL { break }
         }
         
-        // If we still haven't found a URL, check after a delay
-        if !foundURL {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                guard let self = self, self.urlString.isEmpty else { return }
+        // If we've started processing but still don't have a URL after a delay,
+        // then show an error. This gives async operations time to complete.
+        if processStarted {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                guard let self = self else { return }
                 
-                self.logger.warning("No URL found after processing all content")
-                self.showToast(message: "Unable to find a URL in the shared content")
-                
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    self.dismissShareSheet()
+                // Only show error and dismiss if we still don't have a URL after all processing
+                // and the URLProcessingManager confirms no URL was found
+                if self.urlString.isEmpty && !URLProcessingManager.shared.urlFound {
+                    self.logger.warning("No URL found after processing all content")
+                    self.showToast(message: "Unable to find a URL in the shared content")
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        if self.urlString.isEmpty && !URLProcessingManager.shared.urlFound {
+                            self.dismissShareSheet()
+                        }
+                    }
                 }
             }
         }
     }
     
     private func processAttachment(_ attachment: NSItemProvider) {
+        // First check if a URL has already been found by another attachment processing
+        if URLProcessingManager.shared.urlFound {
+            logger.info("Skipping attachment processing as URL was already found")
+            return
+        }
+
         logger.info("Processing attachment with types: \(attachment.registeredTypeIdentifiers)")
         
         // First check for image types to scan for QR codes
@@ -199,7 +218,7 @@ private extension ShareViewController {
             logger.info("Found HTML content")
             attachment.loadItem(forTypeIdentifier: kUTTypeHTML as String, options: nil) { [weak self] (item, error) in
                 DispatchQueue.main.async {
-                    guard let self = self else { return }
+                    guard let self = self, !URLProcessingManager.shared.urlFound else { return }
                     
                     if let htmlString = item as? String,
                        let url = self.extractURLFromHTML(htmlString) {
@@ -217,11 +236,11 @@ private extension ShareViewController {
         }
         
         // Check for text that might contain a URL - improved text scanning
-        if attachment.hasItemConformingToTypeIdentifier(kUTTypePlainText as String) {
+        else if attachment.hasItemConformingToTypeIdentifier(kUTTypePlainText as String) {
             logger.info("Found plain text, checking for URLs")
             attachment.loadItem(forTypeIdentifier: kUTTypePlainText as String, options: nil) { [weak self] (item, error) in
                 DispatchQueue.main.async {
-                    guard let self = self else { return }
+                    guard let self = self, !URLProcessingManager.shared.urlFound else { return }
                     
                     if let text = item as? String {
                         self.logger.info("Processing text for URL: \(text)")
@@ -232,11 +251,20 @@ private extension ShareViewController {
                             self.updateUI(with: extractedUrl)
                         } else {
                             self.logger.warning("No URL found in text")
-                            self.showToast(message: "No URL found in the shared text")
                             
-                            // Dismiss after delay
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                                self.dismissShareSheet()
+                            // Only show toast and dismiss if we haven't found a URL elsewhere
+                            // and the URLProcessingManager confirms no URL was found
+                            DispatchQueue.main.async {
+                                if self.urlString.isEmpty && !URLProcessingManager.shared.urlFound {
+                                    self.showToast(message: "No URL found in the shared text")
+                                    
+                                    // Dismiss after delay - only if we still don't have a URL and the manager confirms none found
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                        if self.urlString.isEmpty && !URLProcessingManager.shared.urlFound {
+                                            self.dismissShareSheet()
+                                        }
+                                    }
+                                }
                             }
                         }
                     } else if let error = error {
@@ -427,6 +455,9 @@ private extension ShareViewController {
     }
     
     func updateUI(with urlString: String) {
+        // Set the URL found flag first to prevent race conditions
+        URLProcessingManager.shared.urlFound = true
+        
         // Store original URL
         self.urlString = urlString
         
