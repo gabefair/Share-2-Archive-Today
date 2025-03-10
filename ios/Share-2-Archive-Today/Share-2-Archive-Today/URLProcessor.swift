@@ -74,109 +74,96 @@ class URLProcessor {
             return urlString
         }
         
-        var isYouTube = false
-        var isSubstack = false
+        // If there are no query parameters, handle special cases then return
+        if components.queryItems == nil || components.queryItems!.isEmpty {
+            // Special case for Substack - add no_cover=true
+            if let host = components.host, host == "substack.com" || host.hasSuffix(".substack.com") {
+                components.queryItems = [URLQueryItem(name: "no_cover", value: "true")]
+            }
+            
+            // Special case for YouTube - convert shorts to standard format
+            if let host = components.host, host == "youtube.com" || host.hasSuffix(".youtube.com"),
+               components.path.contains("/shorts/") {
+                components.path = components.path.replacingOccurrences(of: "/shorts/", with: "/v/")
+            }
+            
+            return components.url?.absoluteString ?? urlString
+        }
         
+        // Start with a clean slate for query parameters
+        let originalQueryItems = components.queryItems!
+        var newQueryItems: [URLQueryItem] = []
+        
+        // Handle special cases
         if let host = components.host {
+            // YouTube specific processing
             if host == "youtube.com" || host.hasSuffix(".youtube.com") || host == "youtu.be" {
-                isYouTube = true
-                
-                // Handle music.youtube.com -> youtube.com
+                // Remove "music." prefix if present
                 if host.hasPrefix("music.") {
                     components.host = host.replacingOccurrences(of: "music.", with: "")
                 }
-            } else if host == "substack.com" || host.hasSuffix(".substack.com") {
-                isSubstack = true
-            }
-        }
-        
-        // Convert YouTube shorts to standard format - moved outside nested query block
-        if isYouTube && components.path.contains("/shorts/") {
-            components.path = components.path.replacingOccurrences(of: "/shorts/", with: "/v/")
-        }
-        
-        // If there are no query parameters, we might still need to return a modified URL for some sites
-        if components.queryItems == nil || components.queryItems!.isEmpty {
-            if isSubstack {
-                // Add no_cover=true for Substack
-                components.queryItems = [URLQueryItem(name: "no_cover", value: "true")]
                 
-                // Return the modified URL with the added query parameter
-                return components.url?.absoluteString ?? urlString
-            }
-            
-            // For YouTube, we've already handled the /shorts/ conversion above
-            if isYouTube {
-                return components.url?.absoluteString ?? urlString
-            }
-            
-            // No query parameters and no special site processing needed
-            return urlString
-        }
-        
-        // Process query parameters if they exist
-        let queryItems = components.queryItems!
-        var newQueryItems: [URLQueryItem] = []
-        
-        // Handle nested query parameters (specifically for YouTube)
-        if isYouTube {
-            if let qItem = queryItems.first(where: { $0.name == "q" }),
-               let qValue = qItem.value,
-               var nestedComponents = URLComponents(string: qValue) {
-                
-                // Filter out tracking parameters from nested URL
-                if let nestedQueryItems = nestedComponents.queryItems {
-                    let filteredNestedItems = nestedQueryItems.filter { item in
-                        !trackingParams.contains(item.name)
-                    }
-                    nestedComponents.queryItems = filteredNestedItems.isEmpty ? nil : filteredNestedItems
+                // Convert YouTube shorts to standard format
+                if components.path.contains("/shorts/") {
+                    components.path = components.path.replacingOccurrences(of: "/shorts/", with: "/v/")
                 }
                 
-                // Add the cleaned nested URL back as a query parameter
-                let nestedURLString = nestedComponents.string ?? qValue
-                newQueryItems.append(URLQueryItem(name: "q", value: nestedURLString))
+                // Handle nested query parameters (specifically for 'q' parameter)
+                if let qItem = originalQueryItems.first(where: { $0.name == "q" }),
+                   let qValue = qItem.value,
+                   var nestedComponents = URLComponents(string: qValue) {
+                    
+                    // Clean nested URL's parameters
+                    if let nestedQueryItems = nestedComponents.queryItems {
+                        let filteredNestedItems = nestedQueryItems.filter { item in
+                            !trackingParams.contains(item.name)
+                        }
+                        nestedComponents.queryItems = filteredNestedItems.isEmpty ? nil : filteredNestedItems
+                    }
+                    
+                    // Add back the cleaned nested URL
+                    let nestedURLString = nestedComponents.string ?? qValue
+                    newQueryItems.append(URLQueryItem(name: "q", value: nestedURLString))
+                }
+                
+                // Add all non-tracking, non-YouTube unwanted parameters
+                for item in originalQueryItems {
+                    if item.name != "q" && // Skip 'q' as we've already handled it
+                       !trackingParams.contains(item.name) &&
+                       !unwantedYoutubeParams.contains(item.name) {
+                        newQueryItems.append(item)
+                    }
+                }
+            }
+            // Substack specific processing
+            else if host == "substack.com" || host.hasSuffix(".substack.com") {
+                // Make sure no_cover=true is included
+                let hasCoverParam = originalQueryItems.contains { $0.name == "no_cover" }
+                if !hasCoverParam {
+                    newQueryItems.append(URLQueryItem(name: "no_cover", value: "true"))
+                }
+                
+                // Add all non-tracking parameters
+                for item in originalQueryItems {
+                    if !trackingParams.contains(item.name) {
+                        newQueryItems.append(item)
+                    }
+                }
+            }
+            // Default processing for all other domains
+            else {
+                // Just remove tracking parameters
+                for item in originalQueryItems {
+                    if !trackingParams.contains(item.name) {
+                        newQueryItems.append(item)
+                    }
+                }
             }
         }
         
-        // Add no_cover=true for Substack
-        if isSubstack {
-            // First, check if no_cover already exists to avoid duplicates
-            if !queryItems.contains(where: { $0.name == "no_cover" }) {
-                newQueryItems.append(URLQueryItem(name: "no_cover", value: "true"))
-            }
-        }
-        
-        // Filter regular query parameters
-        for item in queryItems {
-            // Skip the 'q' parameter if we've already handled it for YouTube
-            if isYouTube && item.name == "q" {
-                continue
-            }
-            
-            // Skip tracking parameters
-            if trackingParams.contains(item.name) {
-                continue
-            }
-            
-            // Skip unwanted YouTube parameters
-            if isYouTube && unwantedYoutubeParams.contains(item.name) {
-                continue
-            }
-            
-            // Skip no_cover if we've already added it for Substack
-            if isSubstack && item.name == "no_cover" {
-                newQueryItems.append(item);
-                continue;
-            }
-            
-            // Keep all other parameters
-            newQueryItems.append(item)
-        }
-        
-        // Set the filtered query items
+        // Set the new query items
         components.queryItems = newQueryItems.isEmpty ? nil : newQueryItems
         
-        // Return the cleaned URL string
         return components.url?.absoluteString ?? urlString
     }
     
