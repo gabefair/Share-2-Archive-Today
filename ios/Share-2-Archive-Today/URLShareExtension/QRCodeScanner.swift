@@ -189,7 +189,10 @@ class QRCodeScanner {
     /// Sets the optimal revision for barcode detection based on iOS version
     /// - Parameter request: The VNDetectBarcodesRequest to configure
     private static func setOptimalRevision(for request: VNDetectBarcodesRequest) {
-        if #available(iOS 16.0, *) {
+        if #available(iOS 17.0, *){
+            request.revision = VNDetectBarcodesRequestRevision4
+            logger.debug("Using VNDetectBarcodesRequestRevision3 (iOS 17+)")
+        } else if #available(iOS 16.0, *) {
             // Use the newest revision for iOS 16+
             request.revision = VNDetectBarcodesRequestRevision3
             logger.debug("Using VNDetectBarcodesRequestRevision3 (iOS 16+)")
