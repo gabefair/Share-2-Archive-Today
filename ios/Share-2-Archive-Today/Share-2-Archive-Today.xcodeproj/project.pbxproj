@@ -57,6 +57,7 @@
 		B094EE3F2D59AB0B00F66DEA /* Exceptions for "Share-2-Archive-Today" folder in "URLShareExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				ArchiveURLService.swift,
 				URLProcessor.swift,
 				URLStore.swift,
 			);

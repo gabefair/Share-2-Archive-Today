@@ -17,6 +17,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     /// Logger for debugging
     private let logger = Logger(subsystem: "org.Gnosco.Share-2-Archive-Today", category: "AppDelegate")
     
+    /// Archive URL service
+    private let archiveService = ArchiveURLService.shared
+    
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Check if the app was launched from a URL
         if let url = launchOptions?[.url] as? URL {
@@ -37,84 +40,32 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                     options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         // Handle URLs coming from the share extension
         logger.info("App opened with URL: \(url)")
-        handleIncomingURL(url)
-        return true
-    }
-    
-    /// Processes URLs that are used to launch the app
-    /// - Parameter url: The URL to process
-    private func handleIncomingURL(_ url: URL) {
-        // Verify the URL scheme matches our app
-        guard url.scheme == "share2archivetoday" else {
-            logger.error("URL scheme doesn't match: \(url.scheme ?? "nil")")
-            return
-        }
         
-        logger.info("Processing incoming URL: \(url)")
-        
-        // Extract the shared URL from the incoming URL's query parameters
-        if let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
-           let urlQueryItem = components.queryItems?.first(where: { $0.name == "url" }),
-           let urlString = urlQueryItem.value,
-           let decodedURL = urlString.removingPercentEncoding {
-            
-            // Process the URL to clean tracking parameters if needed
-            let processedURL = URLProcessor.processURL(decodedURL)
-            
-            // Save the processed URL to the URLStore
-            URLStore.shared.saveURL(processedURL)
-            logger.info("Processed URL saved to store: \(processedURL)")
-            
-            if let archiveURL = createArchiveURL(from: processedURL) {
-                // Present the archive.today page in Safari View Controller
-                logger.info("Opening archive.today URL: \(archiveURL)")
-                presentArchivePage(with: archiveURL)
-            } else {
-                logger.error("Failed to create archive URL from: \(processedURL)")
-            }
-        } else {
-            logger.error("Could not extract URL from components: \(url)")
-        }
-    }
-    
-    /// Creates an archive.today URL from a given URL string
-    /// - Parameter urlString: The URL to archive
-    /// - Returns: A URL for the archive.today service, if creation was successful
-    private func createArchiveURL(from urlString: String) -> URL? {
-        guard let encodedUrl = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            logger.error("Failed to encode URL: \(urlString)")
-            return nil
-        }
-        
-        let archiveUrlString = "https://archive.today/?run=1&url=\(encodedUrl)"
-        logger.debug("Created archive URL: \(archiveUrlString)")
-        return URL(string: archiveUrlString)
-    }
-    
-    /// Presents the archive.today page in a Safari View Controller
-    /// - Parameter url: The archive.today URL to present
-    private func presentArchivePage(with url: URL) {
         // Get the root view controller
         guard let rootViewController = window?.rootViewController else {
             logger.error("Could not get root view controller")
-            return
+            return false
         }
         
-        // Create and configure the Safari View Controller
-        let safariVC = SFSafariViewController(url: url)
-        safariVC.preferredControlTintColor = .systemBlue
-        
-        logger.info("Presenting Safari View Controller")
-        
-        // If a view controller is already being presented, dismiss it first
-        if let presented = rootViewController.presentedViewController {
-            logger.debug("Dismissing existing presented view controller")
-            presented.dismiss(animated: true) {
-                rootViewController.present(safariVC, animated: true)
+        // Don't try to create a UIOpenURLContext, instead modify the ArchiveURLService
+        // to have a method that directly handles URLs
+        if url.scheme == "share2archivetoday" {
+            if let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
+               let queryItem = components.queryItems?.first(where: { $0.name == "url" }),
+               let receivedUrlString = queryItem.value,
+               let decodedURL = receivedUrlString.removingPercentEncoding {
+                
+                // Process the URL directly
+                archiveService.processAndArchiveURL(decodedURL, from: rootViewController)
+            } else {
+                // No URL in parameters, check for pending URL
+                archiveService.checkForPendingURL(from: rootViewController)
             }
         } else {
-            rootViewController.present(safariVC, animated: true)
+            logger.error("Unsupported URL scheme: \(url.scheme ?? "nil")")
         }
+        
+        return true
     }
     
     // MARK: - App Configuration
@@ -130,6 +81,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Initialize URLStore
         _ = URLStore.shared
         logger.debug("URLStore initialized")
+        
+        // Initialize Archive URL Service
+        _ = ArchiveURLService.shared
+        logger.debug("ArchiveURLService initialized")
         
         // Setup any other required services
     }
