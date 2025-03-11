@@ -29,8 +29,8 @@ class ShareViewController: UIViewController {
     /// Logger for debugging
     private let logger = Logger(subsystem: "org.Gnosco.Share-2-Archive-Today", category: "ShareExtension")
     
-    /// URL store for saving URLs
-    private lazy var urlStore = URLStore.shared
+    /// Archive URL service
+    private let archiveService = ArchiveURLService.shared
     
     // MARK: - Lifecycle Methods
     
@@ -461,8 +461,8 @@ private extension ShareViewController {
         // Store original URL
         self.urlString = urlString
         
-        // Process the URL to clean tracking parameters - this is the ONLY place we should process the URL
-        self.processedUrlString = URLProcessor.processURL(urlString)
+        // Use the Archive URL Service to process the URL
+        self.processedUrlString = archiveService.processURL(urlString)
         
         // Show the processed URL as the primary URL in the UI
         if self.processedUrlString != urlString {
@@ -500,16 +500,16 @@ private extension ShareViewController {
     }
     
     func saveAndRedirectToApp() {
-        // Save ONLY the processed URL to the store - it was already processed in updateUI
         if !processedUrlString.isEmpty {
-            urlStore.saveURL(processedUrlString)
-            logger.info("Saved processed URL to store: \(self.processedUrlString)")
+            // Use archiveService to save the URL
+            archiveService.saveURL(processedUrlString)
+        logger.info("Saved processed URL to store: \(self.processedUrlString)")
         } else if !urlString.isEmpty {
             // Fallback in case something went wrong with processing
             logger.warning("Using original URL as fallback: \(self.urlString)")
-            urlStore.saveURL(urlString)
+            archiveService.saveURL(urlString)
         }
-        
+
         // Always use the processed URL for redirecting to the app
         let finalUrl = !processedUrlString.isEmpty ? processedUrlString : urlString
         let encodedUrl = finalUrl.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
