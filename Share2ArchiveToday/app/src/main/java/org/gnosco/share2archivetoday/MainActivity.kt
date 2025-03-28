@@ -16,8 +16,14 @@ import kotlin.math.max
 import android.widget.Toast
 
 class MainActivity : Activity() {
+    private lateinit var clearUrlsManager: ClearUrlsRulesManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize ClearURLs rules
+        clearUrlsManager = ClearUrlsRulesManager(applicationContext)
+
         handleShareIntent(intent)
     }
 
@@ -36,7 +42,7 @@ class MainActivity : Activity() {
 
                         if (url != null) {
                             val processedUrl = processArchiveUrl(url)
-                            val cleanedUrl = cleanTrackingParamsFromUrl(processedUrl)
+                            val cleanedUrl = clearUrlsManager.cleanTrackingParamsFromUrl(processedUrl)
                             openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
                         } else {
                             Toast.makeText(this, "No URL found in shared text", Toast.LENGTH_SHORT).show()
@@ -68,7 +74,7 @@ class MainActivity : Activity() {
             val qrUrl = extractQRCodeFromImage(imageUri)
             if (qrUrl != null) {
                 val processedUrl = processArchiveUrl(qrUrl)
-                val cleanedUrl = cleanTrackingParamsFromUrl(processedUrl)
+                val cleanedUrl = clearUrlsManager.cleanTrackingParamsFromUrl(processedUrl)
                 openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
                 Toast.makeText(this, "URL found in QR code", Toast.LENGTH_SHORT).show()
             } else {
@@ -149,73 +155,6 @@ class MainActivity : Activity() {
         } else {
             url
         }
-    }
-
-    private fun isTrackingParam(param: String): Boolean {
-        val trackingParams = setOf(
-            "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
-            "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "tclid",
-            "aff_id", "affiliate_id", "ref", "referer", "campaign_id", "ad_id",
-            "adgroup_id", "adset_id", "creativetype", "placement", "network",
-            "mc_eid", "mc_cid", "si", "icid", "_ga", "_gid", "scid", "click_id",
-            "trk", "track", "trk_sid", "sid", "mibextid", "fb_action_ids",
-            "fb_action_types", "twclid", "igshid", "s_kwcid", "sxsrf", "sca_esv",
-            "source", "tbo", "sa", "ved", "pi", "fbs", "fbc", "fb_ref", "client", "ei",
-            "gs_lp", "sclient", "oq", "uact", "bih", "biw" //sxsrf might be needed on some sites, but google uses it for tracking
-        )
-        return param in trackingParams
-    }
-
-    private fun isUnwantedYoutubeParam(param: String): Boolean {
-        val youtubeParams = setOf(
-            "feature"
-        )
-        return param in youtubeParams
-    }
-
-    private fun cleanTrackingParamsFromUrl(url: String): String {
-        val uri = Uri.parse(url)
-        if (uri.legacyGetQueryParameterNames().isEmpty()) {
-            return url
-        }
-
-        val newUriBuilder = uri.buildUpon().legacyClearQuery()
-        var removeYouTubeParams = false
-
-        // Additional handling for YouTube URLs
-        if (uri.host?.contains("youtube.com") == true || uri.host?.contains("youtu.be") == true) {
-            removeYouTubeParams = true
-            val nestedQueryParams = uri.getQueryParameter("q")
-            if (nestedQueryParams != null) {
-                val nestedUri = Uri.parse(nestedQueryParams)
-                val newNestedUriBuilder = nestedUri.buildUpon().legacyClearQuery()
-
-                nestedUri.legacyGetQueryParameterNames().forEach { nestedParam ->
-                    newNestedUriBuilder.appendQueryParameter(nestedParam, nestedUri.getQueryParameter(nestedParam))
-                }
-
-                newUriBuilder.appendQueryParameter("q", newNestedUriBuilder.build().toString())
-            }
-
-            val modifiedHost = uri.host?.removePrefix("music.")
-            newUriBuilder.authority(modifiedHost)
-
-            newUriBuilder.path(uri.path?.replace("/shorts/", "/v/") ?: uri.path)
-        }
-
-        else if(uri.host?.endsWith(".substack.com") == true) {
-            // Add "?no_cover=true" to the URL path
-            newUriBuilder.appendQueryParameter("no_cover", "true")
-        }
-
-        uri.legacyGetQueryParameterNames().forEach { param ->
-            // Add only non-tracking parameters to the new URL
-            if (!isTrackingParam(param) && !(removeYouTubeParams && isUnwantedYoutubeParam(param))) {
-                newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
-            }
-        }
-
-        return newUriBuilder.build().toString()
     }
 
     private fun extractUrl(text: String): String? {

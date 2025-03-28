@@ -10,10 +10,10 @@ android {
 
     defaultConfig {
         applicationId = "org.gnosco.share2archivetoday"
-        minSdk = 1
+        minSdk = 21
         targetSdk = 34
-        versionCode = 30
-        versionName = "3.0"
+        versionCode = 31
+        versionName = "3.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -51,9 +51,15 @@ android {
     }
 }
 
-
-
-
 dependencies {
     implementation("com.google.zxing:core:3.5.3")
+    // JUnit 4 for testing
+    testImplementation("junit:junit:4.13.2")
+
+    // AndroidX Test dependencies
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test:core:1.5.0")
+    androidTestImplementation("androidx.test:runner:1.5.2")
+    androidTestImplementation("androidx.test:rules:1.5.0")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }
