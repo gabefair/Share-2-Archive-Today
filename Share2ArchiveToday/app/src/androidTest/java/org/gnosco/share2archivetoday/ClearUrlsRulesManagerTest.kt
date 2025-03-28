@@ -22,13 +22,19 @@ class ClearUrlsRulesManagerTest {
     @Test
     fun testUrlCleaning() {
         val testUrls = mapOf(
+            // Amazon raw rule test
             "https://www.amazon.com/dp/B07PXRGG6Z/ref=cm_sw_r_cp_api_glt_i_AB12CD34" to
                     "https://www.amazon.com/dp/B07PXRGG6Z",
 
-            "https://www.google.com/url?sa=t&source=web&rct=j&url=https%3A%2F%2Fexample.com&usg=AOvVaw123456" to
+            // Facebook with tracking parameters
+            "https://www.facebook.com/story.php?story_fbid=12345&id=6789&m_entstream_source=timeline" to
+                    "https://www.facebook.com/story.php?story_fbid=12345&id=6789",
+
+            // Google with redirection
+            "https://www.google.com/url?sa=t&source=web&url=https%3A%2F%2Fexample.com" to
                     "https://example.com",
 
-            // Add more test cases with expected results
+
         )
 
         for ((input, expected) in testUrls) {
