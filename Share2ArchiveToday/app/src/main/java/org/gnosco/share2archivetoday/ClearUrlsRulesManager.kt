@@ -1,18 +1,22 @@
 package org.gnosco.share2archivetoday
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.IOException
 import java.io.InputStreamReader
 import java.net.URLDecoder
+import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Pattern
 
 /**
  * Manager class for handling ClearURLs rules
  * Based directly on the original ClearURLs extension approach using rules format from https://docs.clearurls.xyz/1.27.3/specs/rules/
+ * Optimized for faster URL matching and cleaning
  */
 class ClearUrlsRulesManager(private val context: Context) {
     private val TAG = "ClearUrlsRulesManager"
@@ -20,6 +24,18 @@ class ClearUrlsRulesManager(private val context: Context) {
     // Store providers
     private var providers = mutableListOf<Provider>()
     private var providerKeys = mutableListOf<String>()
+
+    // Domain pattern to Provider map for quick lookups
+    private val domainToProviderMap = ConcurrentHashMap<String, MutableList<Provider>>()
+
+    // Preferences for caching
+    private val prefs: SharedPreferences by lazy {
+        context.getSharedPreferences("clearurls_prefs", Context.MODE_PRIVATE)
+    }
+
+    // Rules version tracking
+    private var rulesVersion: String = "1.27.3"
+    private var cachedRulesVersion: String = ""
 
     // Configuration
     private var domainBlocking = true
@@ -29,10 +45,34 @@ class ClearUrlsRulesManager(private val context: Context) {
 
     init {
         try {
-            loadRules()
+            // Check for cached rules first if on supported SDK
+            if (shouldUseCachedRules()) {
+                loadCachedRules()
+            } else {
+                loadRules()
+                // Only cache if on supported SDK
+                if (isHoneycombOrHigher()) {
+                    cacheRules()
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error loading ClearURLs rules", e)
+            // If error occurs with cached rules, try loading from assets
+            if (isCachedRulesLoaded()) {
+                try {
+                    loadRules()
+                } catch (e2: Exception) {
+                    Log.e(TAG, "Error loading rules from assets after cache failure", e2)
+                }
+            }
         }
+    }
+
+    /**
+     * Helper method to check if the device is running Honeycomb or higher
+     */
+    private fun isHoneycombOrHigher(): Boolean {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB
     }
 
     /**
@@ -43,6 +83,7 @@ class ClearUrlsRulesManager(private val context: Context) {
         private val completeProvider: Boolean = false
     ) {
         private var urlPattern: Pattern? = null
+        private var patternString: String = ""
         private val enabledRules = mutableMapOf<String, Boolean>()
         private val enabledRawRules = mutableMapOf<String, Boolean>()
         private val enabledExceptions = mutableMapOf<String, Boolean>()
@@ -55,10 +96,18 @@ class ClearUrlsRulesManager(private val context: Context) {
          */
         fun setURLPattern(pattern: String) {
             try {
+                patternString = pattern
                 urlPattern = Pattern.compile(pattern, Pattern.CASE_INSENSITIVE)
             } catch (e: Exception) {
                 Log.e(TAG, "Error compiling URL pattern for provider $name: $pattern", e)
             }
+        }
+
+        /**
+         * Get the pattern string used for this provider
+         */
+        fun getPatternString(): String {
+            return patternString
         }
 
         /**
@@ -186,6 +235,249 @@ class ClearUrlsRulesManager(private val context: Context) {
 
             return null
         }
+
+        /**
+         * For serialization
+         */
+        fun toJSON(): JSONObject {
+            val json = JSONObject()
+            json.put("name", name)
+            json.put("completeProvider", completeProvider)
+            json.put("patternString", patternString)
+
+            // Save rules
+            json.put("rules", JSONObject().apply {
+                enabledRules.forEach { (rule, active) -> put(rule, active) }
+            })
+
+            // Save raw rules
+            json.put("rawRules", JSONObject().apply {
+                enabledRawRules.forEach { (rule, active) -> put(rule, active) }
+            })
+
+            // Save exceptions
+            json.put("exceptions", JSONObject().apply {
+                enabledExceptions.forEach { (exception, active) -> put(exception, active) }
+            })
+
+            // Save redirections
+            json.put("redirections", JSONObject().apply {
+                enabledRedirections.forEach { (redirection, active) -> put(redirection, active) }
+            })
+
+            // Save referral marketing
+            json.put("referralMarketing", JSONObject().apply {
+                enabledReferralMarketing.forEach { (rule, active) -> put(rule, active) }
+            })
+
+            // Save methods
+            val methodsJson = JSONObject()
+            methods.forEachIndexed { index, method -> methodsJson.put(index.toString(), method) }
+            json.put("methods", methodsJson)
+
+            return json
+        }
+
+        /**
+         * For serialization - This function is no longer used with a companion object
+         */
+    }
+
+    /**
+     * Check if cached rules should be used
+     * Rules should NOT be used if device is pre-Honeycomb
+     */
+    private fun shouldUseCachedRules(): Boolean {
+        // Don't use cache if device is pre-Honeycomb
+        if (!isHoneycombOrHigher()) {
+            return false
+        }
+
+        cachedRulesVersion = prefs.getString("rules_version", "") ?: ""
+        return cachedRulesVersion.isNotEmpty() && prefs.contains("cached_rules")
+    }
+
+    /**
+     * Check if we have cached rules loaded
+     */
+    private fun isCachedRulesLoaded(): Boolean {
+        return cachedRulesVersion.isNotEmpty()
+    }
+
+    /**
+     * Cache the current rules to shared preferences
+     * Only if the device is running Honeycomb or higher
+     */
+    private fun cacheRules() {
+        // Don't cache on pre-Honeycomb devices
+        if (!isHoneycombOrHigher()) {
+            return
+        }
+
+        if (providers.isEmpty() || rulesVersion.isEmpty()) {
+            return
+        }
+
+        try {
+            val providersJson = JSONObject()
+
+            // Save each provider
+            providers.forEachIndexed { index, provider ->
+                providersJson.put(index.toString(), provider.toJSON())
+            }
+
+            // Save provider keys
+            val keysJson = JSONObject()
+            providerKeys.forEachIndexed { index, key ->
+                keysJson.put(index.toString(), key)
+            }
+
+            // Create a master JSON with all data
+            val masterJson = JSONObject()
+            masterJson.put("providers", providersJson)
+            masterJson.put("providerKeys", keysJson)
+            masterJson.put("domainBlocking", domainBlocking)
+            masterJson.put("referralMarketingEnabled", referralMarketingEnabled)
+            masterJson.put("localHostsSkipping", localHostsSkipping)
+            masterJson.put("version", rulesVersion)
+
+            // Save to preferences
+            prefs.edit()
+                .putString("cached_rules", masterJson.toString())
+                .putString("rules_version", rulesVersion)
+                .apply()
+
+            Log.d(TAG, "Rules cached successfully, version: $rulesVersion")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error caching rules", e)
+        }
+    }
+
+    /**
+     * Create a Provider from JSON
+     */
+    private fun providerFromJSON(json: JSONObject): Provider? {
+        try {
+            val name = json.getString("name")
+            val completeProvider = json.optBoolean("completeProvider", false)
+            val provider = Provider(name, completeProvider)
+
+            // Set pattern
+            if (json.has("patternString")) {
+                provider.setURLPattern(json.getString("patternString"))
+            }
+
+            // Load rules
+            val rules = json.optJSONObject("rules")
+            if (rules != null) {
+                val rulesIter = rules.keys()
+                while (rulesIter.hasNext()) {
+                    val rule = rulesIter.next()
+                    provider.addRule(rule, rules.getBoolean(rule))
+                }
+            }
+
+            // Load raw rules
+            val rawRules = json.optJSONObject("rawRules")
+            if (rawRules != null) {
+                val rawRulesIter = rawRules.keys()
+                while (rawRulesIter.hasNext()) {
+                    val rule = rawRulesIter.next()
+                    provider.addRawRule(rule, rawRules.getBoolean(rule))
+                }
+            }
+
+            // Load exceptions
+            val exceptions = json.optJSONObject("exceptions")
+            if (exceptions != null) {
+                val exceptionsIter = exceptions.keys()
+                while (exceptionsIter.hasNext()) {
+                    val exception = exceptionsIter.next()
+                    provider.addException(exception, exceptions.getBoolean(exception))
+                }
+            }
+
+            // Load redirections
+            val redirections = json.optJSONObject("redirections")
+            if (redirections != null) {
+                val redirectionsIter = redirections.keys()
+                while (redirectionsIter.hasNext()) {
+                    val redirection = redirectionsIter.next()
+                    provider.addRedirection(redirection, redirections.getBoolean(redirection))
+                }
+            }
+
+            // Load referral marketing
+            val referralMarketing = json.optJSONObject("referralMarketing")
+            if (referralMarketing != null) {
+                val referralMarketingIter = referralMarketing.keys()
+                while (referralMarketingIter.hasNext()) {
+                    val rule = referralMarketingIter.next()
+                    provider.addReferralMarketing(rule, referralMarketing.getBoolean(rule))
+                }
+            }
+
+            // Load methods
+            val methods = json.optJSONObject("methods")
+            if (methods != null) {
+                val methodsIter = methods.keys()
+                while (methodsIter.hasNext()) {
+                    val method = methods.getString(methodsIter.next())
+                    provider.addMethod(method)
+                }
+            }
+
+            return provider
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deserializing provider", e)
+            return null
+        }
+    }
+
+    /**
+     * Load rules from cache
+     */
+    private fun loadCachedRules() {
+        try {
+            val cachedData = prefs.getString("cached_rules", null) ?: return
+            val masterJson = JSONObject(cachedData)
+
+            // Load configuration
+            domainBlocking = masterJson.optBoolean("domainBlocking", true)
+            referralMarketingEnabled = masterJson.optBoolean("referralMarketingEnabled", false)
+            localHostsSkipping = masterJson.optBoolean("localHostsSkipping", true)
+            rulesVersion = masterJson.optString("version", "1.27.3")
+
+            // Load provider keys
+            val keysJson = masterJson.optJSONObject("providerKeys")
+            if (keysJson != null) {
+                val keysIter = keysJson.keys()
+                while (keysIter.hasNext()) {
+                    providerKeys.add(keysJson.getString(keysIter.next()))
+                }
+            }
+
+            // Load providers
+            val providersJson = masterJson.optJSONObject("providers")
+            if (providersJson != null) {
+                val providerIter = providersJson.keys()
+                while (providerIter.hasNext()) {
+                    val providerJson = providersJson.getJSONObject(providerIter.next())
+                    val provider = providerFromJSON(providerJson)
+                    if (provider != null) {
+                        providers.add(provider)
+                    }
+                }
+            }
+
+            // Build the domain to provider map
+            buildDomainProviderMap()
+
+            Log.d(TAG, "Loaded ${providers.size} providers from cached rules, version: $rulesVersion")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading cached rules", e)
+            throw e
+        }
     }
 
     /**
@@ -197,6 +489,9 @@ class ClearUrlsRulesManager(private val context: Context) {
             if (jsonString != null) {
                 val clearURLsData = JSONObject(jsonString)
 
+                // Get version info
+                rulesVersion = clearURLsData.optString("version", "")
+
                 // Get provider keys
                 val providersObj = clearURLsData.optJSONObject("providers")
                 if (providersObj != null) {
@@ -207,12 +502,44 @@ class ClearUrlsRulesManager(private val context: Context) {
 
                     // Create providers
                     createProviders(clearURLsData)
-                    Log.d(TAG, "Loaded ${providers.size} providers from rules")
+
+                    // Build the domain to provider map
+                    buildDomainProviderMap()
+
+                    Log.d(TAG, "Loaded ${providers.size} providers from rules, version: $rulesVersion")
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error reading ClearURLs rules", e)
+            throw e
         }
+    }
+
+    /**
+     * Build the domain-to-provider mapping for faster lookups
+     */
+    private fun buildDomainProviderMap() {
+        domainToProviderMap.clear()
+
+        for (provider in providers) {
+            // Get the pattern string as a key
+            val patternString = provider.getPatternString()
+
+            // Add to the map, creating a list if needed
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                domainToProviderMap.computeIfAbsent(patternString) { mutableListOf() }.add(provider)
+            } else {
+                // Fallback for older Android versions
+                var list = domainToProviderMap[patternString]
+                if (list == null) {
+                    list = mutableListOf()
+                    domainToProviderMap[patternString] = list
+                }
+                list.add(provider)
+            }
+        }
+
+        Log.d(TAG, "Built domain map with ${domainToProviderMap.size} patterns")
     }
 
     /**
