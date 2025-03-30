@@ -52,8 +52,15 @@ class MainActivity : Activity() {
                     // Handle image shares
                     if (intent.type?.startsWith("image/") == true) {
                         try {
-                            intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { imageUri ->
-                                handleImageShare(imageUri)
+                            val imageUri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                            } else {
+                                @Suppress("DEPRECATION")
+                                intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+                            }
+
+                            imageUri?.let {
+                                handleImageShare(it)
                             }
                         } catch (e: Exception) {
                             Log.e("MainActivity", "Error handling image share", e)
@@ -75,7 +82,7 @@ class MainActivity : Activity() {
 
     private fun handleImageShare(imageUri: Uri) {
         try {
-            val qrUrl = extractQRCodeFromImage(imageUri)
+            val qrUrl = extractUrl(extractQRCodeFromImage(imageUri))
             if (qrUrl != null) {
                 threeSteps(qrUrl)
                 Toast.makeText(this, "URL found in QR code", Toast.LENGTH_SHORT).show()
@@ -96,12 +103,11 @@ class MainActivity : Activity() {
      */
     private fun handleURL(url: String): String {
         // First clean with ClearURLs rules
-        val rulesCleanedUrl = if (clearUrlsRulesManager.areRulesLoaded()) {
-            clearUrlsRulesManager.clearUrl(url)
-        } else {
-            // Fallback to legacy method if rules not loaded
-            cleanTrackingParamsFromUrl(url)
+        var rulesCleanedUrl = url
+        if (clearUrlsRulesManager.areRulesLoaded()) {
+            rulesCleanedUrl = clearUrlsRulesManager.clearUrl(url)
         }
+        cleanTrackingParamsFromUrl(rulesCleanedUrl)
 
         // Then apply additional platform-specific optimizations that might not be in the rules
         return applyPlatformSpecificOptimizations(rulesCleanedUrl)
@@ -163,8 +169,8 @@ class MainActivity : Activity() {
         return if (changed) newUriBuilder.build().toString() else url
     }
 
-    private fun extractQRCodeFromImage(imageUri: Uri): String? {
-        val inputStream = contentResolver.openInputStream(imageUri) ?: return null
+    private fun extractQRCodeFromImage(imageUri: Uri): String {
+        val inputStream = contentResolver.openInputStream(imageUri) ?: return ""
 
         // Read image dimensions first
         val options = BitmapFactory.Options().apply {
@@ -184,7 +190,7 @@ class MainActivity : Activity() {
         }
 
         contentResolver.openInputStream(imageUri)?.use { stream ->
-            val bitmap = BitmapFactory.decodeStream(stream, null, scaledOptions) ?: return null
+            val bitmap = BitmapFactory.decodeStream(stream, null, scaledOptions) ?: return ""
 
             try {
                 // Convert to ZXing format
@@ -210,13 +216,13 @@ class MainActivity : Activity() {
                 } catch (e: NotFoundException) {
                     // No QR code found
                     Log.d("MainActivity", "No QR code found in image")
-                    return null
+                    return ""
                 }
             } finally {
                 bitmap.recycle()
             }
         }
-        return null
+        return ""
     }
 
     private fun processArchiveUrl(url: String): String {
