@@ -16,13 +16,13 @@ import kotlin.math.max
 import android.widget.Toast
 
 class MainActivity : Activity() {
-    private lateinit var clearUrlsManager: ClearUrlsRulesManager
+    private lateinit var clearUrlsRulesManager: ClearUrlsRulesManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize ClearURLs rules
-        clearUrlsManager = ClearUrlsRulesManager(applicationContext)
+        // Initialize ClearURLs rules manager
+        clearUrlsRulesManager = ClearUrlsRulesManager(applicationContext)
 
         handleShareIntent(intent)
     }
@@ -41,9 +41,7 @@ class MainActivity : Activity() {
                         val url = extractUrl(sharedText)
 
                         if (url != null) {
-                            val processedUrl = processArchiveUrl(url)
-                            val cleanedUrl = clearUrlsManager.cleanTrackingParamsFromUrl(processedUrl)
-                            openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
+                            threeSteps(url)
                         } else {
                             Toast.makeText(this, "No URL found in shared text", Toast.LENGTH_SHORT).show()
                             finish()
@@ -69,13 +67,17 @@ class MainActivity : Activity() {
         finish()
     }
 
+    private fun threeSteps(url: String) {
+        val processedUrl = processArchiveUrl(url)
+        val cleanedUrl = handleURL(processedUrl)
+        openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
+    }
+
     private fun handleImageShare(imageUri: Uri) {
         try {
             val qrUrl = extractQRCodeFromImage(imageUri)
             if (qrUrl != null) {
-                val processedUrl = processArchiveUrl(qrUrl)
-                val cleanedUrl = clearUrlsManager.cleanTrackingParamsFromUrl(processedUrl)
-                openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
+                threeSteps(qrUrl)
                 Toast.makeText(this, "URL found in QR code", Toast.LENGTH_SHORT).show()
             } else {
                 Log.d("MainActivity", "No QR code found in image")
@@ -87,6 +89,78 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Error processing QR code", Toast.LENGTH_SHORT).show()
             finish()
         }
+    }
+
+    /**
+     * Main URL handling method that combines ClearURLs rules with platform-specific optimizations
+     */
+    private fun handleURL(url: String): String {
+        // First clean with ClearURLs rules
+        val rulesCleanedUrl = if (clearUrlsRulesManager.areRulesLoaded()) {
+            clearUrlsRulesManager.clearUrl(url)
+        } else {
+            // Fallback to legacy method if rules not loaded
+            cleanTrackingParamsFromUrl(url)
+        }
+
+        // Then apply additional platform-specific optimizations that might not be in the rules
+        return applyPlatformSpecificOptimizations(rulesCleanedUrl)
+    }
+
+    /**
+     * Apply platform-specific optimizations that may not be covered by ClearURLs rules
+     */
+    private fun applyPlatformSpecificOptimizations(url: String): String {
+        val uri = Uri.parse(url)
+        val newUriBuilder = uri.buildUpon()
+        var changed = false
+
+        // YouTube-specific handling
+        if (uri.host?.contains("youtube.com") == true || uri.host?.contains("youtu.be") == true) {
+            // Convert shorts to regular videos
+            if (uri.path?.contains("/shorts/") == true) {
+                newUriBuilder.path(uri.path?.replace("/shorts/", "/v/"))
+                changed = true
+            }
+
+            // Remove music. prefix
+            val modifiedHost = uri.host?.removePrefix("music.")
+            if (modifiedHost != uri.host) {
+                newUriBuilder.authority(modifiedHost)
+                changed = true
+            }
+
+            // Handle nested query parameters in YouTube search links
+            val nestedQueryParams = uri.getQueryParameter("q")
+            if (nestedQueryParams != null && nestedQueryParams.contains("?")) {
+                try {
+                    val nestedUri = Uri.parse(nestedQueryParams)
+                    val newNestedUriBuilder = nestedUri.buildUpon().legacyClearQuery()
+
+                    nestedUri.legacyGetQueryParameterNames().forEach { nestedParam ->
+                        if (!isTrackingParam(nestedParam)) {
+                            newNestedUriBuilder.appendQueryParameter(nestedParam, nestedUri.getQueryParameter(nestedParam))
+                        }
+                    }
+
+                    newUriBuilder.appendQueryParameter("q", newNestedUriBuilder.build().toString())
+                    changed = true
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Error handling nested query params", e)
+                }
+            }
+        }
+
+        // Substack-specific handling
+        else if(uri.host?.endsWith(".substack.com") == true) {
+            // Add "no_cover=true" parameter for better archive quality
+            if (uri.getQueryParameter("no_cover") == null) {
+                newUriBuilder.appendQueryParameter("no_cover", "true")
+                changed = true
+            }
+        }
+
+        return if (changed) newUriBuilder.build().toString() else url
     }
 
     private fun extractQRCodeFromImage(imageUri: Uri): String? {
@@ -157,6 +231,70 @@ class MainActivity : Activity() {
         }
     }
 
+    // Keep for fallback purposes
+    private fun isTrackingParam(param: String): Boolean {
+        val trackingParams = setOf(
+            "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+            "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "tclid",
+            "aff_id", "affiliate_id", "ref", "referer", "campaign_id", "ad_id",
+            "adgroup_id", "adset_id", "creativetype", "placement", "network",
+            "mc_eid", "mc_cid", "si", "icid", "_ga", "_gid", "scid", "click_id",
+            "trk", "track", "trk_sid", "sid", "mibextid", "fb_action_ids",
+            "fb_action_types", "twclid", "igshid", "s_kwcid", "sxsrf", "sca_esv",
+            "source", "tbo", "sa", "ved", "pi", "fbs", "fbc", "fb_ref", "client", "ei",
+            "gs_lp", "sclient", "oq", "uact", "bih", "biw", // sxsrf might be needed on some sites, but google uses it for tracking
+            "m_entstream_source", "entstream_source", "fb_source"
+
+        )
+        return param in trackingParams
+    }
+
+    private fun isUnwantedYoutubeParam(param: String): Boolean {
+        val youtubeParams = setOf(
+            "feature",
+            "ab_channel",
+            "t", // Some cases you may want to keep t for timestamps, but remove it for tracking purposes
+            "si"
+        )
+        return param in youtubeParams
+    }
+
+    // Keep for fallback and special handling
+    private fun cleanTrackingParamsFromUrl(url: String): String {
+        val uri = Uri.parse(url)
+        if (uri.legacyGetQueryParameterNames().isEmpty()) {
+            return url
+        }
+
+        val newUriBuilder = uri.buildUpon().legacyClearQuery()
+        var removeYouTubeParams = false
+
+        // Additional handling for YouTube URLs
+        if (uri.host?.contains("youtube.com") == true || uri.host?.contains("youtu.be") == true) {
+            removeYouTubeParams = true
+            val nestedQueryParams = uri.getQueryParameter("q")
+            if (nestedQueryParams != null) {
+                val nestedUri = Uri.parse(nestedQueryParams)
+                val newNestedUriBuilder = nestedUri.buildUpon().legacyClearQuery()
+
+                nestedUri.legacyGetQueryParameterNames().forEach { nestedParam ->
+                    if (!isTrackingParam(nestedParam)) {
+                        newNestedUriBuilder.appendQueryParameter(nestedParam, nestedUri.getQueryParameter(nestedParam))
+                    }
+                }
+                newUriBuilder.appendQueryParameter("q", newNestedUriBuilder.build().toString())
+            }
+        }
+
+        uri.legacyGetQueryParameterNames().forEach { param ->
+            // Add only non-tracking parameters to the new URL
+            if (!isTrackingParam(param) && !(removeYouTubeParams && isUnwantedYoutubeParam(param))) {
+                newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
+            }
+        }
+        return newUriBuilder.build().toString()
+    }
+
     private fun extractUrl(text: String): String? {
         // First try to find URLs with protocols
         val protocolMatcher = WebURLMatcher.matcher(text)
@@ -201,7 +339,13 @@ class MainActivity : Activity() {
         }
 
         // Remove any trailing punctuation that might have been caught
-        return cleanedUrl.removeSuffix(".").removeSuffix(",").removeSuffix(";").removeSuffix(")")
+        return cleanedUrl
+            .removeSuffix(".")
+            .removeSuffix(",")
+            .removeSuffix(";")
+            .removeSuffix(")")
+            .removeSuffix("'")
+            .removeSuffix("\"")
     }
 
     private fun openInBrowser(url: String) {

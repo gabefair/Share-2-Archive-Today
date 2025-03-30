@@ -3,46 +3,30 @@ package org.gnosco.share2archivetoday
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import android.util.LruCache
-import org.json.JSONArray
-import org.json.JSONException
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.IOException
 import java.io.InputStreamReader
 import java.net.URLDecoder
 import java.util.regex.Pattern
-import java.util.regex.PatternSyntaxException
 
 /**
  * Manager class for handling ClearURLs rules
- * Based on the rules format from https://docs.clearurls.xyz/1.27.3/specs/rules/
+ * Based directly on the original ClearURLs extension approach using rules format from https://docs.clearurls.xyz/1.27.3/specs/rules/
  */
 class ClearUrlsRulesManager(private val context: Context) {
     private val TAG = "ClearUrlsRulesManager"
 
-    // Cached rules data
-    private var providers: JSONObject? = null
-    private var globalTrackers: Set<String> = emptySet()
-    private var rawRules: Map<String, List<Pattern>> = emptyMap()
-    private var redirections: Map<String, List<Pattern>> = emptyMap()
-    private var completeProviders: Set<String> = emptySet()
-    private var exceptions: Map<String, List<Pattern>> = emptyMap()
-    private var referralMarketing: Map<String, Set<String>> = emptyMap()
-    private var providerUrlPatterns: Map<String, Pattern> = emptyMap()
-    private var providersTrackingParams: Map<String, Set<String>> = emptyMap()
+    // Store providers
+    private var providers = mutableListOf<Provider>()
+    private var providerKeys = mutableListOf<String>()
 
-    // Caches for improved performance
-    private val patternCache = mutableMapOf<String, Pattern?>()
-    private val urlProviderMatchCache = LruCache<String, List<String>>(100) // Cache last 100 URL matches
-    private val trackingParamCache = LruCache<String, Boolean>(500) // Cache parameter tracking status
+    // Configuration
+    private var domainBlocking = true
+    private var referralMarketingEnabled = false
+    private var loggingEnabled = true
+    private var localHostsSkipping = true
 
-    // Stats for monitoring
-    private var patternsCompiled = 0
-    private var patternCompilationErrors = 0
-    private var rawRulesApplied = 0
-
-    // Initialize and load rules from assets
     init {
         try {
             loadRules()
@@ -52,287 +36,263 @@ class ClearUrlsRulesManager(private val context: Context) {
     }
 
     /**
-     * Clear caches to free memory or force recompilation of patterns
+     * Provider class that matches the JavaScript implementation
      */
-    fun clearCaches() {
-        patternCache.clear()
-        urlProviderMatchCache.evictAll()
-        trackingParamCache.evictAll()
-        Log.d(TAG, "All caches cleared")
-    }
+    inner class Provider(
+        private val name: String,
+        private val completeProvider: Boolean = false
+    ) {
+        private var urlPattern: Pattern? = null
+        private val enabledRules = mutableMapOf<String, Boolean>()
+        private val enabledRawRules = mutableMapOf<String, Boolean>()
+        private val enabledExceptions = mutableMapOf<String, Boolean>()
+        private val enabledRedirections = mutableMapOf<String, Boolean>()
+        private val enabledReferralMarketing = mutableMapOf<String, Boolean>()
+        private val methods = mutableListOf<String>()
 
-    /**
-     * Reload rules from assets
-     */
-    fun reloadRules() {
-        clearCaches()
-        try {
-            loadRules()
-            Log.d(TAG, "Rules reloaded successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to reload rules", e)
+        /**
+         * Set the URL pattern for this provider
+         */
+        fun setURLPattern(pattern: String) {
+            try {
+                urlPattern = Pattern.compile(pattern, Pattern.CASE_INSENSITIVE)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error compiling URL pattern for provider $name: $pattern", e)
+            }
+        }
+
+        /**
+         * Return if the Provider Request is canceled
+         */
+        fun isCanceling(): Boolean {
+            return completeProvider
+        }
+
+        /**
+         * Check if a URL matches this provider
+         */
+        fun matchURL(url: String): Boolean {
+            return urlPattern?.matcher(url)?.find() == true && !matchException(url)
+        }
+
+        /**
+         * Add a rule to this provider
+         */
+        fun addRule(rule: String, isActive: Boolean = true) {
+            applyRule(enabledRules, rule, isActive)
+        }
+
+        /**
+         * Add a raw rule to this provider
+         */
+        fun addRawRule(rule: String, isActive: Boolean = true) {
+            applyRule(enabledRawRules, rule, isActive)
+        }
+
+        /**
+         * Add a referral marketing rule
+         */
+        fun addReferralMarketing(rule: String, isActive: Boolean = true) {
+            applyRule(enabledReferralMarketing, rule, isActive)
+        }
+
+        /**
+         * Add an exception to this provider
+         */
+        fun addException(exception: String, isActive: Boolean = true) {
+            applyRule(enabledExceptions, exception, isActive)
+        }
+
+        /**
+         * Add a redirection to this provider
+         */
+        fun addRedirection(redirection: String, isActive: Boolean = true) {
+            applyRule(enabledRedirections, redirection, isActive)
+        }
+
+        /**
+         * Add HTTP method
+         */
+        fun addMethod(method: String) {
+            if (!methods.contains(method)) {
+                methods.add(method)
+            }
+        }
+
+        /**
+         * Apply a rule to the given map
+         */
+        private fun applyRule(map: MutableMap<String, Boolean>, rule: String, isActive: Boolean) {
+            if (isActive) {
+                map[rule] = true
+            }
+        }
+
+        /**
+         * Check if the URL matches any exception
+         */
+        fun matchException(url: String): Boolean {
+            for (exception in enabledExceptions.keys) {
+                try {
+                    val exceptionRegex = Pattern.compile(exception, Pattern.CASE_INSENSITIVE)
+                    if (exceptionRegex.matcher(url).find()) {
+                        return true
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error matching exception: $exception", e)
+                }
+            }
+            return false
+        }
+
+        /**
+         * Get all enabled rules
+         */
+        fun getRules(): List<String> {
+            val rules = mutableListOf<String>()
+            rules.addAll(enabledRules.keys)
+
+            // Include referral marketing rules if enabled
+            if (referralMarketingEnabled) {
+                rules.addAll(enabledReferralMarketing.keys)
+            }
+
+            return rules
+        }
+
+        /**
+         * Get all enabled raw rules
+         */
+        fun getRawRules(): List<String> {
+            return enabledRawRules.keys.toList()
+        }
+
+        /**
+         * Check for and get redirection if applicable
+         */
+        fun getRedirection(url: String): String? {
+            for (redirection in enabledRedirections.keys) {
+                try {
+                    val pattern = Pattern.compile(redirection, Pattern.CASE_INSENSITIVE)
+                    val matcher = pattern.matcher(url)
+
+                    if (matcher.find() && matcher.groupCount() >= 1) {
+                        return matcher.group(1)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error applying redirection: $redirection", e)
+                }
+            }
+
+            return null
         }
     }
 
     /**
-     * Check if rules loaded successfully
-     */
-    fun areRulesLoaded(): Boolean {
-        return providers != null && providerUrlPatterns.isNotEmpty()
-    }
-
-    /**
-     * Get stats about the rule manager for debugging
-     */
-    fun getStats(): Map<String, Any> {
-        return mapOf(
-            "providersCount" to (providers?.length() ?: 0),
-            "globalTrackersCount" to globalTrackers.size,
-            "rawRulesCount" to rawRules.values.sumOf { it.size },
-            "redirectionsCount" to redirections.values.sumOf { it.size },
-            "exceptionsCount" to exceptions.values.sumOf { it.size },
-            "completeProvidersCount" to completeProviders.size,
-            "patternsCompiled" to patternsCompiled,
-            "patternErrors" to patternCompilationErrors,
-            "rawRulesApplied" to rawRulesApplied,
-            "patternCacheSize" to patternCache.size,
-            "urlMatchCacheSize" to urlProviderMatchCache.size(),
-            "trackingParamCacheSize" to trackingParamCache.size()
-        )
-    }
-
-    /**
-     * Load rules from the bundled JSON file in assets
+     * Load rules from assets file
      */
     private fun loadRules() {
         try {
-            val jsonString = loadJSONFromAsset("data.minify.json")
+            val jsonString = loadJSONFromAsset()
             if (jsonString != null) {
-                val rulesData = JSONObject(jsonString)
+                val clearURLsData = JSONObject(jsonString)
 
-                // Load provider-specific rules
-                providers = rulesData.optJSONObject("providers")
+                // Get provider keys
+                val providersObj = clearURLsData.optJSONObject("providers")
+                if (providersObj != null) {
+                    val providerIter = providersObj.keys()
+                    while (providerIter.hasNext()) {
+                        providerKeys.add(providerIter.next())
+                    }
 
-                // Load global trackers (common tracking parameters across all sites)
-                val trackersArray = rulesData.optJSONObject("providers")?.optJSONObject("globalRules")?.optJSONArray("rules")
-                if (trackersArray != null) {
-                    globalTrackers = parseTrackers(trackersArray)
+                    // Create providers
+                    createProviders(clearURLsData)
+                    Log.d(TAG, "Loaded ${providers.size} providers from rules")
                 }
-
-                // Process raw rules, redirections, and exceptions
-                processProviderSpecificRules()
-
-                Log.d(TAG, "Loaded ClearURLs rules: ${providers?.length() ?: 0} providers, ${globalTrackers.size} global trackers")
-            } else {
-                Log.e(TAG, "Failed to load rules file from assets")
             }
-        } catch (e: JSONException) {
-            Log.e(TAG, "Error parsing ClearURLs rules", e)
-        }
-    }
-
-    /**
-     * Centralized method to compile regex patterns with proper error handling and caching
-     */
-    private fun compilePattern(patternStr: String, providerName: String, ruleType: String): Pattern? {
-        // Create a cache key
-        val cacheKey = "$providerName:$ruleType:$patternStr"
-
-        // Check cache first
-        patternCache[cacheKey]?.let { return it }
-
-        try {
-            // Ensure proper handling of the pattern
-            val pattern = Pattern.compile(patternStr)
-            // Cache the successful pattern
-            patternCache[cacheKey] = pattern
-            patternsCompiled++
-            return pattern
-        } catch (e: PatternSyntaxException) {
-            Log.e(TAG, "Invalid pattern in $ruleType for provider $providerName: $patternStr", e)
-            // Cache the failure to avoid repeated compilation attempts
-            patternCache[cacheKey] = null
-            patternCompilationErrors++
-            return null
         } catch (e: Exception) {
-            Log.e(TAG, "Error compiling pattern in $ruleType for provider $providerName: $patternStr", e)
-            patternCompilationErrors++
-            return null
+            Log.e(TAG, "Error reading ClearURLs rules", e)
         }
     }
 
     /**
-     * Process provider-specific rules including raw rules, redirections, and exceptions
+     * Create providers from the JSON data
      */
-    private fun processProviderSpecificRules() {
-        val rawRulesMap = mutableMapOf<String, MutableList<Pattern>>()
-        val redirectionsMap = mutableMapOf<String, MutableList<Pattern>>()
-        val exceptionsMap = mutableMapOf<String, MutableList<Pattern>>()
-        val completeProviderSet = mutableSetOf<String>()
-        val referralMarketingMap = mutableMapOf<String, MutableSet<String>>()
-        val urlPatternsMap = mutableMapOf<String, Pattern>()
-        val providersTrackingParamsMap = mutableMapOf<String, MutableSet<String>>()
+    private fun createProviders(data: JSONObject) {
+        val providersObj = data.optJSONObject("providers")
 
-        providers?.let { providersObj ->
-            val providerIter = providersObj.keys()
-            while (providerIter.hasNext()) {
-                val providerName = providerIter.next()
-                val provider = providersObj.optJSONObject(providerName) ?: continue
+        for (providerKey in providerKeys) {
+            val providerJson = providersObj?.optJSONObject(providerKey) ?: continue
 
-                // Store URL pattern
-                val urlPatternStr = provider.optString("urlPattern", "")
-                if (urlPatternStr.isNotEmpty()) {
-                    compilePattern(urlPatternStr, providerName, "urlPattern")?.let {
-                        urlPatternsMap[providerName] = it
-                    }
-                }
+            // Create provider with appropriate flags
+            val completeProvider = providerJson.optBoolean("completeProvider", false)
+            val provider = Provider(providerKey, completeProvider)
 
-                // Check if this is a complete provider (should be blocked entirely)
-                if (provider.optBoolean("completeProvider", false)) {
-                    completeProviderSet.add(providerName)
-                    Log.d(TAG, "Added complete provider: $providerName with pattern: $urlPatternStr")
-                }
+            // Add URL pattern
+            val urlPattern = providerJson.optString("urlPattern", "")
+            if (urlPattern.isNotEmpty()) {
+                provider.setURLPattern(urlPattern)
+            }
 
-                // Process raw rules (applied to the entire URL path)
-                processPatternArray(provider.optJSONArray("rawRules"), providerName, "rawRules")?.let { patterns ->
-                    if (patterns.isNotEmpty()) {
-                        rawRulesMap[providerName] = patterns
-                        Log.d(TAG, "Added ${patterns.size} raw rules for provider $providerName")
-                    }
-                }
-
-                // Process redirections
-                processPatternArray(provider.optJSONArray("redirections"), providerName, "redirections")?.let { patterns ->
-                    if (patterns.isNotEmpty()) {
-                        redirectionsMap[providerName] = patterns
-                    }
-                }
-
-                // Process exceptions
-                processPatternArray(provider.optJSONArray("exceptions"), providerName, "exceptions")?.let { patterns ->
-                    if (patterns.isNotEmpty()) {
-                        exceptionsMap[providerName] = patterns
-                    }
-                }
-
-                // Process rules (tracking parameters)
-                val rulesArray = provider.optJSONArray("rules")
-                if (rulesArray != null) {
-                    val trackingParams = parseTrackers(rulesArray)
-                    if (trackingParams.isNotEmpty()) {
-                        providersTrackingParamsMap[providerName] = trackingParams.toMutableSet()
-                        Log.d(TAG, "Added ${trackingParams.size} tracking parameters for provider $providerName")
-                    }
-                }
-
-                // Process referral marketing rules
-                val referralMarketingArray = provider.optJSONArray("referralMarketing")
-                if (referralMarketingArray != null) {
-                    val refParams = mutableSetOf<String>()
-                    for (i in 0 until referralMarketingArray.length()) {
-                        val refPattern = referralMarketingArray.optString(i, "")
-                        if (refPattern.isNotEmpty()) {
-                            // Convert to simple parameter name if possible
-                            val cleanParam = refPattern.trim('&', '=', '^', '(', ')', '?', '%', '3', 'F')
-                            if (cleanParam.isNotEmpty()) {
-                                refParams.add(cleanParam)
-                            }
-                        }
-                    }
-                    if (refParams.isNotEmpty()) {
-                        referralMarketingMap[providerName] = refParams
-                    }
+            // Add rules
+            val rules = providerJson.optJSONArray("rules")
+            if (rules != null) {
+                for (i in 0 until rules.length()) {
+                    provider.addRule(rules.optString(i))
                 }
             }
-        }
 
-        // Store the processed rules
-        rawRules = rawRulesMap
-        redirections = redirectionsMap
-        exceptions = exceptionsMap
-        completeProviders = completeProviderSet
-        referralMarketing = referralMarketingMap
-        providerUrlPatterns = urlPatternsMap
-        providersTrackingParams = providersTrackingParamsMap
-    }
-
-    /**
-     * Process a JSON array of patterns and compile them
-     */
-    private fun processPatternArray(jsonArray: JSONArray?, providerName: String, ruleType: String): MutableList<Pattern>? {
-        if (jsonArray == null) return null
-
-        val patterns = mutableListOf<Pattern>()
-        for (i in 0 until jsonArray.length()) {
-            try {
-                val patternStr = jsonArray.getString(i)
-                compilePattern(patternStr, providerName, ruleType)?.let {
-                    patterns.add(it)
-                    if (ruleType == "rawRules") {
-                        Log.d(TAG, "Added raw rule for $providerName: $patternStr")
-                    }
-                    if (ruleType != "exceptions") { // Don't log exceptions to reduce noise
-                        Log.d(TAG, "Added $ruleType for $providerName: $patternStr")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error processing $ruleType pattern for $providerName at index $i", e)
-            }
-        }
-        return patterns
-    }
-
-    /**
-     * Parse tracker parameter patterns from a JSON array
-     */
-    private fun parseTrackers(trackersArray: JSONArray): Set<String> {
-        val trackers = mutableSetOf<String>()
-        for (i in 0 until trackersArray.length()) {
-            val tracker = trackersArray.optString(i)
-            if (tracker.isNotEmpty()) {
-                // Convert ClearURLs pattern to a simple parameter name
-                // Example: "&utm_source=" becomes "utm_source"
-                val cleanTracker = tracker.trim('&', '=', '^', '(', ')', '?', '%', '3', 'F')
-                if (cleanTracker.isNotEmpty()) {
-                    trackers.add(cleanTracker)
+            // Add raw rules
+            val rawRules = providerJson.optJSONArray("rawRules")
+            if (rawRules != null) {
+                for (i in 0 until rawRules.length()) {
+                    provider.addRawRule(rawRules.optString(i))
                 }
             }
-        }
-        return trackers
-    }
 
-    /**
-     * Parse tracker parameter patterns that use regex
-     */
-    private fun isParameterMatchingRegex(param: String, providerRules: List<String>): Boolean {
-        for (rule in providerRules) {
-            try {
-                // If the rule is a simple string (not a regex)
-                if (!rule.contains("[") && !rule.contains("*") && !rule.contains("+") && !rule.contains("?")) {
-                    if (param == rule) {
-                        return true
-                    }
-                } else {
-                    // It's a regex pattern, compile and check
-                    val pattern = Pattern.compile(rule)
-                    if (pattern.matcher(param).matches()) {
-                        return true
-                    }
+            // Add referral marketing rules
+            val referralMarketing = providerJson.optJSONArray("referralMarketing")
+            if (referralMarketing != null) {
+                for (i in 0 until referralMarketing.length()) {
+                    provider.addReferralMarketing(referralMarketing.optString(i))
                 }
-            } catch (e: Exception) {
-                // If there's an error with this rule, continue to the next one
-                Log.e(TAG, "Error matching parameter $param against rule $rule", e)
             }
+
+            // Add exceptions
+            val exceptions = providerJson.optJSONArray("exceptions")
+            if (exceptions != null) {
+                for (i in 0 until exceptions.length()) {
+                    provider.addException(exceptions.optString(i))
+                }
+            }
+
+            // Add redirections
+            val redirections = providerJson.optJSONArray("redirections")
+            if (redirections != null) {
+                for (i in 0 until redirections.length()) {
+                    provider.addRedirection(redirections.optString(i))
+                }
+            }
+
+            // Add HTTP methods
+            val methods = providerJson.optJSONArray("methods")
+            if (methods != null) {
+                for (i in 0 until methods.length()) {
+                    provider.addMethod(methods.optString(i))
+                }
+            }
+
+            // Add the provider to our list
+            providers.add(provider)
         }
-        return false
     }
 
     /**
-     * Load JSON from assets file
+     * Load JSON data from assets
      */
-    private fun loadJSONFromAsset(fileName: String): String? {
+    private fun loadJSONFromAsset(): String? {
         return try {
-            val inputStream = context.assets.open(fileName)
+            val inputStream = context.assets.open("data.minify.json")
             val bufferedReader = BufferedReader(InputStreamReader(inputStream))
             val stringBuilder = StringBuilder()
             var line: String?
@@ -348,430 +308,356 @@ class ClearUrlsRulesManager(private val context: Context) {
     }
 
     /**
-     * Check if a URL matches an exception pattern
+     * Extract URL fragments (similar to the JavaScript extractFragments function)
      */
-    private fun isUrlException(url: String): Boolean {
-        // Check global exceptions first
-        val globalExceptions = exceptions["globalRules"]
-        if (globalExceptions != null) {
-            for (pattern in globalExceptions) {
-                if (pattern.matcher(url).find()) {
-                    return true
-                }
+    private fun extractFragments(uri: Uri): MutableMap<String, String> {
+        val fragments = mutableMapOf<String, String>()
+        val fragmentStr = uri.fragment ?: return fragments
+
+        // Parse fragment similar to query parameters
+        val fragmentParts = fragmentStr.split("&")
+        for (part in fragmentParts) {
+            val keyValue = part.split("=", limit = 2)
+            if (keyValue.size == 2) {
+                fragments[keyValue[0]] = keyValue[1]
+            } else if (keyValue.size == 1 && keyValue[0].isNotEmpty()) {
+                fragments[keyValue[0]] = ""
             }
         }
 
-        // Then check provider-specific exceptions
-        val matchingProviders = findMatchingProviders(url)
-        for (providerName in matchingProviders) {
-            if (providerName == "globalRules") continue
-
-            // Check against this provider's exception patterns
-            val providerExceptions = exceptions[providerName] ?: continue
-            for (exceptionPattern in providerExceptions) {
-                if (exceptionPattern.matcher(url).find()) {
-                    return true
-                }
-            }
-        }
-
-        return false
+        return fragments
     }
 
     /**
-     * Find providers that match a given URL with caching
+     * Convert fragments map back to string
      */
-    private fun findMatchingProviders(url: String): List<String> {
-        // Check cache first
-        urlProviderMatchCache.get(url)?.let { return it }
+    private fun fragmentsToString(fragments: Map<String, String>): String {
+        if (fragments.isEmpty()) return ""
 
-        val matchingProviders = mutableListOf<String>()
-
-        for ((providerName, pattern) in providerUrlPatterns) {
-            if (providerName == "globalRules") continue
-
-            try {
-                if (pattern.matcher(url).find()) {
-                    matchingProviders.add(providerName)
-                    Log.d(TAG, "URL $url matches provider: $providerName")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error matching URL against provider pattern: $providerName", e)
+        val parts = mutableListOf<String>()
+        for ((key, value) in fragments) {
+            if (value.isEmpty()) {
+                parts.add(key)
+            } else {
+                parts.add("$key=$value")
             }
         }
-
-        // Cache the result
-        urlProviderMatchCache.put(url, matchingProviders)
-        return matchingProviders
+        return parts.joinToString("&")
     }
 
     /**
-     * Check if a parameter is a tracking parameter based on ClearURLs rules
+     * Return URL without parameters and hash
      */
-    fun isTrackingParam(param: String, url: String): Boolean {
-        // Create a cache key for this param+url combination
-        val cacheKey = "$param:$url"
+    private fun urlWithoutParamsAndHash(uri: Uri): String {
+        val builder = Uri.Builder()
+            .scheme(uri.scheme)
+            .authority(uri.authority)
+            .path(uri.path)
 
-        // Check cache first
-        val cachedResult = trackingParamCache.get(cacheKey)
-        if (cachedResult != null) {
-            return cachedResult
-        }
-
-        // First check against global trackers (most common case)
-        if (globalTrackers.contains(param)) {
-            trackingParamCache.put(cacheKey, true)
-            return true
-        }
-
-        // Then check provider-specific rules
-        val matchingProviders = findMatchingProviders(url)
-        for (providerName in matchingProviders) {
-            // Get tracking parameters for this provider
-            val trackingParams = providersTrackingParams[providerName] ?: continue
-
-            // First check for exact match
-            if (trackingParams.contains(param)) {
-                trackingParamCache.put(cacheKey, true)
-                return true
-            }
-
-            // Then check for regex matches
-            val provider = providers?.optJSONObject(providerName) ?: continue
-            val rulesArray = provider.optJSONArray("rules") ?: continue
-            val rulesList = mutableListOf<String>()
-
-            for (i in 0 until rulesArray.length()) {
-                rulesList.add(rulesArray.optString(i, ""))
-            }
-
-            if (isParameterMatchingRegex(param, rulesList)) {
-                trackingParamCache.put(cacheKey, true)
-                return true
-            }
-        }
-
-        // Default to the legacy list for backward compatibility
-        val result = isTrackingParamLegacy(param)
-        trackingParamCache.put(cacheKey, result)
-        return result
+        return builder.build().toString()
     }
 
     /**
-     * Check if a parameter is a referral marketing parameter
+     * Check if URL is local
      */
-    private fun isReferralMarketingParam(param: String, url: String): Boolean {
-        val matchingProviders = findMatchingProviders(url)
-
-        for (providerName in matchingProviders) {
-            val refParams = referralMarketing[providerName] ?: continue
-            if (refParams.contains(param)) {
-                return true
-            }
-        }
-
-        return false
+    private fun checkLocalURL(uri: Uri): Boolean {
+        val host = uri.host ?: return false
+        return host == "localhost" || host == "127.0.0.1" || host.endsWith(".local")
     }
 
     /**
-     * Legacy list of tracking parameters as a fallback
+     * Decode URL (handles multiple levels of encoding)
      */
-    private fun isTrackingParamLegacy(param: String): Boolean {
-        val trackingParams = setOf(
-            "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
-            "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "tclid",
-            "aff_id", "affiliate_id", "ref", "referer", "campaign_id", "ad_id",
-            "adgroup_id", "adset_id", "creativetype", "placement", "network",
-            "mc_eid", "mc_cid", "si", "icid", "_ga", "_gid", "scid", "click_id",
-            "trk", "track", "trk_sid", "sid", "mibextid", "fb_action_ids",
-            "fb_action_types", "twclid", "igshid", "s_kwcid", "sxsrf", "sca_esv",
-            "source", "tbo", "sa", "ved", "pi", "fbs", "fbc", "fb_ref", "client", "ei",
-            "gs_lp", "sclient", "oq", "uact", "bih", "biw",
-            // Additional common tracking params
-            "m_entstream_source", "entstream_source", "fb_source"
-        )
-        return param in trackingParams
+    private fun decodeURL(url: String): String {
+        var decoded = url
+        try {
+            // Try to decode up to 5 times to handle multiple encodings
+            for (i in 0 until 5) {
+                val prev = decoded
+                decoded = URLDecoder.decode(decoded, "UTF-8")
+                if (prev == decoded) break
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error decoding URL: $url", e)
+        }
+        return decoded
     }
 
     /**
-     * Check if a YouTube parameter should be removed
+     * Convert URLSearchParams to string
      */
-    fun isUnwantedYoutubeParam(param: String): Boolean {
-        val youtubeParams = setOf(
-            "feature", "app", "ab_channel"
-        )
-        return param in youtubeParams
+    private fun urlSearchParamsToString(params: Map<String, String>): String {
+        val parts = mutableListOf<String>()
+        for ((key, value) in params) {
+            parts.add("$key=$value")
+        }
+        return parts.joinToString("&")
     }
 
     /**
-     * Check if a URL matches a complete provider (should be blocked entirely)
+     * Remove tracking fields from URL following the original algorithm
      */
-    private fun isCompleteProvider(url: String): Boolean {
-        for (providerName in completeProviders) {
-            val pattern = providerUrlPatterns[providerName] ?: continue
-            if (pattern.matcher(url).find()) {
-                Log.d(TAG, "Matched complete provider: $providerName for URL: $url")
-                return true
-            }
-        }
+    private fun removeFieldsFormURL(provider: Provider, pureUrl: String, quiet: Boolean = false): Map<String, Any> {
+        var url = pureUrl
+        var domain = ""
+        val rules = provider.getRules()
+        var changes = false
+        val rawRules = provider.getRawRules()
+        var urlObject: Uri
 
-        return false
-    }
-
-    /**
-     * Check for and extract redirected URL
-     */
-    private fun checkForRedirections(url: String): String? {
-        val matchingProviders = findMatchingProviders(url)
-
-        // Check provider-specific redirections
-        for (providerName in matchingProviders) {
-            val redirectPatterns = redirections[providerName] ?: continue
-
-            for (pattern in redirectPatterns) {
-                val matcher = pattern.matcher(url)
-                if (matcher.find() && matcher.groupCount() >= 1) {
-                    var redirectUrl = matcher.group(1) ?: continue
-
-                    // Some URLs might be double-encoded
-                    try {
-                        redirectUrl = URLDecoder.decode(redirectUrl, "UTF-8")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error decoding URL: $redirectUrl", e)
-                    }
-
-                    Log.d(TAG, "Found redirection in $providerName: $url -> $redirectUrl")
-                    return redirectUrl
-                }
-            }
-        }
-
-        // Check global redirections
-        val globalRedirections = redirections["globalRules"]
-        if (globalRedirections != null) {
-            for (pattern in globalRedirections) {
-                val matcher = pattern.matcher(url)
-                if (matcher.find() && matcher.groupCount() >= 1) {
-                    var redirectUrl = matcher.group(1) ?: continue
-
-                    // Try to decode the URL
-                    try {
-                        redirectUrl = URLDecoder.decode(redirectUrl, "UTF-8")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error decoding URL: $redirectUrl", e)
-                    }
-
-                    Log.d(TAG, "Found global redirection: $url -> $redirectUrl")
-                    return redirectUrl
-                }
-            }
-        }
-
-        return null
-    }
-
-    /**
-     * Apply raw rules to a URL
-     */
-    private fun applyRawRules(url: String): String {
-        var result = url
-        val matchingProviders = findMatchingProviders(url)
-
-        Log.d(TAG, "Applying raw rules to URL: $url for ${matchingProviders.size} matching providers")
-
-        // Apply provider-specific raw rules
-        for (providerName in matchingProviders) {
-            val providerRawRules = rawRules[providerName] ?: continue
-
-            Log.d(TAG, "Provider $providerName has ${providerRawRules.size} raw rules")
-
-            for (pattern in providerRawRules) {
-                val before = result
-                try {
-                    // Apply the pattern with proper error handling
-                    result = pattern.matcher(result).replaceAll("")
-
-                    if (before != result) {
-                        rawRulesApplied++
-                        Log.d(TAG, "Applied raw rule from $providerName: $before -> $result")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error applying raw rule for provider $providerName", e)
-                }
-            }
-        }
-
-        // Apply global raw rules
-        val globalRawRules = rawRules["globalRules"]
-        if (globalRawRules != null) {
-            for (pattern in globalRawRules) {
-                val before = result
-                try {
-                    result = pattern.matcher(result).replaceAll("")
-                    if (before != result) {
-                        rawRulesApplied++
-                        Log.d(TAG, "Applied global raw rule: $before -> $result")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error applying global raw rule", e)
-                }
-            }
-        }
-
-        return result
-    }
-
-    private fun isValidUri(uri: Uri): Boolean {
-        return !uri.scheme.isNullOrEmpty() &&
-                !uri.host.isNullOrEmpty() &&
-                (uri.scheme == "http" || uri.scheme == "https")
-    }
-
-    /**
-     * Dump all relevant information about a URL for debugging
-     */
-    fun dumpUrlInfo(url: String): Map<String, Any> {
-        val matchingProviders = findMatchingProviders(url)
-        val info = mutableMapOf<String, Any>()
-
-        info["url"] = url
-        info["matchingProviders"] = matchingProviders
-
-        val uri = Uri.parse(url)
-        val paramMap = mutableMapOf<String, Map<String, Boolean>>()
-
-        if (!uri.query.isNullOrEmpty()) {
-            val paramNames = uri.legacyGetQueryParameterNames()
-            for (param in paramNames) {
-                val isTracking = isTrackingParam(param, url)
-                val isReferral = isReferralMarketingParam(param, url)
-                paramMap[param] = mapOf(
-                    "isTracking" to isTracking,
-                    "isReferral" to isReferral
+        // Skip local URLs if enabled
+        try {
+            urlObject = Uri.parse(url)
+            if (localHostsSkipping && checkLocalURL(urlObject)) {
+                return mapOf(
+                    "changes" to false,
+                    "url" to url,
+                    "cancel" to false
                 )
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing URL: $url", e)
+            return mapOf(
+                "changes" to false,
+                "url" to url,
+                "cancel" to false
+            )
         }
 
-        info["parameters"] = paramMap
+        // Check for redirection
+        val re = provider.getRedirection(url)
+        if (re != null) {
+            url = decodeURL(re)
 
-        // Check raw rules
-        val rawRulesInfo = mutableMapOf<String, List<String>>()
-        for (provider in matchingProviders) {
-            val rules = rawRules[provider]?.map { it.pattern() } ?: emptyList()
-            if (rules.isNotEmpty()) {
-                rawRulesInfo[provider] = rules
+            // Log action
+            if (!quiet && loggingEnabled) {
+                Log.d(TAG, "Redirected: $pureUrl -> $url")
+            }
+
+            return mapOf(
+                "redirect" to true,
+                "url" to url
+            )
+        }
+
+        // Check for canceling (domain blocking)
+        if (provider.isCanceling() && domainBlocking) {
+            if (!quiet && loggingEnabled) {
+                Log.d(TAG, "Domain blocked: $pureUrl")
+            }
+
+            return mapOf(
+                "cancel" to true,
+                "url" to url
+            )
+        }
+
+        // Apply raw rules
+        for (rawRule in rawRules) {
+            try {
+                val beforeReplace = url
+                val pattern = Pattern.compile(rawRule, Pattern.CASE_INSENSITIVE)
+                url = pattern.matcher(url).replaceAll("")
+
+                if (beforeReplace != url) {
+                    if (loggingEnabled && !quiet) {
+                        Log.d(TAG, "Applied raw rule: $rawRule")
+                        Log.d(TAG, "  Before: $beforeReplace")
+                        Log.d(TAG, "  After: $url")
+                    }
+
+                    changes = true
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error applying raw rule: $rawRule", e)
             }
         }
-        info["rawRules"] = rawRulesInfo
 
-        return info
+        // Parse the URL again after raw rules
+        urlObject = Uri.parse(url)
+
+        // Get query parameters
+        val queryParams = mutableMapOf<String, String>()
+        for (paramName in urlObject.queryParameterNames) {
+            urlObject.getQueryParameter(paramName)?.let {
+                queryParams[paramName] = it
+            }
+        }
+
+        // Get fragments
+        val fragmentMap = extractFragments(urlObject)
+
+        // Get base domain
+        domain = urlWithoutParamsAndHash(urlObject)
+
+        // Only process if there are fields or fragments to clean
+        if (queryParams.isNotEmpty() || fragmentMap.isNotEmpty()) {
+            // Check each rule against fields and fragments
+            for (rule in rules) {
+                val beforeFields = queryParams.toString()
+                val beforeFragments = fragmentMap.toString()
+                var localChange = false
+
+                // Check against query parameters
+                val paramsToRemove = mutableListOf<String>()
+                for (field in queryParams.keys) {
+                    try {
+                        if (Pattern.compile("^$rule$", Pattern.CASE_INSENSITIVE).matcher(field).matches()) {
+                            paramsToRemove.add(field)
+                            changes = true
+                            localChange = true
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error matching rule against field: $rule", e)
+                    }
+                }
+
+                // Remove matched parameters
+                for (param in paramsToRemove) {
+                    queryParams.remove(param)
+                }
+
+                // Check against fragments
+                val fragmentsToRemove = mutableListOf<String>()
+                for (fragment in fragmentMap.keys) {
+                    try {
+                        if (Pattern.compile("^$rule$", Pattern.CASE_INSENSITIVE).matcher(fragment).matches()) {
+                            fragmentsToRemove.add(fragment)
+                            changes = true
+                            localChange = true
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error matching rule against fragment: $rule", e)
+                    }
+                }
+
+                // Remove matched fragments
+                for (fragment in fragmentsToRemove) {
+                    fragmentMap.remove(fragment)
+                }
+
+                // Log if changes were made
+                if (localChange && loggingEnabled && !quiet) {
+                    var tempURL = domain
+                    var tempBeforeURL = domain
+
+                    if (queryParams.isNotEmpty()) {
+                        tempURL += "?" + urlSearchParamsToString(queryParams)
+                    }
+                    if (fragmentMap.isNotEmpty()) {
+                        tempURL += "#" + fragmentsToString(fragmentMap)
+                    }
+                    if (beforeFields != "{}") {
+                        tempBeforeURL += "?${beforeFields}"
+                    }
+                    if (beforeFragments != "{}") {
+                        tempBeforeURL += "#${beforeFragments}"
+                    }
+
+                    Log.d(TAG, "Applied rule: $rule")
+                    Log.d(TAG, "  Before: $tempBeforeURL")
+                    Log.d(TAG, "  After: $tempURL")
+                }
+            }
+
+            // Build final URL
+            var finalURL = domain
+
+            if (queryParams.isNotEmpty()) {
+                finalURL += "?" + urlSearchParamsToString(queryParams)
+            }
+
+            if (fragmentMap.isNotEmpty()) {
+                finalURL += "#" + fragmentsToString(fragmentMap)
+            }
+
+            // Fix any URL formatting issues
+            url = finalURL.replace(Regex("\\?&"), "?").replace(Regex("#&"), "#")
+        }
+
+        return mapOf(
+            "changes" to changes,
+            "url" to url,
+            "cancel" to false,
+            "redirect" to false
+        )
     }
 
     /**
-     * Clean tracking parameters from a URL
-     *
-     * @param url The URL to clean
-     * @param allowReferralMarketing Whether to allow referral marketing parameters (default: false)
-     * @return The cleaned URL
+     * Checks if a string is likely a valid URL that's missing a protocol.
+     * Returns true for strings like "example.com" or "www.example.com/path"
+     * but returns false for complete URLs like "https://example.com" or non-URL strings.
      */
-    fun cleanTrackingParamsFromUrl(url: String, allowReferralMarketing: Boolean = false,
-                                   maxRedirections: Int = 10, visited: MutableSet<String> = mutableSetOf()): String {
+    fun isValidUrlMissingProtocol(url: String): Boolean {
+        // Return false if string is empty or already has a protocol
+        if (url.isEmpty() || url.contains("://")) {
+            return false
+        }
+
+        // Pattern for a valid domain name:
+        // - Optional www prefix
+        // - Domain with at least one letter/number
+        // - At least one dot
+        // - TLD with 2+ letters
+        // - Optional path, query parameters, etc.
+        val domainPattern = "^(www\\.)?([a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9])\\." +
+                "([a-zA-Z]{2,})(\\.[a-zA-Z]{2,})*(:[0-9]{1,5})?" +
+                "(/[a-zA-Z0-9\\-._~:/\\?#\\[\\]@!\\$&'\\(\\)\\*\\+,;=]*)?"
+
+        return url.matches(Regex(domainPattern))
+    }
+
+    /**
+     * Clean a URL by removing tracking fields
+     * This is the main public method to use
+     */
+    fun clearUrl(url: String): String {
         if (url.isEmpty()) {
             return url
         }
 
-        // Quick return for common non-URL strings
-        if (!url.contains("://") && !url.contains(".")) {
+        // If it looks like a valid URL missing protocol, add https:// protocol
+        if (isValidUrlMissingProtocol(url)) {
+            return clearUrl("https://$url") // Recursively call with added protocol
+        }
+
+        // If it doesn't have a protocol and doesn't look like a valid URL, return as is
+        if (!url.contains("://")) {
             return url
         }
 
-        // Prevent infinite redirection loops
-        if (visited.contains(url) || visited.size >= maxRedirections) {
-            Log.w(TAG, "Redirection limit reached or loop detected for: $url")
-            return url
-        }
-        visited.add(url)
+        var result = url
 
-        try {
-            Log.d(TAG, "Cleaning URL: $url")
+        // Check each provider
+        for (provider in providers) {
+            if (provider.matchURL(result)) {
+                val cleanResult = removeFieldsFormURL(provider, result)
 
-            // Check if the URL matches any exceptions
-            if (isUrlException(url)) {
-                Log.d(TAG, "URL matches exception pattern, skipping: $url")
-                return url
-            }
-
-            // Check if the URL matches a complete provider (to be completely blocked)
-            if (isCompleteProvider(url)) {
-                Log.d(TAG, "URL matches complete provider, returning empty URL: $url")
-                return ""
-            }
-
-            // Check for redirections first
-            val redirectedUrl = checkForRedirections(url)
-            if (redirectedUrl != null && redirectedUrl != url) {
-                Log.d(TAG, "Redirection found: $url -> $redirectedUrl")
-                // Recursively clean with visited URLs tracking
-                return cleanTrackingParamsFromUrl(redirectedUrl, allowReferralMarketing, maxRedirections, visited)
-            }
-
-            // Apply raw rules to the URL (pattern based replacements)
-            var cleanUrl = applyRawRules(url)
-
-            // After applying raw rules
-            try {
-                var uri = Uri.parse(cleanUrl)
-                if (!isValidUri(uri)) {
-                    Log.d(TAG, "URL became invalid after raw rules, using original")
-                    return url
+                // Handle redirection
+                if (cleanResult["redirect"] == true) {
+                    result = cleanResult["url"] as String
+                    return result
                 }
 
-                // Clean query parameters if present
-                if (!uri.query.isNullOrEmpty()) {
-                    val paramNames = uri.legacyGetQueryParameterNames()
-                    if (paramNames.isNotEmpty()) {
-                        val builder = uri.buildUpon().legacyClearQuery()
-
-                        for (param in paramNames) {
-                            val value = uri.getQueryParameter(param)
-
-                            // Special case for YouTube parameters
-                            val isYouTubeParam = isUnwantedYoutubeParam(param) &&
-                                    uri.host?.contains("youtube.com") == true
-
-                            // Check if it's a referral marketing parameter
-                            val isReferralParam = isReferralMarketingParam(param, cleanUrl)
-
-                            // Check if it's a tracking parameter
-                            val isTracking = isTrackingParam(param, cleanUrl)
-
-                            // Determine if we should keep this parameter
-                            val shouldKeepParam = value != null &&
-                                    !isYouTubeParam &&
-                                    (!isTracking || (allowReferralMarketing && isReferralParam))
-
-                            if (shouldKeepParam) {
-                                builder.appendQueryParameter(param, value)
-                            } else {
-                                Log.d(TAG, "Removing parameter: $param from URL: $cleanUrl")
-                            }
-                        }
-
-                        uri = builder.build()
-                        cleanUrl = uri.toString()
-                    }
+                // Handle cancellation (domain blocking)
+                if (cleanResult["cancel"] == true) {
+                    return "" // Return empty for canceled URLs
                 }
 
-                Log.d(TAG, "Final cleaned URL: $cleanUrl")
-                return cleanUrl
-            } catch (e: Exception) {
-                Log.e(TAG, "Error parsing URL after raw rules: $cleanUrl", e)
-                return url
+                // Handle changes
+                if (cleanResult["changes"] == true) {
+                    result = cleanResult["url"] as String
+                }
             }
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error cleaning URL: $url", e)
-            return url
         }
+
+        return result
+    }
+
+    /**
+     * Check if rules are loaded
+     */
+    fun areRulesLoaded(): Boolean {
+        return providers.isNotEmpty()
     }
 }
