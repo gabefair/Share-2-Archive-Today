@@ -1,14 +1,5 @@
 ##---------------Begin: App Specific Rules ----------
-# Keep only essential parts of MainActivity
 -keep class org.gnosco.share2archivetoday.MainActivity {*;}
-
-# Only keep necessary methods in ClearUrlsRulesManager
--keep class org.gnosco.share2archivetoday.ClearUrlsRulesManager {
-    public <init>(...);
-    public boolean areRulesLoaded();
-    public java.lang.String clearUrl(java.lang.String);
-}
-
 -keep class androidx.compose.** { *; }
 
 ##---------------Begin: Stripping Logs ----------
