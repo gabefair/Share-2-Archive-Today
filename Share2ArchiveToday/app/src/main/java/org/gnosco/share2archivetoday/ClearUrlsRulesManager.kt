@@ -292,9 +292,11 @@ class ClearUrlsRulesManager(private val context: Context) {
         if (!isHoneycombOrHigher()) {
             return false
         }
-
         cachedRulesVersion = prefs.getString("rules_version", "") ?: ""
-        return cachedRulesVersion.isNotEmpty() && prefs.contains("cached_rules")
+
+        return cachedRulesVersion.isNotEmpty() &&
+                cachedRulesVersion == rulesVersion &&
+                prefs.contains("cached_rules")
     }
 
     /**
@@ -446,7 +448,7 @@ class ClearUrlsRulesManager(private val context: Context) {
             domainBlocking = masterJson.optBoolean("domainBlocking", true)
             referralMarketingEnabled = masterJson.optBoolean("referralMarketingEnabled", false)
             localHostsSkipping = masterJson.optBoolean("localHostsSkipping", true)
-            rulesVersion = masterJson.optString("version", "1.27.3")
+            rulesVersion = masterJson.optString("version", "")
 
             // Load provider keys
             val keysJson = masterJson.optJSONObject("providerKeys")
@@ -490,7 +492,10 @@ class ClearUrlsRulesManager(private val context: Context) {
                 val clearURLsData = JSONObject(jsonString)
 
                 // Get version info
-                rulesVersion = clearURLsData.optString("version", "")
+                val jsonVersion = clearURLsData.optString("version", "")
+                if (jsonVersion.isNotEmpty()) {
+                    rulesVersion = jsonVersion
+                }
 
                 // Get provider keys
                 val providersObj = clearURLsData.optJSONObject("providers")
