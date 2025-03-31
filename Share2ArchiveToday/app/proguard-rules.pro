@@ -1,9 +1,6 @@
 ##---------------Begin: App Specific Rules ----------
 # Keep only essential parts of MainActivity
--keep class org.gnosco.share2archivetoday.MainActivity {
-    void onCreate(android.os.Bundle);
-    void onNewIntent(android.content.Intent);
-}
+-keep class org.gnosco.share2archivetoday.MainActivity {*;}
 
 # Only keep necessary methods in ClearUrlsRulesManager
 -keep class org.gnosco.share2archivetoday.ClearUrlsRulesManager {
