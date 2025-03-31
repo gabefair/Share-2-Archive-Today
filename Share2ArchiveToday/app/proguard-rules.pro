@@ -12,6 +12,8 @@
     public java.lang.String clearUrl(java.lang.String);
 }
 
+-keep class androidx.compose.** { *; }
+
 ##---------------Begin: Stripping Logs ----------
 # Strip all log calls
 -assumenosideeffects class android.util.Log {
