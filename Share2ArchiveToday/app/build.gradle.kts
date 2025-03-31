@@ -1,4 +1,3 @@
-//Module level build.gradle.kts file
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
@@ -6,19 +5,14 @@ plugins {
 
 android {
     namespace = "org.gnosco.share2archivetoday"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "org.gnosco.share2archivetoday"
-        minSdk = 1
+        minSdk = 3
         targetSdk = 34
-        versionCode = 30
-        versionName = "3.0"
-
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        vectorDrawables {
-            useSupportLibrary = true
-        }
+        versionCode = 41
+        versionName = "4.1"
     }
 
     buildTypes {
@@ -30,29 +24,31 @@ android {
                 "proguard-rules.pro"
             )
         }
+        debug {
+            isTestCoverageEnabled = true
+        }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
+
     kotlinOptions {
         jvmTarget = "1.8"
     }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
     dependenciesInfo {
-        // Disables dependency metadata when building APKs.
-        includeInApk = false
-        // Disables dependency metadata when building Android App Bundles.
-        includeInBundle = false
+        includeInApk = true
+        includeInBundle = true
     }
 }
-
-
-
 
 dependencies {
     implementation("com.google.zxing:core:3.5.3")

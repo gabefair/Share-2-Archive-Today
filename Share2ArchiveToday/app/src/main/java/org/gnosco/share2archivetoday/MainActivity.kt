@@ -15,9 +15,15 @@ import com.google.zxing.common.HybridBinarizer
 import kotlin.math.max
 import android.widget.Toast
 
-class MainActivity : Activity() {
+open class MainActivity : Activity() {
+    private lateinit var clearUrlsRulesManager: ClearUrlsRulesManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize ClearURLs rules manager
+        clearUrlsRulesManager = ClearUrlsRulesManager(applicationContext)
+
         handleShareIntent(intent)
     }
 
@@ -35,9 +41,7 @@ class MainActivity : Activity() {
                         val url = extractUrl(sharedText)
 
                         if (url != null) {
-                            val processedUrl = processArchiveUrl(url)
-                            val cleanedUrl = cleanTrackingParamsFromUrl(processedUrl)
-                            openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
+                            threeSteps(url)
                         } else {
                             Toast.makeText(this, "No URL found in shared text", Toast.LENGTH_SHORT).show()
                             finish()
@@ -48,8 +52,15 @@ class MainActivity : Activity() {
                     // Handle image shares
                     if (intent.type?.startsWith("image/") == true) {
                         try {
-                            intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { imageUri ->
-                                handleImageShare(imageUri)
+                            val imageUri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                            } else {
+                                @Suppress("DEPRECATION")
+                                intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+                            }
+
+                            imageUri?.let {
+                                handleImageShare(it)
                             }
                         } catch (e: Exception) {
                             Log.e("MainActivity", "Error handling image share", e)
@@ -63,17 +74,21 @@ class MainActivity : Activity() {
         finish()
     }
 
-    private fun handleImageShare(imageUri: Uri) {
+    internal fun threeSteps(url: String) {
+        val processedUrl = processArchiveUrl(url)
+        val cleanedUrl = handleURL(processedUrl)
+        openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
+    }
+
+    internal fun handleImageShare(imageUri: Uri) {
         try {
-            val qrUrl = extractQRCodeFromImage(imageUri)
+            val qrUrl = extractUrl(extractQRCodeFromImage(imageUri))
             if (qrUrl != null) {
-                val processedUrl = processArchiveUrl(qrUrl)
-                val cleanedUrl = cleanTrackingParamsFromUrl(processedUrl)
-                openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
+                threeSteps(qrUrl)
                 Toast.makeText(this, "URL found in QR code", Toast.LENGTH_SHORT).show()
             } else {
                 Log.d("MainActivity", "No QR code found in image")
-                Toast.makeText(this, "No QR code found in image", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "No URL found in QR code image", Toast.LENGTH_SHORT).show()
                 finish()
             }
         } catch (e: Exception) {
@@ -83,8 +98,79 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun extractQRCodeFromImage(imageUri: Uri): String? {
-        val inputStream = contentResolver.openInputStream(imageUri) ?: return null
+    /**
+     * Main URL handling method that combines ClearURLs rules with platform-specific optimizations
+     */
+    internal fun handleURL(url: String): String {
+        // First clean with ClearURLs rules
+        var rulesCleanedUrl = url
+        if (clearUrlsRulesManager.areRulesLoaded()) {
+            rulesCleanedUrl = clearUrlsRulesManager.clearUrl(url)
+        }
+        rulesCleanedUrl = cleanTrackingParamsFromUrl(rulesCleanedUrl)
+
+        // Then apply additional platform-specific optimizations that might not be in the rules
+        return applyPlatformSpecificOptimizations(rulesCleanedUrl)
+    }
+
+    /**
+     * Apply platform-specific optimizations that may not be covered by ClearURLs rules
+     */
+    internal fun applyPlatformSpecificOptimizations(url: String): String {
+        val uri = Uri.parse(url)
+        val newUriBuilder = uri.buildUpon()
+        var changed = false
+
+        // YouTube-specific handling
+        if (uri.host?.contains("youtube.com") == true || uri.host?.contains("youtu.be") == true) {
+            // Convert shorts to regular videos
+            if (uri.path?.contains("/shorts/") == true) {
+                newUriBuilder.path(uri.path?.replace("/shorts/", "/v/"))
+                changed = true
+            }
+
+            // Remove music. prefix
+            val modifiedHost = uri.host?.removePrefix("music.")
+            if (modifiedHost != uri.host) {
+                newUriBuilder.authority(modifiedHost)
+                changed = true
+            }
+
+            // Handle nested query parameters in YouTube search links
+            val nestedQueryParams = uri.getQueryParameter("q")
+            if (nestedQueryParams != null && nestedQueryParams.contains("?")) {
+                try {
+                    val nestedUri = Uri.parse(nestedQueryParams)
+                    val newNestedUriBuilder = nestedUri.buildUpon().legacyClearQuery()
+
+                    nestedUri.legacyGetQueryParameterNames().forEach { nestedParam ->
+                        if (!isTrackingParam(nestedParam)) {
+                            newNestedUriBuilder.appendQueryParameter(nestedParam, nestedUri.getQueryParameter(nestedParam))
+                        }
+                    }
+
+                    newUriBuilder.appendQueryParameter("q", newNestedUriBuilder.build().toString())
+                    changed = true
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Error handling nested query params", e)
+                }
+            }
+        }
+
+        // Substack-specific handling
+        else if(uri.host?.endsWith(".substack.com") == true) {
+            // Add "no_cover=true" parameter for better archive quality
+            if (uri.getQueryParameter("no_cover") == null) {
+                newUriBuilder.appendQueryParameter("no_cover", "true")
+                changed = true
+            }
+        }
+
+        return if (changed) newUriBuilder.build().toString() else url
+    }
+
+    internal fun extractQRCodeFromImage(imageUri: Uri): String {
+        val inputStream = contentResolver.openInputStream(imageUri) ?: return ""
 
         // Read image dimensions first
         val options = BitmapFactory.Options().apply {
@@ -104,7 +190,7 @@ class MainActivity : Activity() {
         }
 
         contentResolver.openInputStream(imageUri)?.use { stream ->
-            val bitmap = BitmapFactory.decodeStream(stream, null, scaledOptions) ?: return null
+            val bitmap = BitmapFactory.decodeStream(stream, null, scaledOptions) ?: return ""
 
             try {
                 // Convert to ZXing format
@@ -130,16 +216,16 @@ class MainActivity : Activity() {
                 } catch (e: NotFoundException) {
                     // No QR code found
                     Log.d("MainActivity", "No QR code found in image")
-                    return null
+                    return ""
                 }
             } finally {
                 bitmap.recycle()
             }
         }
-        return null
+        return ""
     }
 
-    private fun processArchiveUrl(url: String): String {
+    internal fun processArchiveUrl(url: String): String {
         val uri = Uri.parse(url)
         val pattern = Regex("archive\\.[a-z]+/o/[a-zA-Z0-9]+/(.+)")
         val matchResult = pattern.find(uri.toString())
@@ -151,6 +237,7 @@ class MainActivity : Activity() {
         }
     }
 
+    // Keep for fallback purposes
     private fun isTrackingParam(param: String): Boolean {
         val trackingParams = setOf(
             "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
@@ -161,19 +248,25 @@ class MainActivity : Activity() {
             "trk", "track", "trk_sid", "sid", "mibextid", "fb_action_ids",
             "fb_action_types", "twclid", "igshid", "s_kwcid", "sxsrf", "sca_esv",
             "source", "tbo", "sa", "ved", "pi", "fbs", "fbc", "fb_ref", "client", "ei",
-            "gs_lp", "sclient", "oq", "uact", "bih", "biw" //sxsrf might be needed on some sites, but google uses it for tracking
+            "gs_lp", "sclient", "oq", "uact", "bih", "biw", // sxsrf might be needed on some sites, but google uses it for tracking
+            "m_entstream_source", "entstream_source", "fb_source"
+
         )
         return param in trackingParams
     }
 
-    private fun isUnwantedYoutubeParam(param: String): Boolean {
+    internal fun isUnwantedYoutubeParam(param: String): Boolean {
         val youtubeParams = setOf(
-            "feature"
+            "feature",
+            "ab_channel",
+            "t", // Some cases you may want to keep t for timestamps, but remove it for tracking purposes
+            "si"
         )
         return param in youtubeParams
     }
 
-    private fun cleanTrackingParamsFromUrl(url: String): String {
+    // Keep for fallback and special handling
+    internal fun cleanTrackingParamsFromUrl(url: String): String {
         val uri = Uri.parse(url)
         if (uri.legacyGetQueryParameterNames().isEmpty()) {
             return url
@@ -191,21 +284,12 @@ class MainActivity : Activity() {
                 val newNestedUriBuilder = nestedUri.buildUpon().legacyClearQuery()
 
                 nestedUri.legacyGetQueryParameterNames().forEach { nestedParam ->
-                    newNestedUriBuilder.appendQueryParameter(nestedParam, nestedUri.getQueryParameter(nestedParam))
+                    if (!isTrackingParam(nestedParam)) {
+                        newNestedUriBuilder.appendQueryParameter(nestedParam, nestedUri.getQueryParameter(nestedParam))
+                    }
                 }
-
                 newUriBuilder.appendQueryParameter("q", newNestedUriBuilder.build().toString())
             }
-
-            val modifiedHost = uri.host?.removePrefix("music.")
-            newUriBuilder.authority(modifiedHost)
-
-            newUriBuilder.path(uri.path?.replace("/shorts/", "/v/") ?: uri.path)
-        }
-
-        else if(uri.host?.endsWith(".substack.com") == true) {
-            // Add "?no_cover=true" to the URL path
-            newUriBuilder.appendQueryParameter("no_cover", "true")
         }
 
         uri.legacyGetQueryParameterNames().forEach { param ->
@@ -214,11 +298,10 @@ class MainActivity : Activity() {
                 newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
             }
         }
-
         return newUriBuilder.build().toString()
     }
 
-    private fun extractUrl(text: String): String? {
+    internal fun extractUrl(text: String): String? {
         // First try to find URLs with protocols
         val protocolMatcher = WebURLMatcher.matcher(text)
         if (protocolMatcher.find()) {
@@ -244,28 +327,35 @@ class MainActivity : Activity() {
         return null
     }
 
-    private fun cleanUrl(url: String): String {
-        val lastHttpsIndex = url.lastIndexOf("https://")
-        val lastHttpIndex = url.lastIndexOf("http://")
-        val lastValidUrlIndex = maxOf(lastHttpsIndex, lastHttpIndex)
+    internal fun cleanUrl(url: String): String {
+        val cleanedUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            val lastHttpsIndex = url.lastIndexOf("https://")
+            val lastHttpIndex = url.lastIndexOf("http://")
+            val lastValidUrlIndex = maxOf(lastHttpsIndex, lastHttpIndex)
 
-        val cleanedUrl = if (lastValidUrlIndex != -1) {
-            // Extract the portion from the last valid protocol and clean any remaining %09 sequences
-            url.substring(lastValidUrlIndex).replace(Regex("%09+"), "")
-        } else {
-            // If no valid protocol is found, ensure it has one and clean %09 sequences
-            if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                "https://${url.replace(Regex("%09+"), "")}"
+            if (lastValidUrlIndex != -1) {
+                // Extract the portion from the last valid protocol and clean any remaining %09 sequences
+                url.substring(lastValidUrlIndex).replace(Regex("%09+"), "")
             } else {
-                url.replace(Regex("%09+"), "")
+                // If no valid protocol is found, add https:// and clean %09 sequences
+                "https://${url.replace(Regex("%09+"), "")}"
             }
+        } else {
+            // URL already starts with a protocol, just clean %09 sequences
+            url.replace(Regex("%09+"), "")
         }
 
         // Remove any trailing punctuation that might have been caught
-        return cleanedUrl.removeSuffix(".").removeSuffix(",").removeSuffix(";").removeSuffix(")")
+        return cleanedUrl
+            .removeSuffix(".")
+            .removeSuffix(",")
+            .removeSuffix(";")
+            .removeSuffix(")")
+            .removeSuffix("'")
+            .removeSuffix("\"")
     }
 
-    private fun openInBrowser(url: String) {
+    open fun openInBrowser(url: String) {
         Log.d("MainActivity", "Opening URL: $url")
         val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
         startActivity(browserIntent)
