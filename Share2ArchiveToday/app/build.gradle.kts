@@ -44,9 +44,9 @@ android {
         }
     }
 
-    dependenciesInfo {
-        includeInApk = true
-        includeInBundle = true
+    dependenciesInfo { // The name of these variables are misleading, they need to be false in order to make the app more transparent.
+        includeInApk = false
+        includeInBundle = false
     }
 }
 
