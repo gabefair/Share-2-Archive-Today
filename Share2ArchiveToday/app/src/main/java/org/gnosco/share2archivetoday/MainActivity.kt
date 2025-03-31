@@ -15,7 +15,7 @@ import com.google.zxing.common.HybridBinarizer
 import kotlin.math.max
 import android.widget.Toast
 
-class MainActivity : Activity() {
+open class MainActivity : Activity() {
     private lateinit var clearUrlsRulesManager: ClearUrlsRulesManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,13 +74,13 @@ class MainActivity : Activity() {
         finish()
     }
 
-    private fun threeSteps(url: String) {
+    internal fun threeSteps(url: String) {
         val processedUrl = processArchiveUrl(url)
         val cleanedUrl = handleURL(processedUrl)
         openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
     }
 
-    private fun handleImageShare(imageUri: Uri) {
+    internal fun handleImageShare(imageUri: Uri) {
         try {
             val qrUrl = extractUrl(extractQRCodeFromImage(imageUri))
             if (qrUrl != null) {
@@ -88,7 +88,7 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "URL found in QR code", Toast.LENGTH_SHORT).show()
             } else {
                 Log.d("MainActivity", "No QR code found in image")
-                Toast.makeText(this, "No QR code found in image", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "No URL found in QR code image", Toast.LENGTH_SHORT).show()
                 finish()
             }
         } catch (e: Exception) {
@@ -101,13 +101,13 @@ class MainActivity : Activity() {
     /**
      * Main URL handling method that combines ClearURLs rules with platform-specific optimizations
      */
-    private fun handleURL(url: String): String {
+    internal fun handleURL(url: String): String {
         // First clean with ClearURLs rules
         var rulesCleanedUrl = url
         if (clearUrlsRulesManager.areRulesLoaded()) {
             rulesCleanedUrl = clearUrlsRulesManager.clearUrl(url)
         }
-        cleanTrackingParamsFromUrl(rulesCleanedUrl)
+        rulesCleanedUrl = cleanTrackingParamsFromUrl(rulesCleanedUrl)
 
         // Then apply additional platform-specific optimizations that might not be in the rules
         return applyPlatformSpecificOptimizations(rulesCleanedUrl)
@@ -116,7 +116,7 @@ class MainActivity : Activity() {
     /**
      * Apply platform-specific optimizations that may not be covered by ClearURLs rules
      */
-    private fun applyPlatformSpecificOptimizations(url: String): String {
+    internal fun applyPlatformSpecificOptimizations(url: String): String {
         val uri = Uri.parse(url)
         val newUriBuilder = uri.buildUpon()
         var changed = false
@@ -169,7 +169,7 @@ class MainActivity : Activity() {
         return if (changed) newUriBuilder.build().toString() else url
     }
 
-    private fun extractQRCodeFromImage(imageUri: Uri): String {
+    internal fun extractQRCodeFromImage(imageUri: Uri): String {
         val inputStream = contentResolver.openInputStream(imageUri) ?: return ""
 
         // Read image dimensions first
@@ -225,7 +225,7 @@ class MainActivity : Activity() {
         return ""
     }
 
-    private fun processArchiveUrl(url: String): String {
+    internal fun processArchiveUrl(url: String): String {
         val uri = Uri.parse(url)
         val pattern = Regex("archive\\.[a-z]+/o/[a-zA-Z0-9]+/(.+)")
         val matchResult = pattern.find(uri.toString())
@@ -255,7 +255,7 @@ class MainActivity : Activity() {
         return param in trackingParams
     }
 
-    private fun isUnwantedYoutubeParam(param: String): Boolean {
+    internal fun isUnwantedYoutubeParam(param: String): Boolean {
         val youtubeParams = setOf(
             "feature",
             "ab_channel",
@@ -266,7 +266,7 @@ class MainActivity : Activity() {
     }
 
     // Keep for fallback and special handling
-    private fun cleanTrackingParamsFromUrl(url: String): String {
+    internal fun cleanTrackingParamsFromUrl(url: String): String {
         val uri = Uri.parse(url)
         if (uri.legacyGetQueryParameterNames().isEmpty()) {
             return url
@@ -301,7 +301,7 @@ class MainActivity : Activity() {
         return newUriBuilder.build().toString()
     }
 
-    private fun extractUrl(text: String): String? {
+    internal fun extractUrl(text: String): String? {
         // First try to find URLs with protocols
         val protocolMatcher = WebURLMatcher.matcher(text)
         if (protocolMatcher.find()) {
@@ -327,21 +327,22 @@ class MainActivity : Activity() {
         return null
     }
 
-    private fun cleanUrl(url: String): String {
-        val lastHttpsIndex = url.lastIndexOf("https://")
-        val lastHttpIndex = url.lastIndexOf("http://")
-        val lastValidUrlIndex = maxOf(lastHttpsIndex, lastHttpIndex)
+    internal fun cleanUrl(url: String): String {
+        val cleanedUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            val lastHttpsIndex = url.lastIndexOf("https://")
+            val lastHttpIndex = url.lastIndexOf("http://")
+            val lastValidUrlIndex = maxOf(lastHttpsIndex, lastHttpIndex)
 
-        val cleanedUrl = if (lastValidUrlIndex != -1) {
-            // Extract the portion from the last valid protocol and clean any remaining %09 sequences
-            url.substring(lastValidUrlIndex).replace(Regex("%09+"), "")
-        } else {
-            // If no valid protocol is found, ensure it has one and clean %09 sequences
-            if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                "https://${url.replace(Regex("%09+"), "")}"
+            if (lastValidUrlIndex != -1) {
+                // Extract the portion from the last valid protocol and clean any remaining %09 sequences
+                url.substring(lastValidUrlIndex).replace(Regex("%09+"), "")
             } else {
-                url.replace(Regex("%09+"), "")
+                // If no valid protocol is found, add https:// and clean %09 sequences
+                "https://${url.replace(Regex("%09+"), "")}"
             }
+        } else {
+            // URL already starts with a protocol, just clean %09 sequences
+            url.replace(Regex("%09+"), "")
         }
 
         // Remove any trailing punctuation that might have been caught
@@ -354,7 +355,7 @@ class MainActivity : Activity() {
             .removeSuffix("\"")
     }
 
-    private fun openInBrowser(url: String) {
+    open fun openInBrowser(url: String) {
         Log.d("MainActivity", "Opening URL: $url")
         val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
         startActivity(browserIntent)
