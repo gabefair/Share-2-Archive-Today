@@ -166,6 +166,14 @@ open class MainActivity : Activity() {
             }
         }
 
+        else if (uri.host?.equals("t.me", ignoreCase = true) == true) {
+            val path = uri.path?.trimStart('/') ?: ""
+            if (!path.startsWith("s/") && path.isNotEmpty()) {
+                newUriBuilder.path("/s/$path") //This is to archive some parts of the group chat if the web preview feature is enabled, otherwise the about page will be shown by telegram.
+                changed = true
+            }
+        }
+
         return if (changed) newUriBuilder.build().toString() else url
     }
 
