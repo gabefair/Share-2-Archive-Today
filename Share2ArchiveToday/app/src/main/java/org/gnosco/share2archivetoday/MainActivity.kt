@@ -249,8 +249,12 @@ open class MainActivity : Activity() {
             "fb_action_types", "twclid", "igshid", "s_kwcid", "sxsrf", "sca_esv",
             "source", "tbo", "sa", "ved", "pi", "fbs", "fbc", "fb_ref", "client", "ei",
             "gs_lp", "sclient", "oq", "uact", "bih", "biw", // sxsrf might be needed on some sites, but google uses it for tracking
-            "m_entstream_source", "entstream_source", "fb_source"
-
+            "m_entstream_source", "entstream_source", "fb_source",
+            "ref_source", "ref_medium", "ref_campaign", "ref_content", "ref_term", "ref_keyword",
+            "ref_type", "ref_campaign_id", "ref_ad_id", "ref_adgroup_id", "ref_adset_id",
+            "ref_creativetype", "ref_placement", "ref_network", "ref_sid", "ref_mc_eid",
+            "ref_mc_cid", "ref_scid", "ref_click_id", "ref_trk", "ref_track", "ref_trk_sid",
+            "ref_sid", "ref", "ref_url", "ref_campaign_id", "ref_ad_id", "ref_adgroup_id", "ref_adset_id"
         )
         return param in trackingParams
     }
@@ -259,8 +263,15 @@ open class MainActivity : Activity() {
         val youtubeParams = setOf(
             "feature",
             "ab_channel",
-            "t", // Some cases you may want to keep t for timestamps, but remove it for tracking purposes
+            "t",
             "si"
+        )
+        return param in youtubeParams
+    }
+    internal fun isUnwantedSubstackParam(param: String): Boolean {
+        val substackParams = setOf(
+            "r",
+            "showWelcomeOnShare"
         )
         return param in youtubeParams
     }
