@@ -11,8 +11,8 @@ android {
         applicationId = "org.gnosco.share2archivetoday"
         minSdk = 3
         targetSdk = 34
-        versionCode = 43
-        versionName = "4.3"
+        versionCode = 44
+        versionName = "4.4"
     }
 
     buildTypes {
