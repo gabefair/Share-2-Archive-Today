@@ -11,8 +11,8 @@ android {
         applicationId = "org.gnosco.share2archivetoday"
         minSdk = 3
         targetSdk = 34
-        versionCode = 43
-        versionName = "4.3"
+        versionCode = 48
+        versionName = "4.8"
     }
 
     buildTypes {
@@ -52,4 +52,8 @@ android {
 
 dependencies {
     implementation("com.google.zxing:core:3.5.3")
+    // ML Kit Barcode Scanning - will only be used on Android 5.0+
+    //implementation("com.google.mlkit:barcode-scanning:17.2.0")
+    compileOnly("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1")
+
 }
