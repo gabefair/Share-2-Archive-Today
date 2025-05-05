@@ -225,7 +225,7 @@ open class MainActivity : Activity() {
             "r",
             "showWelcomeOnShare"
         )
-        return param in youtubeParams
+        return param in substackParams
     }
 
     // Keep for fallback and special handling
@@ -237,6 +237,7 @@ open class MainActivity : Activity() {
 
         val newUriBuilder = uri.buildUpon().legacyClearQuery()
         var removeYouTubeParams = false
+        var removeSubstackParams = false
 
         // Additional handling for YouTube URLs
         if (uri.host?.contains("youtube.com") == true || uri.host?.contains("youtu.be") == true) {
@@ -255,9 +256,13 @@ open class MainActivity : Activity() {
             }
         }
 
+        else if(uri.host?.endsWith(".substack.com") == true) {
+            removeSubstackParams = true
+        }
+
         uri.legacyGetQueryParameterNames().forEach { param ->
             // Add only non-tracking parameters to the new URL
-            if (!isTrackingParam(param) && !(removeYouTubeParams && isUnwantedYoutubeParam(param))) {
+            if (!isTrackingParam(param) && !(removeYouTubeParams && isUnwantedYoutubeParam(param)) && !(removeSubstackParams && isUnwantedSubstackParam(param))) {
                 newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
             }
         }
