@@ -74,7 +74,7 @@ open class MainActivity : Activity() {
         finish()
     }
 
-    internal fun threeSteps(url: String) {
+    open fun threeSteps(url: String) {
         val processedUrl = processArchiveUrl(url)
         val cleanedUrl = handleURL(processedUrl)
         openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")

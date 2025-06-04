@@ -9,10 +9,10 @@ android {
 
     defaultConfig {
         applicationId = "org.gnosco.share2archivetoday"
-        minSdk = 3
+        minSdk = 13
         targetSdk = 34
-        versionCode = 45
-        versionName = "4.5"
+        versionCode = 47
+        versionName = "4.7"
     }
 
     buildTypes {
