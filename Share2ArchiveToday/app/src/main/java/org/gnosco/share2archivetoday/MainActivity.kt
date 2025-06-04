@@ -166,6 +166,31 @@ open class MainActivity : Activity() {
             }
         }
 
+        else if (uri.host?.contains("amazon.com") == true || uri.host?.contains("amazon.") == true) {
+            val path = uri.path ?: ""
+            // Remove /ref=... tracking from Amazon URLs
+            val refPattern = Regex("/ref=[^/]*")
+            val cleanedPath = path.replace(refPattern, "")
+            if (cleanedPath != path) {
+                newUriBuilder.path(cleanedPath)
+                changed = true
+            }
+        }
+
+        //mailchimp-specific handling
+        else if (uri.host?.contains("list-manage.com") == true) {
+            if (uri.getQueryParameter("e") != null) {
+                // Rebuild query parameters without the "e" parameter
+                newUriBuilder.legacyClearQuery()
+                uri.legacyGetQueryParameterNames().forEach { param ->
+                    if (param != "e") {
+                        newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
+                    }
+                }
+                changed = true
+            }
+        }
+
         else if (uri.host?.equals("t.me", ignoreCase = true) == true) {
             val path = uri.path?.trimStart('/') ?: ""
             if (!path.startsWith("s/") && path.isNotEmpty()) {
@@ -262,7 +287,8 @@ open class MainActivity : Activity() {
             "ref_type", "ref_campaign_id", "ref_ad_id", "ref_adgroup_id", "ref_adset_id",
             "ref_creativetype", "ref_placement", "ref_network", "ref_sid", "ref_mc_eid",
             "ref_mc_cid", "ref_scid", "ref_click_id", "ref_trk", "ref_track", "ref_trk_sid",
-            "ref_sid", "ref", "ref_url", "ref_campaign_id", "ref_ad_id", "ref_adgroup_id", "ref_adset_id"
+            "ref_sid", "ref_url", "ref_campaign_id", "ref_ad_id", "ref_adgroup_id", "ref_adset_id",
+            "chainedPosts" // Reddits new tracker
         )
         return param in trackingParams
     }
@@ -325,11 +351,22 @@ open class MainActivity : Activity() {
         return newUriBuilder.build().toString()
     }
 
+
     internal fun extractUrl(text: String): String? {
-        // First try to find URLs with protocols
+        // First, try simple protocol-based extraction for better reliability
+        val simpleUrl = extractUrlSimple(text)
+        if (simpleUrl != null) {
+            return cleanUrl(simpleUrl)
+        }
+
+        // Fallback to the existing WebURLMatcher approach
         val protocolMatcher = WebURLMatcher.matcher(text)
         if (protocolMatcher.find()) {
-            return cleanUrl(protocolMatcher.group(0))
+            val foundUrl = protocolMatcher.group(0)
+            // Validate that the found URL looks reasonable
+            if (foundUrl != null && isValidExtractedUrl(foundUrl)) {
+                return cleanUrl(foundUrl)
+            }
         }
 
         // If no URL with protocol is found, look for potential bare domains
@@ -351,6 +388,64 @@ open class MainActivity : Activity() {
         return null
     }
 
+    /**
+     * Simple URL extraction that looks for http:// or https:// and extracts to the next boundary
+     */
+    private fun extractUrlSimple(text: String): String? {
+        val httpIndex = text.lastIndexOf("http://")
+        val httpsIndex = text.lastIndexOf("https://")
+
+        val startIndex = maxOf(httpIndex, httpsIndex)
+        if (startIndex == -1) return null
+
+        // Find the end of the URL - look for whitespace, newline, or certain punctuation
+        var endIndex = text.length
+        for (i in startIndex until text.length) {
+            val char = text[i]
+            if (char.isWhitespace() || char == '\n' || char == '\r') {
+                endIndex = i
+                break
+            }
+            // Stop at certain punctuation that's likely not part of the URL
+            if (i > startIndex + 10) { // Only check after we have a reasonable URL length
+                if (char in setOf(',', ';', ')', '"', '\'') &&
+                    (i == text.length - 1 || text[i + 1].isWhitespace())) {
+                    endIndex = i
+                    break
+                }
+            }
+        }
+
+        val extractedUrl = text.substring(startIndex, endIndex)
+        return if (isValidExtractedUrl(extractedUrl)) extractedUrl else null
+    }
+
+    /**
+     * Validate that an extracted URL looks reasonable
+     */
+    private fun isValidExtractedUrl(url: String): Boolean {
+        if (url.length < 10) return false // Too short to be a real URL
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return false
+
+        try {
+            val uri = Uri.parse(url)
+            val host = uri.host
+
+            // Must have a valid host
+            if (host.isNullOrEmpty()) return false
+
+            // Host should contain at least one dot (domain.tld)
+            if (!host.contains(".")) return false
+
+            // Host shouldn't have weird characters that suggest parsing error
+            if (host.contains("'") || host.contains('"') || host.contains("â€")) return false
+
+            return true
+        } catch (e: Exception) {
+            return false
+        }
+    }
+
     internal fun cleanUrl(url: String): String {
         val cleanedUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
             val lastHttpsIndex = url.lastIndexOf("https://")
@@ -369,8 +464,11 @@ open class MainActivity : Activity() {
             url.replace(Regex("%09+"), "")
         }
 
-        // Remove any trailing punctuation that might have been caught
+        // Remove any trailing punctuation that might have been shared
         return cleanedUrl
+            .removeSuffix("?")
+            .removeSuffix("&")
+            .removeSuffix("#")
             .removeSuffix(".")
             .removeSuffix(",")
             .removeSuffix(";")
@@ -378,6 +476,7 @@ open class MainActivity : Activity() {
             .removeSuffix("'")
             .removeSuffix("\"")
     }
+
 
     open fun openInBrowser(url: String) {
         Log.d("MainActivity", "Opening URL: $url")
