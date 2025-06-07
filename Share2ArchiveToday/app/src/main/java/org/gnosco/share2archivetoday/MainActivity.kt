@@ -95,6 +95,7 @@ open class MainActivity : Activity() {
         finish()
     }
 
+    open fun threeSteps(url: String) {
         val processedUrl = processArchiveUrl(url)
         val cleanedUrl = handleURL(processedUrl)
         openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
@@ -102,6 +103,7 @@ open class MainActivity : Activity() {
 
     internal fun handleImageShare(imageUri: Uri) {
         try {
+            val qrUrl = extractUrl(extractQRCodeFromImage(imageUri))
             if (qrUrl != null) {
                 threeSteps(qrUrl)
                 Toast.makeText(this, "URL found in QR code", Toast.LENGTH_SHORT).show()
