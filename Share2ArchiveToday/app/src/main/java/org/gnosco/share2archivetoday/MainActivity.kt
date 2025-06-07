@@ -3,6 +3,7 @@ package org.gnosco.share2archivetoday
 
 import WebURLMatcher
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -24,12 +25,32 @@ open class MainActivity : Activity() {
         // Initialize ClearURLs rules manager
         clearUrlsRulesManager = ClearUrlsRulesManager(applicationContext)
 
+        // Show first-time usage tip
+        showFirstTimeToast()
+
         handleShareIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         handleShareIntent(intent)
+    }
+
+    /**
+     * Show a toast on first use to help users discover they can pin the app
+     */
+    private fun showFirstTimeToast() {
+        val prefs = getSharedPreferences("share2archive_prefs", Context.MODE_PRIVATE)
+        val isFirstTime = prefs.getBoolean("is_first_time", true)
+
+        if (isFirstTime) {
+            Toast.makeText(this, "Hold icon to pin", Toast.LENGTH_LONG).show()
+
+            // Mark as no longer first time
+            prefs.edit()
+                .putBoolean("is_first_time", false)
+                .apply()
+        }
     }
 
     private fun handleShareIntent(intent: Intent?) {
@@ -74,7 +95,6 @@ open class MainActivity : Activity() {
         finish()
     }
 
-    open fun threeSteps(url: String) {
         val processedUrl = processArchiveUrl(url)
         val cleanedUrl = handleURL(processedUrl)
         openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
@@ -82,7 +102,6 @@ open class MainActivity : Activity() {
 
     internal fun handleImageShare(imageUri: Uri) {
         try {
-            val qrUrl = extractUrl(extractQRCodeFromImage(imageUri))
             if (qrUrl != null) {
                 threeSteps(qrUrl)
                 Toast.makeText(this, "URL found in QR code", Toast.LENGTH_SHORT).show()
@@ -166,6 +185,7 @@ open class MainActivity : Activity() {
             }
         }
 
+        // Amazon-specific handling for path-based tracking
         else if (uri.host?.contains("amazon.com") == true || uri.host?.contains("amazon.") == true) {
             val path = uri.path ?: ""
             // Remove /ref=... tracking from Amazon URLs
@@ -287,8 +307,9 @@ open class MainActivity : Activity() {
             "ref_type", "ref_campaign_id", "ref_ad_id", "ref_adgroup_id", "ref_adset_id",
             "ref_creativetype", "ref_placement", "ref_network", "ref_sid", "ref_mc_eid",
             "ref_mc_cid", "ref_scid", "ref_click_id", "ref_trk", "ref_track", "ref_trk_sid",
-            "ref_sid", "ref_url", "ref_campaign_id", "ref_ad_id", "ref_adgroup_id", "ref_adset_id",
-            "chainedPosts" // Reddits new tracker
+            "ref_sid", "ref", "ref_url", "ref_campaign_id", "ref_ad_id", "ref_adgroup_id", "ref_adset_id",
+            "gc_id","h_ga_id","h_ad_id","h_keyword_id","gad_source", "impressionid", //reddit ad tracker
+            "ga_source", "ga_medium", "ga_campaign", "ga_content", "ga_term","chainedPosts" // Reddits new tracker
         )
         return param in trackingParams
     }
@@ -350,7 +371,6 @@ open class MainActivity : Activity() {
         }
         return newUriBuilder.build().toString()
     }
-
 
     internal fun extractUrl(text: String): String? {
         // First, try simple protocol-based extraction for better reliability
@@ -439,7 +459,6 @@ open class MainActivity : Activity() {
 
             // Host shouldn't have weird characters that suggest parsing error
             if (host.contains("'") || host.contains('"') || host.contains("â€")) return false
-
             return true
         } catch (e: Exception) {
             return false
@@ -464,7 +483,6 @@ open class MainActivity : Activity() {
             url.replace(Regex("%09+"), "")
         }
 
-        // Remove any trailing punctuation that might have been shared
         return cleanedUrl
             .removeSuffix("?")
             .removeSuffix("&")
@@ -476,7 +494,6 @@ open class MainActivity : Activity() {
             .removeSuffix("'")
             .removeSuffix("\"")
     }
-
 
     open fun openInBrowser(url: String) {
         Log.d("MainActivity", "Opening URL: $url")
