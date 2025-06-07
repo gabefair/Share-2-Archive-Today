@@ -8,16 +8,11 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import com.google.zxing.*
-import com.google.zxing.common.HybridBinarizer
-import kotlin.math.max
 import android.widget.Toast
 
 open class MainActivity : Activity() {
     private lateinit var clearUrlsRulesManager: ClearUrlsRulesManager
+    private lateinit var qrCodeScanner: QRCodeScanner
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -25,8 +20,8 @@ open class MainActivity : Activity() {
         // Initialize ClearURLs rules manager
         clearUrlsRulesManager = ClearUrlsRulesManager(applicationContext)
 
-        // Show first-time usage tip
-        showFirstTimeToast()
+        // Initialize QR code scanner
+        qrCodeScanner = QRCodeScanner(applicationContext)
 
         handleShareIntent(intent)
     }
@@ -44,7 +39,7 @@ open class MainActivity : Activity() {
         val isFirstTime = prefs.getBoolean("is_first_time", true)
 
         if (isFirstTime) {
-            Toast.makeText(this, "Hold icon to pin", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Hold icon to pin to share menu", Toast.LENGTH_LONG).show()
 
             // Mark as no longer first time
             prefs.edit()
@@ -55,6 +50,9 @@ open class MainActivity : Activity() {
 
     private fun handleShareIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND) {
+            // Show first-time usage tip only when actually sharing
+            showFirstTimeToast()
+
             when (intent.type) {
                 "text/plain" -> {
                     intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText ->
@@ -103,7 +101,9 @@ open class MainActivity : Activity() {
 
     internal fun handleImageShare(imageUri: Uri) {
         try {
-            val qrUrl = extractUrl(extractQRCodeFromImage(imageUri))
+            val qrCodeText = qrCodeScanner.extractQRCodeFromImage(imageUri)
+            val qrUrl = extractUrl(qrCodeText)
+
             if (qrUrl != null) {
                 threeSteps(qrUrl)
                 Toast.makeText(this, "URL found in QR code", Toast.LENGTH_SHORT).show()
@@ -222,62 +222,6 @@ open class MainActivity : Activity() {
         }
 
         return if (changed) newUriBuilder.build().toString() else url
-    }
-
-    internal fun extractQRCodeFromImage(imageUri: Uri): String {
-        val inputStream = contentResolver.openInputStream(imageUri) ?: return ""
-
-        // Read image dimensions first
-        val options = BitmapFactory.Options().apply {
-            inJustDecodeBounds = true
-        }
-        BitmapFactory.decodeStream(inputStream, null, options)
-        inputStream.close()
-
-        // Calculate sample size to avoid OOM
-        val maxDimension = max(options.outWidth, options.outHeight)
-        val sampleSize = max(1, maxDimension / 2048)
-
-        // Read the actual bitmap with sampling
-        val scaledOptions = BitmapFactory.Options().apply {
-            inSampleSize = sampleSize
-            inPreferredConfig = Bitmap.Config.ARGB_8888
-        }
-
-        contentResolver.openInputStream(imageUri)?.use { stream ->
-            val bitmap = BitmapFactory.decodeStream(stream, null, scaledOptions) ?: return ""
-
-            try {
-                // Convert to ZXing format
-                val width = bitmap.width
-                val height = bitmap.height
-                val pixels = IntArray(width * height)
-                bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-
-                val source = RGBLuminanceSource(width, height, pixels)
-                val binarizer = HybridBinarizer(source)
-                val binaryBitmap = BinaryBitmap(binarizer)
-
-                // Try to decode QR code
-                val reader = MultiFormatReader()
-                val hints = mapOf(
-                    DecodeHintType.POSSIBLE_FORMATS to arrayListOf(BarcodeFormat.QR_CODE),
-                    DecodeHintType.TRY_HARDER to true
-                )
-
-                try {
-                    val result = reader.decode(binaryBitmap, hints)
-                    return result.text
-                } catch (e: NotFoundException) {
-                    // No QR code found
-                    Log.d("MainActivity", "No QR code found in image")
-                    return ""
-                }
-            } finally {
-                bitmap.recycle()
-            }
-        }
-        return ""
     }
 
     internal fun processArchiveUrl(url: String): String {
