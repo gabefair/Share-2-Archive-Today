@@ -52,4 +52,8 @@ android {
 
 dependencies {
     implementation("com.google.zxing:core:3.5.3")
+
+    // ML Kit for barcode scanning (optional dependency)
+    compileOnly("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1")
+    compileOnly("com.google.android.gms:play-services-tasks:18.2.0")
 }

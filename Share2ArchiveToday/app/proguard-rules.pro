@@ -1,8 +1,3 @@
-##---------------Begin: App Specific Rules ----------
--keep class org.gnosco.share2archivetoday.MainActivity {*;}
--keep class androidx.compose.** { *; }
-
-##---------------Begin: Stripping Logs ----------
 # Strip all log calls
 -assumenosideeffects class android.util.Log {
     public static boolean isLoggable(java.lang.String, int);
@@ -13,17 +8,6 @@
     public static int e(...);
     public static int wtf(...);
 }
-
-##---------------Begin: ZXing Library Rules ----------
-# Keep only necessary ZXing classes
--keep class com.google.zxing.BarcodeFormat { *; }
--keep class com.google.zxing.DecodeHintType { *; }
--keep class com.google.zxing.MultiFormatReader { *; }
--keep class com.google.zxing.Result { *; }
--keep class com.google.zxing.BinaryBitmap { *; }
--keep class com.google.zxing.RGBLuminanceSource { *; }
--keep class com.google.zxing.common.HybridBinarizer { *; }
--keep class com.google.zxing.NotFoundException { *; }
 
 ##---------------Begin: General Optimization Rules ----------
 # Remove all debugging info from all classes
@@ -45,19 +29,18 @@
     public static ** valueOf(java.lang.String);
 }
 
-# Keep necessary Android components
--keep public class * extends android.app.Activity
--keep public class * extends android.app.Application
--keep public class * extends android.content.BroadcastReceiver
--keep public class * extends android.content.ContentProvider
+# Keep ML Kit classes if they exist (for reflection)
+-keep class com.google.mlkit.vision.barcode.BarcodeScanning { *; }
+-keep class com.google.mlkit.vision.barcode.BarcodeScannerOptions { *; }
+-keep class com.google.mlkit.vision.barcode.BarcodeScanner { *; }
+-keep class com.google.mlkit.vision.barcode.common.Barcode { *; }
+-keep class com.google.mlkit.vision.common.InputImage { *; }
+-keep class com.google.android.gms.tasks.Tasks { *; }
+-keep class com.google.android.gms.tasks.Task { *; }
 
-# Keep legacy extension methods
--keepclassmembers class org.gnosco.share2archivetoday.* {
-    public static * legacy*(...);
-}
+# Keep ZXing classes (fallback)
+-keep class com.google.zxing.** { *; }
 
-# Keep the application's entry points
--keepattributes *Annotation*
-
-# Remove unused code, resources, attributes in XMLs
--keepattributes SourceFile,LineNumberTable
+# If you keep the line number information, uncomment this to
+# hide the original source file name.
+#-renamesourcefileattribute SourceFile
