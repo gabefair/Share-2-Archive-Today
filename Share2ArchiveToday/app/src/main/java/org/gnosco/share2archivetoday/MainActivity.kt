@@ -245,15 +245,15 @@ open class MainActivity : Activity() {
             "adgroup_id", "adset_id", "creativetype", "placement", "network",
             "mc_eid", "mc_cid", "si", "icid", "_ga", "_gid", "scid", "click_id",
             "trk", "track", "trk_sid", "sid", "mibextid", "fb_action_ids",
-            "fb_action_types", "twclid", "igshid", "s_kwcid", "sxsrf", "sca_esv",
+            "fb_action_types", "fb_medium", "fb_campaign", "fb_source",
+            "m_entstream_source", "twclid", "igshid", "s_kwcid", "sxsrf", "sca_esv",
             "source", "tbo", "sa", "ved", "pi", "fbs", "fbc", "fb_ref", "client", "ei",
             "gs_lp", "sclient", "oq", "uact", "bih", "biw", // sxsrf might be needed on some sites, but google uses it for tracking
-            "m_entstream_source", "entstream_source", "fb_source",
             "ref_source", "ref_medium", "ref_campaign", "ref_content", "ref_term", "ref_keyword",
-            "ref_type", "ref_campaign_id", "ref_ad_id", "ref_adgroup_id", "ref_adset_id",
+            "ref_type", "ref_campaign_id", "ref_ad_id", "ref_adgroup_id", "entstream_source",
             "ref_creativetype", "ref_placement", "ref_network", "ref_sid", "ref_mc_eid",
             "ref_mc_cid", "ref_scid", "ref_click_id", "ref_trk", "ref_track", "ref_trk_sid",
-            "ref_sid", "ref", "ref_url", "ref_campaign_id", "ref_ad_id", "ref_adgroup_id", "ref_adset_id",
+            "ref_sid", "ref", "ref_url", "ref_campaign_id", "ref_adgroup_id", "ref_adset_id",
             "gc_id","h_ga_id","h_ad_id","h_keyword_id","gad_source", "impressionid", //reddit ad tracker
             "ga_source", "ga_medium", "ga_campaign", "ga_content", "ga_term","chainedPosts", // Reddits new tracker
             "mibextid" //facebooks new tracker
