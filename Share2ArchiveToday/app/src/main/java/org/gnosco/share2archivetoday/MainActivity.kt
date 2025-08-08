@@ -254,6 +254,8 @@ open class MainActivity : Activity() {
             "ref_creativetype", "ref_placement", "ref_network", "ref_sid", "ref_mc_eid",
             "ref_mc_cid", "ref_scid", "ref_click_id", "ref_trk", "ref_track", "ref_trk_sid",
             "ref_sid", "ref", "ref_url", "ref_campaign_id", "ref_adgroup_id", "ref_adset_id",
+            "rcm", //Linkedin's new tracker
+            "xmt", //threads new tracker
             "gc_id","h_ga_id","h_ad_id","h_keyword_id","gad_source", "impressionid", //reddit ad tracker
             "ga_source", "ga_medium", "ga_campaign", "ga_content", "ga_term","chainedPosts", // Reddits new tracker
             "mibextid" //facebooks new tracker
