@@ -237,7 +237,7 @@ open class MainActivity : Activity() {
                 val trimmed = decoded.split("?")[0]
                 trimmed
             } catch (e: Exception) {
-                decoded // fallback to raw decoded
+                embeddedUrl // fallback to raw decoded
             }
         }
 
