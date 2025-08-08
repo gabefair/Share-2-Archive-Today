@@ -226,14 +226,22 @@ open class MainActivity : Activity() {
 
     internal fun processArchiveUrl(url: String): String {
         val uri = Uri.parse(url)
-        val pattern = Regex("archive\\.[a-z]+/o/[a-zA-Z0-9]+/(.+)")
-        val matchResult = pattern.find(uri.toString())
+        val pathSegments = uri.pathSegments
 
-        return if (matchResult != null) {
-            matchResult.groupValues[1]
-        } else {
-            url
+        if (pathSegments.size >= 3 && pathSegments[0] == "o") {
+            // Rebuild and decode the embedded URL
+            val embeddedUrl = pathSegments.subList(2, pathSegments.size).joinToString("/")
+            return try {
+                val decoded = Uri.decode(embeddedUrl)
+                // Ensure we're only returning the embedded URL and not the trailing referrer
+                val trimmed = decoded.split("?")[0]
+                trimmed
+            } catch (e: Exception) {
+                decoded // fallback to raw decoded
+            }
         }
+
+        return url
     }
 
     // Keep for fallback purposes
