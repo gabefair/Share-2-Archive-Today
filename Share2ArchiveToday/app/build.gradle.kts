@@ -5,14 +5,18 @@ plugins {
 
 android {
     namespace = "org.gnosco.share2archivetoday"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "org.gnosco.share2archivetoday"
-        minSdk = 13
-        targetSdk = 34
-        versionCode = 52
-        versionName = "5.2"
+        minSdk = 21
+        targetSdk = 36
+        versionCode = 53
+        versionName = "5.3"
+    }
+
+    buildFeatures { // ask what this is
+        viewBinding = true
     }
 
     buildTypes {
