@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">Share 2 Archive Today</string>
-    <string name="video_download_label">Download Video</string>
+    <string name="video_download_label" translatable="false">Download Video &amp; Share</string>
 </resources>

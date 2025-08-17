@@ -13,9 +13,6 @@ android {
         targetSdk = 36
         versionCode = 53
         versionName = "5.3"
-        
-        // Required for youtubedl-android - specify NDK version instead of deprecated ndk block
-        ndkVersion = "25.2.9519653"
     }
 
     buildFeatures {
@@ -52,6 +49,11 @@ android {
         }
     }
 
+    // Required for youtubedl-android
+    ndk {
+        abiFilters("x86", "x86_64", "armeabi-v7a", "arm64-v8a")
+    }
+
     dependenciesInfo { // The name of these variables are misleading, they need to be false in order to make the app more transparent.
         includeInApk = false
         includeInBundle = false
@@ -66,9 +68,7 @@ dependencies {
     compileOnly("com.google.android.gms:play-services-tasks:18.2.0")
     
     // Video downloading capabilities (using latest youtubedl-android source)
-    implementation(project(":youtubedl-library"))
-    implementation(project(":youtubedl-ffmpeg"))
-    implementation(project(":youtubedl-aria2c"))
+    implementation("com.github.yausername:youtubedl-android:master-SNAPSHOT")
     
     // Coroutines support
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

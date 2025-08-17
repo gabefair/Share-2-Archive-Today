@@ -1,331 +1,319 @@
 package org.gnosco.share2archivetoday
 
-import android.app.DownloadManager
-import android.content.Context
+import android.app.Activity
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
+import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLException
+import com.yausername.youtubedl_android.YoutubeDLRequest
+import com.yausername.youtubedl_android.mapper.VideoInfo
+import com.yausername.ffmpeg.FFmpeg
 import kotlinx.coroutines.*
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import java.io.File
+import kotlinx.coroutines.delay
 
 /**
- * Activity that extracts and downloads videos from web pages
+ * Activity that downloads videos using youtubedl-android library
  */
 class VideoDownloadActivity : MainActivity() {
     
     private val coroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private val httpClient = OkHttpClient.Builder().build()
+    private var currentProcessId: String? = null
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Initialize youtubedl-android with FFmpeg support
+        try {
+            YoutubeDL.getInstance().init(this)
+            // Initialize FFmpeg for audio extraction and format conversion
+            try {
+                FFmpeg.getInstance().init(this)
+                Log.d("VideoDownload", "FFmpeg initialized successfully")
+            } catch (e: Exception) {
+                Log.w("VideoDownload", "FFmpeg not available, continuing without it", e)
+            }
+            Log.d("VideoDownload", "youtubedl-android initialized successfully")
+        } catch (e: YoutubeDLException) {
+            Log.e("VideoDownload", "Failed to initialize youtubedl-android", e)
+            Toast.makeText(this, "Failed to initialize video downloader", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
     }
     
     override fun threeSteps(url: String) {
         val processedUrl = processArchiveUrl(url)
         val cleanedUrl = handleURL(processedUrl)
-        extractAndDownloadVideo(cleanedUrl)
-    }
-
-    private fun extractAndDownloadVideo(url: String) {
-        try {
-            // First check if it's a direct video URL
-            if (isVideoUrl(url)) {
-                downloadVideo(url)
-                return
-            }
-            
-            // Try to extract video information from the page
-            extractVideoFromPage(url)
-            
-        } catch (e: Exception) {
-            Log.e("VideoDownload", "Failed to process video", e)
-            Toast.makeText(this, "Failed to process video: ${e.message}", Toast.LENGTH_SHORT).show()
-            finish()
+        
+        // Check if the URL is likely to contain a video
+        if (isLikelyVideoUrl(cleanedUrl)) {
+            downloadVideo(cleanedUrl)
+        } else {
+            Toast.makeText(this, "This URL doesn't appear to contain a video. Trying anyway...", Toast.LENGTH_LONG).show()
+            downloadVideo(cleanedUrl)
         }
     }
-
-    private fun extractVideoFromPage(url: String) {
-        coroutineScope.launch {
-            try {
-                // Show initial message
-                Toast.makeText(this@VideoDownloadActivity, "Analyzing video page...", Toast.LENGTH_SHORT).show()
-                
-                // Try to find video elements on the page
-                val videoUrls = withContext(Dispatchers.IO) {
-                    try {
-                        val request = Request.Builder().url(url).build()
-                        val response = httpClient.newCall(request).execute()
-                        
-                        if (response.isSuccessful) {
-                            val html = response.body?.string() ?: ""
-                            extractVideoUrlsFromHtml(html, url)
-                        } else {
-                            emptyList()
-                        }
-                    } catch (e: Exception) {
-                        Log.e("VideoDownload", "Error fetching page", e)
-                        emptyList()
-                    }
-                }
-                
-                if (videoUrls.isNotEmpty()) {
-                    // Found video URLs, show options
-                    showVideoDownloadOptions(videoUrls, url)
-                } else {
-                    // No video URLs found, try alternative methods
-                    attemptAlternativeVideoExtraction(url)
-                }
-                
-            } catch (e: Exception) {
-                Log.e("VideoDownload", "Error extracting video info", e)
-                Toast.makeText(this@VideoDownloadActivity, "Could not extract video info. Trying alternative method...", Toast.LENGTH_SHORT).show()
-                attemptAlternativeVideoExtraction(url)
-            }
-        }
-    }
-
-    private fun extractVideoUrlsFromHtml(html: String, baseUrl: String): List<VideoInfo> {
-        val videoInfos = mutableListOf<VideoInfo>()
-        
-        // Look for video source tags
-        val videoSourcePattern = Regex("<source[^>]*src=[\"']([^\"']*)[\"'][^>]*>")
-        val matches = videoSourcePattern.findAll(html)
-        
-        for (match in matches) {
-            val src = match.groupValues[1]
-            if (src.isNotEmpty()) {
-                val fullUrl = if (src.startsWith("http")) src else "$baseUrl$src"
-                videoInfos.add(VideoInfo("Video Source", fullUrl, "mp4"))
-            }
-        }
-        
-        // Look for video tags
-        val videoTagPattern = Regex("<video[^>]*src=[\"']([^\"']*)[\"'][^>]*>")
-        val videoMatches = videoTagPattern.findAll(html)
-        
-        for (match in videoMatches) {
-            val src = match.groupValues[1]
-            if (src.isNotEmpty()) {
-                val fullUrl = if (src.startsWith("http")) src else "$baseUrl$src"
-                videoInfos.add(VideoInfo("Video Element", fullUrl, "mp4"))
-            }
-        }
-        
-        // Look for iframe embeds that might contain videos
-        val iframePattern = Regex("<iframe[^>]*src=[\"']([^\"']*)[\"'][^>]*>")
-        val iframeMatches = iframePattern.findAll(html)
-        
-        for (match in iframeMatches) {
-            val src = match.groupValues[1]
-            if (src.isNotEmpty() && (src.contains("youtube.com") || src.contains("vimeo.com") || src.contains("dailymotion.com"))) {
-                videoInfos.add(VideoInfo("Embedded Video", src, "embedded"))
-            }
-        }
-        
-        // Look for common video URL patterns in the HTML
-        val videoUrlPatterns = listOf(
-            Regex("https?://[^\\s\"']*\\.(mp4|avi|mov|wmv|flv|webm|mkv|m4v|3gp|ogv)"),
-            Regex("https?://[^\\s\"']*/video/[^\\s\"']*"),
-            Regex("https?://[^\\s\"']*/media/[^\\s\"']*"),
-            Regex("https?://[^\\s\"']*/stream/[^\\s\"']*")
+    
+    private fun isLikelyVideoUrl(url: String): Boolean {
+        val videoHosts = listOf(
+            "youtube.com", "youtu.be", "vimeo.com", "dailymotion.com", "twitch.tv",
+            "facebook.com", "instagram.com", "twitter.com", "tiktok.com", "reddit.com",
+            "tumblr.com", "pinterest.com", "linkedin.com", "snapchat.com", "discord.com"
         )
         
-        for (pattern in videoUrlPatterns) {
-            val urlMatches = pattern.findAll(html)
-            for (urlMatch in urlMatches) {
-                val videoUrl = urlMatch.value
-                val extension = videoUrl.substringAfterLast(".", "mp4")
-                videoInfos.add(VideoInfo("Direct Video", videoUrl, extension))
-            }
-        }
-        
-        return videoInfos.distinctBy { it.url }
+        val lowerUrl = url.lowercase()
+        return videoHosts.any { host -> lowerUrl.contains(host) }
     }
-
-    private fun showVideoDownloadOptions(videoInfos: List<VideoInfo>, originalUrl: String) {
-        if (videoInfos.isEmpty()) {
-            Toast.makeText(this, "No videos found on this page", Toast.LENGTH_SHORT).show()
-            finish()
-            return
+    
+    private fun formatViewCount(viewCount: Long): String {
+        return when {
+            viewCount >= 1_000_000_000 -> "${viewCount / 1_000_000_000}B"
+            viewCount >= 1_000_000 -> "${viewCount / 1_000_000}M"
+            viewCount >= 1_000 -> "${viewCount / 1_000}K"
+            else -> viewCount.toString()
         }
-        
-        // For now, we'll download the first video found
-        // In a full implementation, you'd show a dialog with options
-        val firstVideo = videoInfos.first()
-        Toast.makeText(this, "Found video: ${firstVideo.title}", Toast.LENGTH_LONG).show()
-        
-        // Start download
-        downloadVideo(firstVideo.url)
-    }
-
-    private fun attemptAlternativeVideoExtraction(url: String) {
-        // Try to find video URLs using alternative methods
-        coroutineScope.launch {
-            try {
-                // Check if the URL itself might be a video
-                if (isVideoUrl(url)) {
-                    downloadVideo(url)
-                    return@launch
-                }
-                
-                // Try to find video URLs in the page content
-                val videoUrls = withContext(Dispatchers.IO) {
-                    try {
-                        val request = Request.Builder().url(url).build()
-                        val response = httpClient.newCall(request).execute()
-                        
-                        if (response.isSuccessful) {
-                            val html = response.body?.string() ?: ""
-                            extractVideoUrlsFromHtml(html, url)
-                        } else {
-                            emptyList()
-                        }
-                    } catch (e: Exception) {
-                        Log.e("VideoDownload", "Error in alternative extraction", e)
-                        emptyList()
-                    }
-                }
-                
-                if (videoUrls.isNotEmpty()) {
-                    showVideoDownloadOptions(videoUrls, url)
-                } else {
-                    Toast.makeText(this@VideoDownloadActivity, "No videos found. Try the archive option first, then look for download options.", Toast.LENGTH_LONG).show()
-                    finish()
-                }
-                
-            } catch (e: Exception) {
-                Log.e("VideoDownload", "Error in alternative video extraction", e)
-                Toast.makeText(this@VideoDownloadActivity, "Could not extract video. Try the archive option first.", Toast.LENGTH_LONG).show()
-                finish()
-            }
-        }
-    }
-
-    private fun isVideoUrl(url: String): Boolean {
-        val videoExtensions = listOf(".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm", ".mkv", ".m4v", ".3gp", ".ogv")
-        
-        val uri = Uri.parse(url)
-        val path = uri.path ?: ""
-        
-        // Check if URL has video file extension
-        if (videoExtensions.any { path.endsWith(it, ignoreCase = true) }) {
-            return true
-        }
-        
-        // Check for common video URL patterns
-        val videoPatterns = listOf(
-            "/video/", "/videos/", "/media/", "/stream/", "/play/", "/watch/",
-            "video.mp4", "video.webm", "video.avi", "stream.mp4", "media.mp4"
-        )
-        
-        if (videoPatterns.any { path.lowercase().contains(it) }) {
-            return true
-        }
-        
-        // Check query parameters that might indicate video content
-        val videoQueryParams = listOf("video", "media", "stream", "play")
-        if (videoQueryParams.any { uri.getQueryParameter(it) != null }) {
-            return true
-        }
-        
-        return false
     }
 
     private fun downloadVideo(url: String) {
-        try {
-            // Check if we have enough storage space
-            if (!hasEnoughStorageSpace()) {
-                Toast.makeText(this, "Insufficient storage space for video download", Toast.LENGTH_LONG).show()
-                finish()
-                return
-            }
-            
-            val downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            val uri = Uri.parse(url)
-            
-            // Create a filename from the URL
-            val fileName = generateFileName(url)
-            
-            val request = DownloadManager.Request(uri)
-                .setTitle("Downloading video")
-                .setDescription("Downloading video from: $url")
-                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
-                .setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE)
-                .setAllowedOverRoaming(false)
-                .setMimeType("video/*")
-            
-            downloadManager.enqueue(request)
-            
-            Toast.makeText(this, "Video download started: $fileName", Toast.LENGTH_SHORT).show()
-            finish()
-            
-        } catch (e: Exception) {
-            Toast.makeText(this, "Failed to start download: ${e.message}", Toast.LENGTH_SHORT).show()
-            finish()
-        }
-    }
-
-    private fun hasEnoughStorageSpace(): Boolean {
-        try {
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val freeSpace = downloadsDir.freeSpace
-            // Require at least 100MB free space
-            return freeSpace > 100 * 1024 * 1024
-        } catch (e: Exception) {
-            // If we can't check storage, assume it's okay
-            return true
-        }
-    }
-
-    private fun generateFileName(url: String): String {
-        val uri = Uri.parse(url)
-        val path = uri.path ?: ""
-        
-        // Try to extract filename from path
-        if (path.isNotEmpty()) {
-            val segments = path.split("/")
-            val lastSegment = segments.lastOrNull()
-            if (lastSegment != null && lastSegment.contains(".")) {
-                // Clean up the filename and ensure it has a video extension
-                val cleanName = lastSegment.split("?")[0].split("#")[0] // Remove query params and fragments
-                if (isVideoExtension(cleanName)) {
-                    return cleanName
+        coroutineScope.launch {
+            try {
+                // Show initial message
+                Toast.makeText(this@VideoDownloadActivity, "Analyzing video...", Toast.LENGTH_SHORT).show()
+                
+                // First, get video info to check if it's downloadable
+                val videoInfo = withContext(Dispatchers.IO) {
+                    try {
+                        YoutubeDL.getInstance().getInfo(url)
+                    } catch (e: Exception) {
+                        Log.e("VideoDownload", "Error getting video info", e)
+                        null
+                    }
                 }
+                
+                if (videoInfo == null) {
+                    Toast.makeText(this@VideoDownloadActivity, "Could not analyze video. Trying direct download...", Toast.LENGTH_LONG).show()
+                    // Try direct download anyway
+                    startDownload(url, "video")
+                } else {
+                    // Video info found, start download
+                    val title = videoInfo.title ?: "video"
+                    val format = videoInfo.ext ?: "mp4"
+                    val duration = videoInfo.duration
+                    val viewCount = videoInfo.viewCount
+                    val uploader = videoInfo.uploader
+                    
+                    val durationText = if (duration != null) {
+                        val minutes = duration / 60
+                        val seconds = duration % 60
+                        " (${minutes}:${String.format("%02d", seconds)})"
+                    } else ""
+                    
+                    val uploaderText = if (uploader != null) " by $uploader" else ""
+                    val viewText = if (viewCount != null) " • ${formatViewCount(viewCount.toLongOrNull() ?: 0L)} views" else ""
+                    
+                    val infoText = "$title$durationText$uploaderText$viewText"
+                    Toast.makeText(this@VideoDownloadActivity, "Found: $infoText", Toast.LENGTH_LONG).show()
+                    startDownload(url, title, format)
+                }
+                
+            } catch (e: Exception) {
+                Log.e("VideoDownload", "Error in download process", e)
+                Toast.makeText(this@VideoDownloadActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                finish()
             }
         }
-        
-        // Fallback: generate filename from host and timestamp
-        val host = uri.host?.replace(".", "_") ?: "unknown"
-        val timestamp = System.currentTimeMillis()
-        return "${host}_${timestamp}.mp4"
     }
 
-    private fun isVideoExtension(filename: String): Boolean {
-        val videoExtensions = listOf(".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm", ".mkv", ".m4v", ".3gp", ".ogv")
-        return videoExtensions.any { filename.lowercase().endsWith(it) }
+    private fun startDownload(url: String, title: String, format: String = "mp4") {
+        try {
+            // Create download directory
+            val downloadDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Share2Archive")
+            if (!downloadDir.exists()) {
+                downloadDir.mkdirs()
+            }
+            
+            // Generate filename
+            val safeTitle = title.replace(Regex("[^a-zA-Z0-9._-]"), "_").take(100)
+            val filename = "${safeTitle}.${format}"
+            val outputPath = "${downloadDir.absolutePath}/${filename}"
+            
+            // Create download request with better format selection
+            val request = YoutubeDLRequest(url)
+            request.addOption("-o", outputPath)
+            // Try to get the best quality available, fallback to best overall
+            request.addOption("-f", "bestvideo[ext=${format}]+bestaudio[ext=m4a]/best[ext=${format}]/best")
+            request.addOption("--no-mtime")
+            request.addOption("--no-playlist")
+            request.addOption("--no-warnings")
+            request.addOption("--ignore-errors")
+            request.addOption("--extract-audio")
+            request.addOption("--audio-format", "mp3")
+            request.addOption("--audio-quality", "0")
+            
+            // Generate unique process ID
+            currentProcessId = "download_${System.currentTimeMillis()}"
+            
+            // Start download with progress callback
+            YoutubeDL.getInstance().execute(request, currentProcessId) { progress, etaInSeconds, output ->
+                // Progress callback with more informative messages
+                val progressText = when {
+                    progress < 0f -> "Preparing download..."
+                    progress == 0f -> "Starting download..."
+                    progress < 10f -> "Downloading: ${progress}% (ETA: ${etaInSeconds}s)"
+                    progress < 50f -> "Downloading: ${progress}% (ETA: ${etaInSeconds}s)"
+                    progress < 90f -> "Downloading: ${progress}% (ETA: ${etaInSeconds}s)"
+                    progress < 100f -> "Finalizing: ${progress}% (ETA: ${etaInSeconds}s)"
+                    else -> "Download complete!"
+                }
+                
+                runOnUiThread {
+                    Toast.makeText(this@VideoDownloadActivity, progressText, Toast.LENGTH_SHORT).show()
+                }
+                
+                // If download is complete, share the file
+                if (progress >= 100f) {
+                    runOnUiThread {
+                        onDownloadComplete(outputPath, filename)
+                    }
+                }
+                
+                // Handle download errors (negative progress values)
+                if (progress < -1f) {
+                    runOnUiThread {
+                        handleDownloadError(progress.toInt())
+                    }
+                }
+                
+                // Log progress for debugging
+                Log.d("VideoDownload", "Progress: $progress%, ETA: ${etaInSeconds}s")
+            }
+            
+            Toast.makeText(this, "Download started: $filename", Toast.LENGTH_LONG).show()
+            
+        } catch (e: Exception) {
+            Log.e("VideoDownload", "Error starting download", e)
+            Toast.makeText(this, "Failed to start download: ${e.message}", Toast.LENGTH_LONG).show()
+            finish()
+        }
+    }
+
+    private fun onDownloadComplete(filePath: String, filename: String) {
+        try {
+            val file = File(filePath)
+            if (file.exists() && file.length() > 0) {
+                val fileSizeMB = file.length() / (1024 * 1024)
+                val fileSizeText = if (fileSizeMB > 0) " (${fileSizeMB}MB)" else ""
+                Toast.makeText(this, "Download complete!$fileSizeText Sharing video...", Toast.LENGTH_LONG).show()
+                
+                // Small delay to ensure file is fully written
+                coroutineScope.launch {
+                    delay(1000)
+                    shareVideo(file)
+                }
+            } else {
+                Toast.makeText(this, "Download failed or file is empty", Toast.LENGTH_LONG).show()
+                finish()
+            }
+        } catch (e: Exception) {
+            Log.e("VideoDownload", "Error handling download completion", e)
+            Toast.makeText(this, "Error sharing video: ${e.message}", Toast.LENGTH_LONG).show()
+            finish()
+        }
+    }
+
+    private fun shareVideo(videoFile: File) {
+        try {
+            val videoUri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                // Use FileProvider for Android 7+ (API 24+)
+                val authority = "${applicationContext.packageName}.fileprovider"
+                val contentUri = androidx.core.content.FileProvider.getUriForFile(
+                    this,
+                    authority,
+                    videoFile
+                )
+                contentUri
+            } else {
+                // Fallback for older Android versions
+                Uri.fromFile(videoFile)
+            }
+            
+            // Determine the MIME type based on file extension
+            val mimeType = when (videoFile.extension.lowercase()) {
+                "mp4" -> "video/mp4"
+                "webm" -> "video/webm"
+                "mkv" -> "video/x-matroska"
+                "avi" -> "video/x-msvideo"
+                "mov" -> "video/quicktime"
+                "mp3" -> "audio/mpeg"
+                "m4a" -> "audio/mp4"
+                "wav" -> "audio/wav"
+                else -> "video/*"
+            }
+            
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(Intent.EXTRA_STREAM, videoUri)
+                putExtra(Intent.EXTRA_SUBJECT, "Media downloaded with Share2Archive")
+                putExtra(Intent.EXTRA_TEXT, "Check out this media I downloaded!")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            
+            // Start the share activity
+            startActivity(Intent.createChooser(shareIntent, "Share Media"))
+            
+            // Finish this activity after sharing
+            finish()
+            
+        } catch (e: Exception) {
+            Log.e("VideoDownload", "Error sharing video", e)
+            Toast.makeText(this, "Error sharing video: ${e.message}", Toast.LENGTH_LONG).show()
+            finish()
+        }
+    }
+
+    private fun handleDownloadError(errorCode: Int) {
+        val errorMessage = when (errorCode) {
+            -2 -> "Download failed: Video not available"
+            -3 -> "Download failed: Network error"
+            -4 -> "Download failed: Format not supported"
+            -5 -> "Download failed: Access denied"
+            else -> "Download failed: Unknown error (code: $errorCode)"
+        }
+        
+        Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show()
+        Log.e("VideoDownload", "Download error: $errorMessage")
+        
+        // Wait a bit before finishing to show the error message
+        coroutineScope.launch {
+            delay(2000)
+            finish()
+        }
     }
 
     override fun openInBrowser(url: String) {
         // Override to prevent browser opening - this should never be called in video download mode
-        extractAndDownloadVideo(url)
+        downloadVideo(url)
     }
     
     override fun onDestroy() {
         super.onDestroy()
+        
+        // Cancel any ongoing download
+        currentProcessId?.let { processId ->
+            try {
+                YoutubeDL.getInstance().destroyProcessById(processId)
+                Log.d("VideoDownload", "Download process cancelled: $processId")
+            } catch (e: Exception) {
+                Log.e("VideoDownload", "Error cancelling download process", e)
+            }
+        }
+        
         coroutineScope.cancel()
     }
 }
-
-/**
- * Data class to hold video information
- */
-data class VideoInfo(
-    val title: String,
-    val url: String,
-    val format: String
-)
