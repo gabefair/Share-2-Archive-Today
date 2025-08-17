@@ -1,7 +1,10 @@
 package org.gnosco.share2archivetoday
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
@@ -28,11 +31,18 @@ class VideoDownloadActivity : MainActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        Log.d("VideoDownload", "VideoDownloadActivity onCreate started")
+        Log.d("VideoDownload", "Network status: ${if (isNetworkAvailable()) "Available" else "Not Available"}")
+        
         // Initialize youtubedl-android with FFmpeg support
         try {
+            Log.d("VideoDownload", "Initializing YoutubeDL...")
             YoutubeDL.getInstance().init(this)
+            Log.d("VideoDownload", "YoutubeDL initialized successfully")
+            
             // Initialize FFmpeg for audio extraction and format conversion
             try {
+                Log.d("VideoDownload", "Initializing FFmpeg...")
                 FFmpeg.getInstance().init(this)
                 Log.d("VideoDownload", "FFmpeg initialized successfully")
             } catch (e: Exception) {
@@ -41,10 +51,15 @@ class VideoDownloadActivity : MainActivity() {
             Log.d("VideoDownload", "youtubedl-android initialized successfully")
         } catch (e: YoutubeDLException) {
             Log.e("VideoDownload", "Failed to initialize youtubedl-android", e)
+            Log.e("VideoDownload", "Exception type: ${e.javaClass.simpleName}")
+            Log.e("VideoDownload", "Exception message: ${e.message}")
+            e.printStackTrace()
             Toast.makeText(this, "Failed to initialize video downloader", Toast.LENGTH_LONG).show()
             finish()
             return
         }
+        
+        Log.d("VideoDownload", "VideoDownloadActivity onCreate completed successfully")
     }
     
     override fun threeSteps(url: String) {
@@ -53,10 +68,10 @@ class VideoDownloadActivity : MainActivity() {
         
         // Check if the URL is likely to contain a video
         if (isLikelyVideoUrl(cleanedUrl)) {
-            downloadVideo(cleanedUrl)
+            checkNetworkAndProceed(cleanedUrl)
         } else {
             Toast.makeText(this, "This URL doesn't appear to contain a video. Trying anyway...", Toast.LENGTH_LONG).show()
-            downloadVideo(cleanedUrl)
+            checkNetworkAndProceed(cleanedUrl)
         }
     }
     
@@ -71,6 +86,81 @@ class VideoDownloadActivity : MainActivity() {
         return videoHosts.any { host -> lowerUrl.contains(host) }
     }
     
+    private fun isNetworkAvailable(): Boolean {
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = connectivityManager.activeNetwork ?: return false
+        val activeNetwork = connectivityManager.getNetworkCapabilities(network) ?: return false
+        
+        return when {
+            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> true
+            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> true
+            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> true
+            else -> false
+        }
+    }
+    
+    private fun checkNetworkAndProceed(url: String) {
+        if (!isNetworkAvailable()) {
+            Log.e("VideoDownload", "No network connection available")
+            Toast.makeText(this, "No internet connection available", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
+        
+        Log.d("VideoDownload", "Network connection available, proceeding with download")
+        
+        // Test basic network connectivity
+        testNetworkConnectivity { isConnected ->
+            if (isConnected) {
+                downloadVideo(url)
+            } else {
+                Log.e("VideoDownload", "Network connectivity test failed")
+                Toast.makeText(this, "Network connectivity test failed", Toast.LENGTH_LONG).show()
+                finish()
+            }
+        }
+    }
+    
+    private fun testNetworkConnectivity(callback: (Boolean) -> Unit) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                Log.d("VideoDownload", "Starting network connectivity test...")
+                Log.d("VideoDownload", "Current thread: ${Thread.currentThread().name}")
+                
+                // Try to connect to a reliable service
+                val url = java.net.URL("https://www.google.com")
+                Log.d("VideoDownload", "Testing connection to: ${url}")
+                
+                val connection = url.openConnection() as java.net.HttpURLConnection
+                connection.connectTimeout = 10000
+                connection.readTimeout = 10000
+                connection.requestMethod = "HEAD"
+                
+                Log.d("VideoDownload", "Attempting to connect...")
+                val responseCode = connection.responseCode
+                Log.d("VideoDownload", "Network test response code: $responseCode")
+                
+                connection.disconnect()
+                
+                val isConnected = responseCode in 200..399
+                Log.d("VideoDownload", "Network connectivity test result: $isConnected")
+                
+                withContext(Dispatchers.Main) {
+                    callback(isConnected)
+                }
+            } catch (e: Exception) {
+                Log.e("VideoDownload", "Network connectivity test failed", e)
+                Log.e("VideoDownload", "Exception type: ${e.javaClass.simpleName}")
+                Log.e("VideoDownload", "Exception message: ${e.message}")
+                Log.e("VideoDownload", "Current thread: ${Thread.currentThread().name}")
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    callback(false)
+                }
+            }
+        }
+    }
+    
     private fun formatViewCount(viewCount: Long): String {
         return when {
             viewCount >= 1_000_000_000 -> "${viewCount / 1_000_000_000}B"
@@ -83,15 +173,29 @@ class VideoDownloadActivity : MainActivity() {
     private fun downloadVideo(url: String) {
         coroutineScope.launch {
             try {
+                Log.d("VideoDownload", "Starting download process for URL: $url")
+                Log.d("VideoDownload", "Network status: ${if (isNetworkAvailable()) "Available" else "Not Available"}")
+                Log.d("VideoDownload", "Current thread: ${Thread.currentThread().name}")
+                
                 // Show initial message
                 Toast.makeText(this@VideoDownloadActivity, "Analyzing video...", Toast.LENGTH_SHORT).show()
                 
                 // First, get video info to check if it's downloadable
                 val videoInfo = withContext(Dispatchers.IO) {
                     try {
-                        YoutubeDL.getInstance().getInfo(url)
+                        Log.d("VideoDownload", "Attempting to get video info from: $url")
+                        Log.d("VideoDownload", "YoutubeDL instance: ${YoutubeDL.getInstance()}")
+                        Log.d("VideoDownload", "Current thread: ${Thread.currentThread().name}")
+                        
+                        val info = YoutubeDL.getInstance().getInfo(url)
+                        Log.d("VideoDownload", "Successfully retrieved video info: ${info.title}")
+                        info
                     } catch (e: Exception) {
-                        Log.e("VideoDownload", "Error getting video info", e)
+                        Log.e("VideoDownload", "Error getting video info from $url", e)
+                        Log.e("VideoDownload", "Exception type: ${e.javaClass.simpleName}")
+                        Log.e("VideoDownload", "Exception message: ${e.message}")
+                        Log.e("VideoDownload", "Current thread: ${Thread.currentThread().name}")
+                        e.printStackTrace()
                         null
                     }
                 }
@@ -160,41 +264,57 @@ class VideoDownloadActivity : MainActivity() {
             currentProcessId = "download_${System.currentTimeMillis()}"
             
             // Start download with progress callback
-            YoutubeDL.getInstance().execute(request, currentProcessId) { progress, etaInSeconds, output ->
-                // Progress callback with more informative messages
-                val progressText = when {
-                    progress < 0f -> "Preparing download..."
-                    progress == 0f -> "Starting download..."
-                    progress < 10f -> "Downloading: ${progress}% (ETA: ${etaInSeconds}s)"
-                    progress < 50f -> "Downloading: ${progress}% (ETA: ${etaInSeconds}s)"
-                    progress < 90f -> "Downloading: ${progress}% (ETA: ${etaInSeconds}s)"
-                    progress < 100f -> "Finalizing: ${progress}% (ETA: ${etaInSeconds}s)"
-                    else -> "Download complete!"
-                }
+            try {
+                Log.d("VideoDownload", "Starting download execution for: $url")
+                Log.d("VideoDownload", "Output path: $outputPath")
+                Log.d("VideoDownload", "Process ID: $currentProcessId")
                 
-                runOnUiThread {
-                    Toast.makeText(this@VideoDownloadActivity, progressText, Toast.LENGTH_SHORT).show()
-                }
-                
-                // If download is complete, share the file
-                if (progress >= 100f) {
-                    runOnUiThread {
-                        onDownloadComplete(outputPath, filename)
+                YoutubeDL.getInstance().execute(request, currentProcessId) { progress, etaInSeconds, output ->
+                    // Progress callback with more informative messages
+                    Log.d("VideoDownload", "Progress callback: $progress%, ETA: ${etaInSeconds}s, Output: $output")
+                    
+                    val progressText = when {
+                        progress < 0f -> "Preparing download..."
+                        progress == 0f -> "Starting download..."
+                        progress < 10f -> "Downloading: ${progress}% (ETA: ${etaInSeconds}s)"
+                        progress < 50f -> "Downloading: ${progress}% (ETA: ${etaInSeconds}s)"
+                        progress < 90f -> "Downloading: ${progress}% (ETA: ${etaInSeconds}s)"
+                        progress < 100f -> "Finalizing: ${progress}% (ETA: ${etaInSeconds}s)"
+                        else -> "Download complete!"
                     }
-                }
-                
-                // Handle download errors (negative progress values)
-                if (progress < -1f) {
+                    
                     runOnUiThread {
-                        handleDownloadError(progress.toInt())
+                        Toast.makeText(this@VideoDownloadActivity, progressText, Toast.LENGTH_SHORT).show()
                     }
+                    
+                    // If download is complete, share the file
+                    if (progress >= 100f) {
+                        runOnUiThread {
+                            onDownloadComplete(outputPath, filename)
+                        }
+                    }
+                    
+                    // Handle download errors (negative progress values)
+                    if (progress < -1f) {
+                        runOnUiThread {
+                            handleDownloadError(progress.toInt())
+                        }
+                    }
+                    
+                    // Log progress for debugging
+                    Log.d("VideoDownload", "Progress: $progress%, ETA: ${etaInSeconds}s")
                 }
                 
-                // Log progress for debugging
-                Log.d("VideoDownload", "Progress: $progress%, ETA: ${etaInSeconds}s")
+                Toast.makeText(this, "Download started: $filename", Toast.LENGTH_LONG).show()
+                
+            } catch (e: Exception) {
+                Log.e("VideoDownload", "Error during download execution", e)
+                Log.e("VideoDownload", "Exception type: ${e.javaClass.simpleName}")
+                Log.e("VideoDownload", "Exception message: ${e.message}")
+                e.printStackTrace()
+                Toast.makeText(this, "Download execution failed: ${e.message}", Toast.LENGTH_LONG).show()
+                finish()
             }
-            
-            Toast.makeText(this, "Download started: $filename", Toast.LENGTH_LONG).show()
             
         } catch (e: Exception) {
             Log.e("VideoDownload", "Error starting download", e)
@@ -317,3 +437,4 @@ class VideoDownloadActivity : MainActivity() {
         coroutineScope.cancel()
     }
 }
+
