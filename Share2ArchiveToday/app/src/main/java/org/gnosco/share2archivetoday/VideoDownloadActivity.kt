@@ -3,14 +3,26 @@ package org.gnosco.share2archivetoday
 import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
+import android.os.Bundle
 import android.os.Environment
+import android.util.Log
 import android.widget.Toast
+import kotlinx.coroutines.*
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
 
 /**
- * Activity that extracts and downloads videos from web pages instead of archiving them
+ * Activity that extracts and downloads videos from web pages
  */
 class VideoDownloadActivity : MainActivity() {
+    
+    private val coroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val httpClient = OkHttpClient.Builder().build()
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+    }
     
     override fun threeSteps(url: String) {
         val processedUrl = processArchiveUrl(url)
@@ -26,19 +38,170 @@ class VideoDownloadActivity : MainActivity() {
                 return
             }
             
-            // Check if it's a known video hosting site that we can handle
-            if (isVideoHostingSite(url)) {
-                handleVideoHostingSite(url)
-                return
-            }
-            
-            // For other URLs, show a message about the current limitations
-            Toast.makeText(this, "Video extraction from general web pages requires additional implementation. Try sharing a direct video URL or from supported video sites.", Toast.LENGTH_LONG).show()
-            finish()
+            // Try to extract video information from the page
+            extractVideoFromPage(url)
             
         } catch (e: Exception) {
+            Log.e("VideoDownload", "Failed to process video", e)
             Toast.makeText(this, "Failed to process video: ${e.message}", Toast.LENGTH_SHORT).show()
             finish()
+        }
+    }
+
+    private fun extractVideoFromPage(url: String) {
+        coroutineScope.launch {
+            try {
+                // Show initial message
+                Toast.makeText(this@VideoDownloadActivity, "Analyzing video page...", Toast.LENGTH_SHORT).show()
+                
+                // Try to find video elements on the page
+                val videoUrls = withContext(Dispatchers.IO) {
+                    try {
+                        val request = Request.Builder().url(url).build()
+                        val response = httpClient.newCall(request).execute()
+                        
+                        if (response.isSuccessful) {
+                            val html = response.body?.string() ?: ""
+                            extractVideoUrlsFromHtml(html, url)
+                        } else {
+                            emptyList()
+                        }
+                    } catch (e: Exception) {
+                        Log.e("VideoDownload", "Error fetching page", e)
+                        emptyList()
+                    }
+                }
+                
+                if (videoUrls.isNotEmpty()) {
+                    // Found video URLs, show options
+                    showVideoDownloadOptions(videoUrls, url)
+                } else {
+                    // No video URLs found, try alternative methods
+                    attemptAlternativeVideoExtraction(url)
+                }
+                
+            } catch (e: Exception) {
+                Log.e("VideoDownload", "Error extracting video info", e)
+                Toast.makeText(this@VideoDownloadActivity, "Could not extract video info. Trying alternative method...", Toast.LENGTH_SHORT).show()
+                attemptAlternativeVideoExtraction(url)
+            }
+        }
+    }
+
+    private fun extractVideoUrlsFromHtml(html: String, baseUrl: String): List<VideoInfo> {
+        val videoInfos = mutableListOf<VideoInfo>()
+        
+        // Look for video source tags
+        val videoSourcePattern = Regex("<source[^>]*src=[\"']([^\"']*)[\"'][^>]*>")
+        val matches = videoSourcePattern.findAll(html)
+        
+        for (match in matches) {
+            val src = match.groupValues[1]
+            if (src.isNotEmpty()) {
+                val fullUrl = if (src.startsWith("http")) src else "$baseUrl$src"
+                videoInfos.add(VideoInfo("Video Source", fullUrl, "mp4"))
+            }
+        }
+        
+        // Look for video tags
+        val videoTagPattern = Regex("<video[^>]*src=[\"']([^\"']*)[\"'][^>]*>")
+        val videoMatches = videoTagPattern.findAll(html)
+        
+        for (match in videoMatches) {
+            val src = match.groupValues[1]
+            if (src.isNotEmpty()) {
+                val fullUrl = if (src.startsWith("http")) src else "$baseUrl$src"
+                videoInfos.add(VideoInfo("Video Element", fullUrl, "mp4"))
+            }
+        }
+        
+        // Look for iframe embeds that might contain videos
+        val iframePattern = Regex("<iframe[^>]*src=[\"']([^\"']*)[\"'][^>]*>")
+        val iframeMatches = iframePattern.findAll(html)
+        
+        for (match in iframeMatches) {
+            val src = match.groupValues[1]
+            if (src.isNotEmpty() && (src.contains("youtube.com") || src.contains("vimeo.com") || src.contains("dailymotion.com"))) {
+                videoInfos.add(VideoInfo("Embedded Video", src, "embedded"))
+            }
+        }
+        
+        // Look for common video URL patterns in the HTML
+        val videoUrlPatterns = listOf(
+            Regex("https?://[^\\s\"']*\\.(mp4|avi|mov|wmv|flv|webm|mkv|m4v|3gp|ogv)"),
+            Regex("https?://[^\\s\"']*/video/[^\\s\"']*"),
+            Regex("https?://[^\\s\"']*/media/[^\\s\"']*"),
+            Regex("https?://[^\\s\"']*/stream/[^\\s\"']*")
+        )
+        
+        for (pattern in videoUrlPatterns) {
+            val urlMatches = pattern.findAll(html)
+            for (urlMatch in urlMatches) {
+                val videoUrl = urlMatch.value
+                val extension = videoUrl.substringAfterLast(".", "mp4")
+                videoInfos.add(VideoInfo("Direct Video", videoUrl, extension))
+            }
+        }
+        
+        return videoInfos.distinctBy { it.url }
+    }
+
+    private fun showVideoDownloadOptions(videoInfos: List<VideoInfo>, originalUrl: String) {
+        if (videoInfos.isEmpty()) {
+            Toast.makeText(this, "No videos found on this page", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
+        
+        // For now, we'll download the first video found
+        // In a full implementation, you'd show a dialog with options
+        val firstVideo = videoInfos.first()
+        Toast.makeText(this, "Found video: ${firstVideo.title}", Toast.LENGTH_LONG).show()
+        
+        // Start download
+        downloadVideo(firstVideo.url)
+    }
+
+    private fun attemptAlternativeVideoExtraction(url: String) {
+        // Try to find video URLs using alternative methods
+        coroutineScope.launch {
+            try {
+                // Check if the URL itself might be a video
+                if (isVideoUrl(url)) {
+                    downloadVideo(url)
+                    return@launch
+                }
+                
+                // Try to find video URLs in the page content
+                val videoUrls = withContext(Dispatchers.IO) {
+                    try {
+                        val request = Request.Builder().url(url).build()
+                        val response = httpClient.newCall(request).execute()
+                        
+                        if (response.isSuccessful) {
+                            val html = response.body?.string() ?: ""
+                            extractVideoUrlsFromHtml(html, url)
+                        } else {
+                            emptyList()
+                        }
+                    } catch (e: Exception) {
+                        Log.e("VideoDownload", "Error in alternative extraction", e)
+                        emptyList()
+                    }
+                }
+                
+                if (videoUrls.isNotEmpty()) {
+                    showVideoDownloadOptions(videoUrls, url)
+                } else {
+                    Toast.makeText(this@VideoDownloadActivity, "No videos found. Try the archive option first, then look for download options.", Toast.LENGTH_LONG).show()
+                    finish()
+                }
+                
+            } catch (e: Exception) {
+                Log.e("VideoDownload", "Error in alternative video extraction", e)
+                Toast.makeText(this@VideoDownloadActivity, "Could not extract video. Try the archive option first.", Toast.LENGTH_LONG).show()
+                finish()
+            }
         }
     }
 
@@ -70,72 +233,6 @@ class VideoDownloadActivity : MainActivity() {
         }
         
         return false
-    }
-
-    private fun isVideoHostingSite(url: String): Boolean {
-        val videoHosts = listOf(
-            "youtube.com", "youtu.be", "vimeo.com", "dailymotion.com", "twitch.tv",
-            "facebook.com", "fb.com", "instagram.com", "tiktok.com", "reddit.com",
-            "twitter.com", "x.com", "linkedin.com", "pinterest.com"
-        )
-        val uri = Uri.parse(url)
-        return videoHosts.any { uri.host?.contains(it) == true }
-    }
-
-    private fun handleVideoHostingSite(url: String) {
-        val uri = Uri.parse(url)
-        val host = uri.host ?: ""
-        
-        when {
-            host.contains("youtube.com") || host.contains("youtu.be") -> {
-                Toast.makeText(this, "YouTube videos cannot be directly downloaded due to terms of service. Consider using the archive option instead.", Toast.LENGTH_LONG).show()
-                finish()
-            }
-            host.contains("vimeo.com") -> {
-                Toast.makeText(this, "Vimeo videos have download restrictions. Try the archive option or check if the video has a download button.", Toast.LENGTH_LONG).show()
-                finish()
-            }
-            host.contains("dailymotion.com") -> {
-                Toast.makeText(this, "Dailymotion videos have download restrictions. Try the archive option instead.", Toast.LENGTH_LONG).show()
-                finish()
-            }
-            host.contains("twitch.tv") -> {
-                Toast.makeText(this, "Twitch videos cannot be downloaded due to platform restrictions. Try the archive option instead.", Toast.LENGTH_LONG).show()
-                finish()
-            }
-            host.contains("facebook.com") || host.contains("fb.com") -> {
-                Toast.makeText(this, "Facebook videos have download restrictions. Try the archive option first.", Toast.LENGTH_LONG).show()
-                finish()
-            }
-            host.contains("instagram.com") -> {
-                Toast.makeText(this, "Instagram videos have download restrictions. Try the archive option first.", Toast.LENGTH_LONG).show()
-                finish()
-            }
-            host.contains("tiktok.com") -> {
-                Toast.makeText(this, "TikTok videos have download restrictions. Try the archive option first.", Toast.LENGTH_LONG).show()
-                finish()
-            }
-            host.contains("reddit.com") -> {
-                Toast.makeText(this, "Reddit videos may have download restrictions. Try the archive option first.", Toast.LENGTH_LONG).show()
-                finish()
-            }
-            host.contains("twitter.com") || host.contains("x.com") -> {
-                Toast.makeText(this, "Twitter/X videos have download restrictions. Try the archive option first.", Toast.LENGTH_LONG).show()
-                finish()
-            }
-            host.contains("linkedin.com") -> {
-                Toast.makeText(this, "LinkedIn videos have download restrictions. Try the archive option first.", Toast.LENGTH_LONG).show()
-                finish()
-            }
-            host.contains("pinterest.com") -> {
-                Toast.makeText(this, "Pinterest videos have download restrictions. Try the archive option first.", Toast.LENGTH_LONG).show()
-                finish()
-            }
-            else -> {
-                Toast.makeText(this, "Video hosting site detected. Try the archive option first, then look for download options on the archived page.", Toast.LENGTH_LONG).show()
-                finish()
-            }
-        }
     }
 
     private fun downloadVideo(url: String) {
@@ -217,4 +314,18 @@ class VideoDownloadActivity : MainActivity() {
         // Override to prevent browser opening - this should never be called in video download mode
         extractAndDownloadVideo(url)
     }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        coroutineScope.cancel()
+    }
 }
+
+/**
+ * Data class to hold video information
+ */
+data class VideoInfo(
+    val title: String,
+    val url: String,
+    val format: String
+)

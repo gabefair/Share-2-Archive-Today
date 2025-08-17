@@ -9,13 +9,13 @@ android {
 
     defaultConfig {
         applicationId = "org.gnosco.share2archivetoday"
-        minSdk = 21
+        minSdk = 24
         targetSdk = 36
         versionCode = 53
         versionName = "5.3"
     }
 
-    buildFeatures { // ask what this is
+    buildFeatures {
         viewBinding = true
     }
 
@@ -61,4 +61,11 @@ dependencies {
     // ML Kit for barcode scanning (optional dependency)
     compileOnly("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1")
     compileOnly("com.google.android.gms:play-services-tasks:18.2.0")
+    
+    // Video downloading capabilities (using existing working dependencies)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    
+    // Coroutines support
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }
