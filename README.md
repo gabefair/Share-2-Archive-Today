@@ -26,6 +26,10 @@ Find the companion chrome browser app on the [Chrome Web Store](https://chromewe
  - ⭐️ Substack email nag screens are now bypassed
  - ⭐️ Outlinks can be archived directly from archived pages
  - ⭐️ WesternJournal.com URLs can now be archived
+ - ⭐ Can now copy a tracker free url to your clipboard instead of archiving the link
+ - ⭐ Remove reddit's new chained-posts tracker
+ - ⭐ Remove amazon ref url path tracker
+ - ⭐ Remove mailchimp trackers
 
 
 <img src="https://github.com/gabefair/Share-2-Archive-Today/assets/2096785/4a0c0e79-f6ff-48c0-819d-84687af98772" width="300">

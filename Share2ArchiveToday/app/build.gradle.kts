@@ -28,8 +28,9 @@ android {
                 "proguard-rules.pro"
             )
         }
-        debug {
-            isTestCoverageEnabled = true
+        getByName("debug") {
+            enableUnitTestCoverage = true
+            enableAndroidTestCoverage = true
         }
     }
 
