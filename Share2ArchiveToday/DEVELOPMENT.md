@@ -395,6 +395,20 @@ The project integrates youtubedl-android directly as local modules for maximum c
 - **Key Features**: Multi-connection downloading, resume support, bandwidth management
 - **Dependencies**: Common module, Library module, AndroidX AppCompat, Core KTX, Apache Commons IO
 
+#### FFmpeg Submodule Integration
+
+**FFmpeg Kit Android (`:ffmpeg-kit-android-lib`)**
+- **Purpose**: Native FFmpeg integration for media processing and format conversion
+- **Source**: Git submodule from [moizhassankh/ffmpeg-kit-android-16KB](https://github.com/moizhassankh/ffmpeg-kit-android-16KB)
+- **Key Features**: 
+  - Native FFmpeg libraries (libavcodec, libavformat, libavfilter, etc.)
+  - Support for multiple architectures (arm64-v8a, armeabi-v7a, x86, x86_64)
+  - Media format conversion and post-processing capabilities
+  - Optimized 16KB variant for Android applications
+- **Dependencies**: Smart Exception Java library
+- **Integration**: Direct project dependency, no external repository required
+- **Build Configuration**: Compatible with project's compileSdk 36 and NDK 25.2.9519653
+
 ### External Library Dependencies
 
 #### Core Functionality Libraries
@@ -598,11 +612,10 @@ The project now uses a single, comprehensive script that handles all youtubedl-a
 - **Error handling**: Comprehensive error checking with helpful error messages
 - **Colored output**: Easy-to-read status messages with color coding
 - **Fallback support**: Handles both Git repository and direct clone scenarios
-```
 
 ### Submodule Management
 
-Since the project now uses Git submodules for youtubedl-android:
+Since the project now uses Git submodules for youtubedl-android and FFmpeg:
 
 ```bash
 # Option 1: Clone with submodules (recommended)
@@ -616,6 +629,24 @@ cd Share2ArchiveToday
 # Option 3: Let Gradle handle it automatically
 ./gradlew build  # Will auto-initialize submodules if needed
 ```
+
+#### FFmpeg Submodule Updates
+
+The FFmpeg library is included as a Git submodule and can be updated independently:
+
+```bash
+# Update FFmpeg to latest version
+cd ffmpeg-kit-android
+git fetch origin
+git checkout main
+git pull origin main
+cd ..
+
+# Rebuild project to use updated FFmpeg
+./gradlew clean build
+```
+
+**Note**: FFmpeg updates are typically stable and don't require frequent updates. The current version (6.0.0) provides comprehensive media processing capabilities.
 
 ### Manual Update Process
 

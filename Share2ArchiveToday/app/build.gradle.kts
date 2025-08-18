@@ -153,8 +153,10 @@ dependencies {
     // Commons Compress dependency required by youtubedl-android common module
     implementation("org.apache.commons:commons-compress:1.12")
     
-    // FFmpeg and Aria2c support (optional - these will be built when needed)
-    // implementation(files("youtubedl-android/ffmpeg/build/outputs/aar/ffmpeg-release.aar"))
+    // FFmpeg support using git submodule
+    implementation(project(":ffmpeg-kit-android-lib"))
+    
+    // Aria2c support (optional - this will be built when needed)
     // implementation(files("youtubedl-android/aria2c/build/outputs/aar/aria2c-release.aar"))
     
     // Coroutines support

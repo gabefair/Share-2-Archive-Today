@@ -23,6 +23,10 @@ dependencyResolutionManagement {
 rootProject.name = "Share 2 Archive Today"
 include(":app")
 
+// Include FFmpeg submodule
+include(":ffmpeg-kit-android-lib")
+project(":ffmpeg-kit-android-lib").projectDir = file("ffmpeg-kit-android/android/ffmpeg-kit-android-lib")
+
 // TODO: Re-enable youtubedl-android modules once build issues are resolved
 // Include youtubedl-android modules as local dependencies
 // include(":youtubedl-common")
