@@ -1,7 +1,7 @@
 package org.gnosco.share2archivetoday
 
 import android.Manifest
-import android.app.Activity
+import androidx.activity.ComponentActivity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -16,7 +16,7 @@ import androidx.core.content.ContextCompat
 /**
  * Activity to request necessary permissions for the app to function properly
  */
-class PermissionRequestActivity : Activity() {
+class PermissionRequestActivity : ComponentActivity() {
     
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -129,7 +129,14 @@ class PermissionRequestActivity : Activity() {
                 action = intent.action
                 type = intent.type
                 putExtra(Intent.EXTRA_TEXT, intent.getStringExtra(Intent.EXTRA_TEXT))
-                putExtra(Intent.EXTRA_STREAM, intent.getParcelableExtra(Intent.EXTRA_STREAM))
+                // Handle EXTRA_STREAM with proper type checking
+                val streamExtra = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+                }
+                streamExtra?.let { putExtra(Intent.EXTRA_STREAM, it) }
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             

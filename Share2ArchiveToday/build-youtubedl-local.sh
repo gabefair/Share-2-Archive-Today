@@ -135,31 +135,39 @@ build_library() {
     CURRENT_COMMIT=$(git rev-parse HEAD)
     print_status "Building from commit: $CURRENT_COMMIT"
     
-    # Build the library using the local Gradle wrapper
-    print_build "Building library..."
-    if ./gradlew :library:assembleRelease; then
-        print_success "Library built successfully!"
-        
-        # Copy the built AAR file to the app's libs directory
-        mkdir -p ../app/libs
-        cp library/build/outputs/aar/library-release.aar ../app/libs/
-        
-        print_success "AAR file copied to app/libs/"
-        
-        # Go back to main project
-        cd ..
-        
-        echo ""
-        print_success "Local build complete! You now have the latest youtubedl-android source code."
-        echo "📱 The library is built locally and integrated into your project."
-        echo "🔄 You can now build your app with: ./gradlew build"
-        
-        return 0
-    else
-        print_error "Failed to build library"
+    # Build all required modules using the local Gradle wrapper
+    print_build "Building common module..."
+    if ! ./gradlew :common:assembleRelease; then
+        print_error "Failed to build common module"
         cd ..
         return 1
     fi
+    
+    print_build "Building library module..."
+    if ! ./gradlew :library:assembleRelease; then
+        print_error "Failed to build library module"
+        cd ..
+        return 1
+    fi
+    
+    print_success "All modules built successfully!"
+    
+    # Copy the built AAR files to the app's libs directory
+    mkdir -p ../app/libs
+    cp common/build/outputs/aar/common-release.aar ../app/libs/
+    cp library/build/outputs/aar/library-release.aar ../app/libs/
+    
+    print_success "AAR files copied to app/libs/"
+    
+    # Go back to main project
+    cd ..
+    
+    echo ""
+    print_success "Local build complete! You now have the latest youtubedl-android source code."
+    echo "📱 The library is built locally and integrated into your project."
+    echo "🔄 You can now build your app with: ./gradlew build"
+    
+    return 0
 }
 
 # Main execution logic

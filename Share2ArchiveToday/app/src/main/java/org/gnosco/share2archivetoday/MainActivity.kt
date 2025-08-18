@@ -13,7 +13,7 @@ import android.widget.Toast
 open class MainActivity : Activity() {
     private lateinit var clearUrlsRulesManager: ClearUrlsRulesManager
     private lateinit var qrCodeScanner: QRCodeScanner
-    private lateinit var notificationHelper: NotificationHelper
+    protected lateinit var notificationHelper: NotificationHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

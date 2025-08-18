@@ -15,7 +15,7 @@ import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLException
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import com.yausername.youtubedl_android.mapper.VideoInfo
-import com.yausername.ffmpeg.FFmpeg
+// import com.yausername.ffmpeg.FFmpeg
 import kotlinx.coroutines.*
 import java.io.File
 import kotlinx.coroutines.delay
@@ -43,8 +43,8 @@ class VideoDownloadActivity : MainActivity() {
             // Initialize FFmpeg for audio extraction and format conversion
             try {
                 Log.d("VideoDownload", "Initializing FFmpeg...")
-                FFmpeg.getInstance().init(this)
-                Log.d("VideoDownload", "FFmpeg initialized successfully")
+                // FFmpeg.getInstance().init(this) // Commented out as FFmpeg AAR is not available
+                Log.d("VideoDownload", "FFmpeg initialization skipped (FFmpeg AAR not available)")
             } catch (e: Exception) {
                 Log.w("VideoDownload", "FFmpeg not available, continuing without it", e)
             }
@@ -67,6 +67,12 @@ class VideoDownloadActivity : MainActivity() {
     }
     
     override fun threeSteps(url: String) {
+        // Check if activity is still valid before proceeding
+        if (isFinishing || isDestroyed) {
+            Log.d("VideoDownload", "Activity destroyed, skipping threeSteps")
+            return
+        }
+        
         val processedUrl = processArchiveUrl(url)
         val cleanedUrl = handleURL(processedUrl)
         
@@ -108,6 +114,12 @@ class VideoDownloadActivity : MainActivity() {
     }
     
     private fun checkNetworkAndProceed(url: String) {
+        // Check if activity is still valid before proceeding
+        if (isFinishing || isDestroyed) {
+            Log.d("VideoDownload", "Activity destroyed, skipping network check")
+            return
+        }
+        
         if (!isNetworkAvailable()) {
             Log.e("VideoDownload", "No network connection available")
             Toast.makeText(this, "No internet connection available", Toast.LENGTH_LONG).show()
@@ -119,6 +131,12 @@ class VideoDownloadActivity : MainActivity() {
         
         // Test basic network connectivity
         testNetworkConnectivity { isConnected ->
+            // Check if activity is still valid before proceeding
+            if (isFinishing || isDestroyed) {
+                Log.d("VideoDownload", "Activity destroyed, skipping download after network test")
+                return@testNetworkConnectivity
+            }
+            
             if (isConnected) {
                 downloadVideo(url)
             } else {
@@ -134,6 +152,12 @@ class VideoDownloadActivity : MainActivity() {
             try {
                 Log.d("VideoDownload", "Starting network connectivity test...")
                 Log.d("VideoDownload", "Current thread: ${Thread.currentThread().name}")
+                
+                // Check if the coroutine is still active before proceeding
+                if (!isActive) {
+                    Log.d("VideoDownload", "Coroutine cancelled before network test, aborting")
+                    return@launch
+                }
                 
                 // Try to connect to a reliable service
                 val url = java.net.URL("https://www.google.com")
@@ -153,8 +177,18 @@ class VideoDownloadActivity : MainActivity() {
                 val isConnected = responseCode in 200..399
                 Log.d("VideoDownload", "Network connectivity test result: $isConnected")
                 
-                withContext(Dispatchers.Main) {
-                    callback(isConnected)
+                // Check if still active before calling callback
+                if (isActive) {
+                    withContext(Dispatchers.Main) {
+                        // Check if activity is still valid before calling callback
+                        if (!isFinishing && !isDestroyed) {
+                            callback(isConnected)
+                        } else {
+                            Log.d("VideoDownload", "Activity destroyed, skipping callback")
+                        }
+                    }
+                } else {
+                    Log.d("VideoDownload", "Coroutine cancelled after network test, skipping callback")
                 }
             } catch (e: Exception) {
                 Log.e("VideoDownload", "Network connectivity test failed", e)
@@ -162,8 +196,19 @@ class VideoDownloadActivity : MainActivity() {
                 Log.e("VideoDownload", "Exception message: ${e.message}")
                 Log.e("VideoDownload", "Current thread: ${Thread.currentThread().name}")
                 e.printStackTrace()
-                withContext(Dispatchers.Main) {
-                    callback(false)
+                
+                // Check if still active before calling callback
+                if (isActive) {
+                    withContext(Dispatchers.Main) {
+                        // Check if activity is still valid before calling callback
+                        if (!isFinishing && !isDestroyed) {
+                            callback(false)
+                        } else {
+                            Log.d("VideoDownload", "Activity destroyed, skipping error callback")
+                        }
+                    }
+                } else {
+                    Log.d("VideoDownload", "Coroutine cancelled during error handling, skipping callback")
                 }
             }
         }
@@ -181,9 +226,21 @@ class VideoDownloadActivity : MainActivity() {
     private fun downloadVideo(url: String) {
         coroutineScope.launch {
             try {
+                // Check if coroutine is still active before proceeding
+                if (!isActive) {
+                    Log.d("VideoDownload", "Coroutine cancelled before download process, aborting")
+                    return@launch
+                }
+                
                 Log.d("VideoDownload", "Starting download process for URL: $url")
                 Log.d("VideoDownload", "Network status: ${if (isNetworkAvailable()) "Available" else "Not Available"}")
                 Log.d("VideoDownload", "Current thread: ${Thread.currentThread().name}")
+                
+                // Check if activity is still valid before showing UI elements
+                if (isFinishing || isDestroyed) {
+                    Log.d("VideoDownload", "Activity destroyed, aborting download process")
+                    return@launch
+                }
                 
                 // Show initial message
                 Toast.makeText(this@VideoDownloadActivity, "Analyzing video...", Toast.LENGTH_SHORT).show()
@@ -212,6 +269,12 @@ class VideoDownloadActivity : MainActivity() {
                         e.printStackTrace()
                         null
                     }
+                }
+                
+                // Check if still active and activity is valid before proceeding
+                if (!isActive || isFinishing || isDestroyed) {
+                    Log.d("VideoDownload", "Coroutine cancelled or activity destroyed, aborting download")
+                    return@launch
                 }
                 
                 if (videoInfo == null) {
@@ -250,18 +313,30 @@ class VideoDownloadActivity : MainActivity() {
                 
             } catch (e: Exception) {
                 Log.e("VideoDownload", "Error in download process", e)
-                Toast.makeText(this@VideoDownloadActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-                notificationHelper.showGeneralNotification(
-                    "Video Download",
-                    "Error: ${e.message}"
-                )
-                finish()
+                
+                // Only show UI elements if activity is still valid
+                if (!isFinishing && !isDestroyed) {
+                    Toast.makeText(this@VideoDownloadActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                    notificationHelper.showGeneralNotification(
+                        "Video Download",
+                        "Error: ${e.message}"
+                    )
+                    finish()
+                } else {
+                    Log.d("VideoDownload", "Activity destroyed, skipping error UI")
+                }
             }
         }
     }
 
     private fun startDownload(url: String, title: String, format: String = "mp4") {
         try {
+            // Check if activity is still valid before proceeding
+            if (isFinishing || isDestroyed) {
+                Log.d("VideoDownload", "Activity destroyed, skipping download start")
+                return
+            }
+            
             // Create download directory
             val downloadDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Share2Archive")
             if (!downloadDir.exists()) {
@@ -368,6 +443,12 @@ class VideoDownloadActivity : MainActivity() {
 
     private fun onDownloadComplete(filePath: String, filename: String) {
         try {
+            // Check if activity is still valid before proceeding
+            if (isFinishing || isDestroyed) {
+                Log.d("VideoDownload", "Activity destroyed, skipping download completion")
+                return
+            }
+            
             val file = File(filePath)
             if (file.exists() && file.length() > 0) {
                 val fileSizeMB = file.length() / (1024 * 1024)
@@ -381,7 +462,12 @@ class VideoDownloadActivity : MainActivity() {
                 // Small delay to ensure file is fully written
                 coroutineScope.launch {
                     delay(1000)
-                    shareVideo(file)
+                    // Check if activity is still valid before sharing
+                    if (!isFinishing && !isDestroyed) {
+                        shareVideo(file)
+                    } else {
+                        Log.d("VideoDownload", "Activity destroyed, skipping video sharing")
+                    }
                 }
             } else {
                 Toast.makeText(this, "Download failed or file is empty", Toast.LENGTH_LONG).show()
@@ -393,12 +479,18 @@ class VideoDownloadActivity : MainActivity() {
             }
         } catch (e: Exception) {
             Log.e("VideoDownload", "Error handling download completion", e)
-            Toast.makeText(this, "Error sharing video: ${e.message}", Toast.LENGTH_LONG).show()
-            notificationHelper.showGeneralNotification(
-                "Video Download",
-                "Error sharing video: ${e.message}"
-            )
-            finish()
+            
+            // Only show UI elements if activity is still valid
+            if (!isFinishing && !isDestroyed) {
+                Toast.makeText(this, "Error sharing video: ${e.message}", Toast.LENGTH_LONG).show()
+                notificationHelper.showGeneralNotification(
+                    "Video Download",
+                    "Error sharing video: ${e.message}"
+                )
+                finish()
+            } else {
+                Log.d("VideoDownload", "Activity destroyed, skipping error UI")
+            }
         }
     }
 
@@ -447,12 +539,18 @@ class VideoDownloadActivity : MainActivity() {
             
         } catch (e: Exception) {
             Log.e("VideoDownload", "Error sharing video", e)
-            Toast.makeText(this, "Error sharing video: ${e.message}", Toast.LENGTH_LONG).show()
-            notificationHelper.showGeneralNotification(
-                "Video Download",
-                "Error sharing video: ${e.message}"
-            )
-            finish()
+            
+            // Only show UI elements if activity is still valid
+            if (!isFinishing && !isDestroyed) {
+                Toast.makeText(this, "Error sharing video: ${e.message}", Toast.LENGTH_LONG).show()
+                notificationHelper.showGeneralNotification(
+                    "Video Download",
+                    "Error sharing video: ${e.message}"
+                )
+                finish()
+            } else {
+                Log.d("VideoDownload", "Activity destroyed, skipping error UI")
+            }
         }
     }
 
@@ -465,23 +563,38 @@ class VideoDownloadActivity : MainActivity() {
             else -> "Download failed: Unknown error (code: $errorCode)"
         }
         
-        Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show()
-        notificationHelper.showGeneralNotification(
-            "Video Download",
-            errorMessage
-        )
-        Log.e("VideoDownload", "Download error: $errorMessage")
-        
-        // Wait a bit before finishing to show the error message
-        coroutineScope.launch {
-            delay(2000)
-            finish()
+        // Only show UI elements if activity is still valid
+        if (!isFinishing && !isDestroyed) {
+            Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show()
+            notificationHelper.showGeneralNotification(
+                "Video Download",
+                errorMessage
+            )
+            Log.e("VideoDownload", "Download error: $errorMessage")
+            
+            // Wait a bit before finishing to show the error message
+            coroutineScope.launch {
+                delay(2000)
+                // Check if activity is still valid before finishing
+                if (!isFinishing && !isDestroyed) {
+                    finish()
+                } else {
+                    Log.d("VideoDownload", "Activity destroyed, skipping finish call")
+                }
+            }
+        } else {
+            Log.d("VideoDownload", "Activity destroyed, skipping error handling UI")
         }
     }
 
     override fun openInBrowser(url: String) {
         // Override to prevent browser opening - this should never be called in video download mode
-        downloadVideo(url)
+        // Check if activity is still valid before proceeding
+        if (!isFinishing && !isDestroyed) {
+            downloadVideo(url)
+        } else {
+            Log.d("VideoDownload", "Activity destroyed, skipping browser override")
+        }
     }
     
     override fun onDestroy() {
@@ -500,7 +613,9 @@ class VideoDownloadActivity : MainActivity() {
         // Clean up notifications
         notificationHelper.cancelAllNotifications()
         
-        coroutineScope.cancel()
+        // Cancel all coroutines gracefully
+        Log.d("VideoDownload", "Cancelling coroutine scope in onDestroy")
+        coroutineScope.cancel("Activity destroyed")
     }
 }
 

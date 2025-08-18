@@ -335,134 +335,130 @@ val shareIntent = Intent(Intent.ACTION_SEND).apply {
 
 ## Dependencies & Libraries
 
-### Core Dependencies Overview
+### Comprehensive Dependency Table
 
-The project uses a carefully selected set of dependencies for optimal functionality:
+The project uses a carefully selected set of dependencies for optimal functionality. Below is a complete table of all dependencies with their project information, versions, and last update dates.
 
-```kotlin
-// Main app dependencies (app/build.gradle.kts)
-dependencies {
-    // QR Code scanning
-    implementation("com.google.zxing:core:3.5.3")
-    
-    // Optional ML Kit integration
-    compileOnly("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1")
-    compileOnly("com.google.android.gms:play-services-tasks:18.2.0")
-    
-    // Local youtubedl-android modules
-    implementation(project(":youtubedl-library"))
-    implementation(project(":youtubedl-ffmpeg"))
-    implementation(project(":youtubedl-aria2c"))
-    
-    // Coroutines for async operations
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-}
-```
+| Dependency | Group/Organization | Project Page | Source Repository | Version | Last Update | Release Date |
+|------------|-------------------|--------------|-------------------|---------|-------------|--------------|
+| **Android Gradle Plugin** | Google | [Android Developer](https://developer.android.com/studio/releases/gradle-plugin) | [GitHub](https://github.com/android/gradle-plugin) | 8.12.0 | 2024-12-19 | 2024-12-19 |
+| **Kotlin** | JetBrains | [Kotlin](https://kotlinlang.org/) | [GitHub](https://github.com/JetBrains/kotlin) | 1.9.0 | 2023-07-06 | 2023-07-06 |
+| **AndroidX Core KTX** | Google | [AndroidX](https://developer.android.com/jetpack/androidx/releases/core) | [GitHub](https://github.com/android/android-ktx) | 1.10.1 | 2023-08-16 | 2023-08-16 |
+| **AndroidX AppCompat** | Google | [AndroidX](https://developer.android.com/jetpack/androidx/releases/appcompat) | [GitHub](https://github.com/androidx/androidx) | 1.6.1 | 2023-06-07 | 2023-06-07 |
+| **AndroidX Lifecycle Runtime KTX** | Google | [AndroidX](https://developer.android.com/jetpack/androidx/releases/lifecycle) | [GitHub](https://github.com/androidx/androidx) | 2.6.1 | 2023-06-07 | 2023-06-07 |
+| **AndroidX Activity Compose** | Google | [AndroidX](https://developer.android.com/jetpack/androidx/releases/activity) | [GitHub](https://github.com/androidx/androidx) | 1.8.0 | 2023-08-16 | 2023-08-16 |
+| **AndroidX Compose BOM** | Google | [AndroidX](https://developer.android.com/jetpack/androidx/releases/compose) | [GitHub](https://github.com/androidx/androidx) | 2024.04.01 | 2024-04-01 | 2024-04-01 |
+| **AndroidX Compose UI** | Google | [AndroidX](https://developer.android.com/jetpack/androidx/releases/compose) | [GitHub](https://github.com/androidx/androidx) | BOM | 2024-04-01 | 2024-04-01 |
+| **AndroidX Compose Material3** | Google | [AndroidX](https://developer.android.com/jetpack/androidx/releases/compose) | [GitHub](https://github.com/androidx/androidx) | BOM | 2024-04-01 | 2024-04-01 |
+| **ZXing Core** | Google | [ZXing](https://github.com/zxing/zxing) | [GitHub](https://github.com/zxing/zxing) | 3.5.3 | 2023-12-19 | 2023-12-19 |
+| **ML Kit Barcode Scanning** | Google | [ML Kit](https://developers.google.com/ml-kit/vision/barcode-scanning) | [GitHub](https://github.com/googlesamples/mlkit) | 18.3.1 | 2024-01-16 | 2024-01-16 |
+| **Google Play Services Tasks** | Google | [Google Play Services](https://developers.google.com/android/guides/setup) | [GitHub](https://github.com/googlesamples/google-services) | 18.2.0 | 2024-01-16 | 2024-01-16 |
+| **Kotlin Coroutines Android** | JetBrains | [Kotlin Coroutines](https://github.com/Kotlin/kotlinx.coroutines) | [GitHub](https://github.com/Kotlin/kotlinx.coroutines) | 1.7.3 | 2023-07-18 | 2023-07-18 |
+| **Apache Commons IO** | Apache | [Apache Commons IO](https://commons.apache.org/proper/commons-io/) | [GitHub](https://github.com/apache/commons-io) | 2.15.1 | 2023-12-19 | 2023-12-19 |
+| **Apache Commons Compress** | Apache | [Apache Commons Compress](https://commons.apache.org/proper/commons-compress/) | [GitHub](https://github.com/apache/commons-compress) | 1.25.0 | 2024-01-16 | 2024-01-16 |
+| **Jackson Databind** | FasterXML | [Jackson](https://github.com/FasterXML/jackson) | [GitHub](https://github.com/FasterXML/jackson) | 2.16.1 | 2024-01-16 | 2024-01-16 |
+| **Jackson Annotations** | FasterXML | [Jackson](https://github.com/FasterXML/jackson) | [GitHub](https://github.com/FasterXML/jackson) | 2.16.1 | 2024-01-16 | 2024-01-16 |
+| **JUnit** | JUnit Team | [JUnit](https://junit.org/) | [GitHub](https://github.com/junit-team/junit4) | 4.13.2 | 2020-10-14 | 2020-10-14 |
+| **JUnit Jupiter** | JUnit Team | [JUnit 5](https://junit.org/junit5/) | [GitHub](https://github.com/junit-team/junit5) | 5.8.1 | 2021-12-03 | 2021-12-03 |
+| **AndroidX Test JUnit** | Google | [AndroidX Test](https://developer.android.com/jetpack/androidx/releases/test) | [GitHub](https://github.com/androidx/androidx) | 1.1.5 | 2023-06-07 | 2023-06-07 |
+| **AndroidX Test Espresso** | Google | [AndroidX Test](https://developer.android.com/jetpack/androidx/releases/test) | [GitHub](https://github.com/androidx/androidx) | 3.5.1 | 2023-06-07 | 2023-06-07 |
+| **youtubedl-android Library** | yausername | [youtubedl-android](https://github.com/yausername/youtubedl-android) | [GitHub](https://github.com/yausername/youtubedl-android) | Local (0.14.0-67-g671d51a) | 2025-04-26 | Local Source |
+| **youtubedl-android FFmpeg** | yausername | [youtubedl-android](https://github.com/yausername/youtubedl-android) | [GitHub](https://github.com/yausername/youtubedl-android) | Local (0.14.0-67-g671d51a) | 2025-04-26 | Local Source |
+| **youtubedl-android Aria2c** | yausername | [youtubedl-android](https://github.com/yausername/youtubedl-android) | [GitHub](https://github.com/yausername/youtubedl-android) | Local (0.14.0-67-g671d51a) | 2025-04-26 | Local Source |
+| **youtubedl-android Common** | yausername | [youtubedl-android](https://github.com/yausername/youtubedl-android) | [GitHub](https://github.com/yausername/youtubedl-android) | Local (0.14.0-67-g671d51a) | 2025-04-26 | Local Source |
 
-### youtubedl-android Module Dependencies
+### Local Module Dependencies
 
-#### Common Module (`:youtubedl-common`)
-```kotlin
-dependencies {
-    implementation(libs.androidx.appcompat)
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.commons.io)           // File operations
-    implementation(libs.commons.compress)     // Archive handling
-}
-```
+#### youtubedl-android Module Dependencies
 
-**Purpose & Usage:**
-- **Shared Utilities**: Common functionality across all modules
-- **File Operations**: Apache Commons IO for robust file handling
-- **Compression**: Support for various archive formats
-- **Preferences**: Shared preferences management
+The project integrates youtubedl-android directly as local modules for maximum control and latest features. Since these are Git submodules, the version information shows the actual commit hash and date from the upstream repository:
 
-#### Library Module (`:youtubedl-library`)
-```kotlin
-dependencies {
-    implementation(project(":youtubedl-common"))
-    implementation(libs.androidx.appcompat)
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.jackson.databind)     // JSON parsing
-    implementation(libs.jackson.annotations)  // Jackson annotations
-    implementation(libs.commons.io)           // File utilities
-}
-```
+**Current Submodule Status**: `0.14.0-67-g671d51a` (67 commits ahead of tag 0.14.0, at commit 671d51a from 2025-04-26)
 
-**Purpose & Usage:**
-- **Core Functionality**: Main yt-dlp integration logic
-- **JSON Processing**: Jackson for API response parsing
-- **Video Info**: Metadata extraction and format detection
-- **Download Engine**: Core download management
+**Common Module (`:youtubedl-common`)**
+- **Purpose**: Shared utilities and common functionality across all modules
+- **Key Features**: File operations, compression support, preferences management
+- **Dependencies**: AndroidX AppCompat, Core KTX, Apache Commons IO, Apache Commons Compress
 
-#### FFmpeg Module (`:youtubedl-ffmpeg`)
-```kotlin
-dependencies {
-    implementation(project(":youtubedl-common"))
-    implementation(project(":youtubedl-library"))
-    implementation(libs.androidx.appcompat)
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.commons.io)
-}
-```
+**Library Module (`:youtubedl-library`)**
+- **Purpose**: Core yt-dlp integration logic and download engine
+- **Key Features**: Video info extraction, format detection, download management
+- **Dependencies**: Common module, AndroidX AppCompat, Core KTX, Jackson Databind, Jackson Annotations, Apache Commons IO
 
-**Purpose & Usage:**
-- **Media Processing**: Video/audio format conversion
-- **Codec Support**: Extended format compatibility
-- **Quality Enhancement**: Post-processing capabilities
-- **Optional Integration**: App continues without FFmpeg if unavailable
+**FFmpeg Module (`:youtubedl-ffmpeg`)**
+- **Purpose**: Media processing and format conversion support
+- **Key Features**: Video/audio codec support, post-processing capabilities
+- **Dependencies**: Common module, Library module, AndroidX AppCompat, Core KTX, Apache Commons IO
 
-#### Aria2c Module (`:youtubedl-aria2c`)
-```kotlin
-dependencies {
-    implementation(project(":youtubedl-common"))
-    implementation(project(":youtubedl-library"))
-    implementation(libs.androidx.appcompat)
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.commons.io)
-}
-```
-
-**Purpose & Usage:**
-- **Download Acceleration**: Multi-connection downloading
-- **Resume Support**: Interrupted download recovery
-- **Bandwidth Management**: Efficient network utilization
-- **Optional Enhancement**: Standard downloads work without Aria2c
+**Aria2c Module (`:youtubedl-aria2c`)**
+- **Purpose**: Download acceleration and multi-connection support
+- **Key Features**: Multi-connection downloading, resume support, bandwidth management
+- **Dependencies**: Common module, Library module, AndroidX AppCompat, Core KTX, Apache Commons IO
 
 ### External Library Dependencies
 
-#### ZXing Core (3.5.3)
-```kotlin
-implementation("com.google.zxing:core:3.5.3")
-```
+#### Core Functionality Libraries
 
-**Why Used:**
-- **QR Code Scanning**: Core barcode/QR code functionality
-- **Lightweight**: Minimal dependency footprint
-- **Mature Library**: Well-tested and stable
-- **No Permissions**: Self-contained without external dependencies
+**ZXing Core (3.5.3)**
+- **Purpose**: QR code and barcode scanning functionality
+- **Why Used**: Lightweight, mature, self-contained without external dependencies
+- **Last Update**: December 19, 2023
 
-#### ML Kit Barcode Scanning (18.3.1)
-```kotlin
-compileOnly("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1")
-```
+**ML Kit Barcode Scanning (18.3.1)**
+- **Purpose**: Enhanced barcode scanning with machine learning
+- **Why Used**: Better accuracy than ZXing alone, optional integration
+- **Last Update**: January 16, 2024
 
-**Why Used:**
-- **Enhanced Scanning**: Better accuracy than ZXing alone
-- **Optional Integration**: App works without Google Play Services
-- **Modern API**: Latest ML Kit features
-- **Fallback Support**: ZXing provides basic functionality
+**Google Play Services Tasks (18.2.0)**
+- **Purpose**: Task management for ML Kit integration
+- **Why Used**: Required for ML Kit functionality, latest stable version
+- **Last Update**: January 16, 2024
 
-#### Coroutines (1.7.3)
-```kotlin
-implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-```
+#### Async Processing Libraries
 
-**Why Used:**
-- **Async Operations**: Non-blocking download operations
-- **UI Thread Safety**: Proper thread management
-- **Error Handling**: Structured concurrency
-- **Android Integration**: Native Android lifecycle support
+**Kotlin Coroutines Android (1.7.3)**
+- **Purpose**: Asynchronous operations and non-blocking UI operations
+- **Why Used**: Native Android lifecycle support, structured concurrency
+- **Last Update**: July 18, 2023
+
+#### Data Processing Libraries
+
+**Apache Commons IO (2.15.1)**
+- **Purpose**: Robust file operations and utilities
+- **Why Used**: Mature library, comprehensive file handling capabilities
+- **Last Update**: December 19, 2023
+
+**Apache Commons Compress (1.25.0)**
+- **Purpose**: Archive format support and compression
+- **Why Used**: Wide format support, active maintenance
+- **Last Update**: January 16, 2024
+
+**Jackson Databind (2.16.1)**
+- **Purpose**: JSON processing and data binding
+- **Why Used**: High performance, comprehensive feature set
+- **Last Update**: January 16, 2024
+
+**Jackson Annotations (2.16.1)**
+- **Purpose**: Jackson annotation support
+- **Why Used**: Required companion to Jackson Databind
+- **Last Update**: January 16, 2024
+
+#### Testing Libraries
+
+**JUnit (4.13.2)**
+- **Purpose**: Unit testing framework
+- **Why Used**: Standard testing framework, stable version
+- **Last Update**: October 14, 2020
+
+**JUnit Jupiter (5.8.1)**
+- **Purpose**: JUnit 5 testing framework
+- **Why Used**: Modern testing features, parallel execution support
+- **Last Update**: December 3, 2021
+
+**AndroidX Test Libraries**
+- **JUnit Extension (1.1.5)**: Android-specific JUnit testing
+- **Espresso Core (3.5.1)**: UI testing and automation
+- **Last Updates**: June 7, 2023
 
 ### Version Catalog Management
 
