@@ -55,6 +55,10 @@ class VideoDownloadActivity : MainActivity() {
             Log.e("VideoDownload", "Exception message: ${e.message}")
             e.printStackTrace()
             Toast.makeText(this, "Failed to initialize video downloader", Toast.LENGTH_LONG).show()
+            notificationHelper.showGeneralNotification(
+                "Video Download",
+                "Failed to initialize video downloader"
+            )
             finish()
             return
         }
@@ -71,6 +75,10 @@ class VideoDownloadActivity : MainActivity() {
             checkNetworkAndProceed(cleanedUrl)
         } else {
             Toast.makeText(this, "This URL doesn't appear to contain a video. Trying anyway...", Toast.LENGTH_LONG).show()
+            notificationHelper.showGeneralNotification(
+                "Video Download",
+                "This URL doesn't appear to contain a video. Trying anyway..."
+            )
             checkNetworkAndProceed(cleanedUrl)
         }
     }
@@ -179,6 +187,12 @@ class VideoDownloadActivity : MainActivity() {
                 
                 // Show initial message
                 Toast.makeText(this@VideoDownloadActivity, "Analyzing video...", Toast.LENGTH_SHORT).show()
+                notificationHelper.showDownloadNotification(
+                    "Video Download",
+                    "Analyzing video...",
+                    -1,
+                    true
+                )
                 
                 // First, get video info to check if it's downloadable
                 val videoInfo = withContext(Dispatchers.IO) {
@@ -202,6 +216,10 @@ class VideoDownloadActivity : MainActivity() {
                 
                 if (videoInfo == null) {
                     Toast.makeText(this@VideoDownloadActivity, "Could not analyze video. Trying direct download...", Toast.LENGTH_LONG).show()
+                    notificationHelper.showGeneralNotification(
+                        "Video Download",
+                        "Could not analyze video. Trying direct download..."
+                    )
                     // Try direct download anyway
                     startDownload(url, "video")
                 } else {
@@ -223,12 +241,20 @@ class VideoDownloadActivity : MainActivity() {
                     
                     val infoText = "$title$durationText$uploaderText$viewText"
                     Toast.makeText(this@VideoDownloadActivity, "Found: $infoText", Toast.LENGTH_LONG).show()
+                    notificationHelper.showGeneralNotification(
+                        "Video Download",
+                        "Found: $infoText"
+                    )
                     startDownload(url, title, format)
                 }
                 
             } catch (e: Exception) {
                 Log.e("VideoDownload", "Error in download process", e)
                 Toast.makeText(this@VideoDownloadActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                notificationHelper.showGeneralNotification(
+                    "Video Download",
+                    "Error: ${e.message}"
+                )
                 finish()
             }
         }
@@ -285,6 +311,11 @@ class VideoDownloadActivity : MainActivity() {
                     
                     runOnUiThread {
                         Toast.makeText(this@VideoDownloadActivity, progressText, Toast.LENGTH_SHORT).show()
+                        notificationHelper.updateDownloadNotification(
+                            "Video Download",
+                            progressText,
+                            progress.toInt()
+                        )
                     }
                     
                     // If download is complete, share the file
@@ -306,6 +337,10 @@ class VideoDownloadActivity : MainActivity() {
                 }
                 
                 Toast.makeText(this, "Download started: $filename", Toast.LENGTH_LONG).show()
+                notificationHelper.showGeneralNotification(
+                    "Video Download",
+                    "Download started: $filename"
+                )
                 
             } catch (e: Exception) {
                 Log.e("VideoDownload", "Error during download execution", e)
@@ -313,12 +348,20 @@ class VideoDownloadActivity : MainActivity() {
                 Log.e("VideoDownload", "Exception message: ${e.message}")
                 e.printStackTrace()
                 Toast.makeText(this, "Download execution failed: ${e.message}", Toast.LENGTH_LONG).show()
+                notificationHelper.showGeneralNotification(
+                    "Video Download",
+                    "Download execution failed: ${e.message}"
+                )
                 finish()
             }
             
         } catch (e: Exception) {
             Log.e("VideoDownload", "Error starting download", e)
             Toast.makeText(this, "Failed to start download: ${e.message}", Toast.LENGTH_LONG).show()
+            notificationHelper.showGeneralNotification(
+                "Video Download",
+                "Failed to start download: ${e.message}"
+            )
             finish()
         }
     }
@@ -330,6 +373,10 @@ class VideoDownloadActivity : MainActivity() {
                 val fileSizeMB = file.length() / (1024 * 1024)
                 val fileSizeText = if (fileSizeMB > 0) " (${fileSizeMB}MB)" else ""
                 Toast.makeText(this, "Download complete!$fileSizeText Sharing video...", Toast.LENGTH_LONG).show()
+                notificationHelper.completeDownloadNotification(
+                    "Video Download",
+                    "Download complete!$fileSizeText Sharing video..."
+                )
                 
                 // Small delay to ensure file is fully written
                 coroutineScope.launch {
@@ -338,11 +385,19 @@ class VideoDownloadActivity : MainActivity() {
                 }
             } else {
                 Toast.makeText(this, "Download failed or file is empty", Toast.LENGTH_LONG).show()
+                notificationHelper.showGeneralNotification(
+                    "Video Download",
+                    "Download failed or file is empty"
+                )
                 finish()
             }
         } catch (e: Exception) {
             Log.e("VideoDownload", "Error handling download completion", e)
             Toast.makeText(this, "Error sharing video: ${e.message}", Toast.LENGTH_LONG).show()
+            notificationHelper.showGeneralNotification(
+                "Video Download",
+                "Error sharing video: ${e.message}"
+            )
             finish()
         }
     }
@@ -393,6 +448,10 @@ class VideoDownloadActivity : MainActivity() {
         } catch (e: Exception) {
             Log.e("VideoDownload", "Error sharing video", e)
             Toast.makeText(this, "Error sharing video: ${e.message}", Toast.LENGTH_LONG).show()
+            notificationHelper.showGeneralNotification(
+                "Video Download",
+                "Error sharing video: ${e.message}"
+            )
             finish()
         }
     }
@@ -407,6 +466,10 @@ class VideoDownloadActivity : MainActivity() {
         }
         
         Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show()
+        notificationHelper.showGeneralNotification(
+            "Video Download",
+            errorMessage
+        )
         Log.e("VideoDownload", "Download error: $errorMessage")
         
         // Wait a bit before finishing to show the error message
@@ -433,6 +496,9 @@ class VideoDownloadActivity : MainActivity() {
                 Log.e("VideoDownload", "Error cancelling download process", e)
             }
         }
+        
+        // Clean up notifications
+        notificationHelper.cancelAllNotifications()
         
         coroutineScope.cancel()
     }

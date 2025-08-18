@@ -13,6 +13,7 @@ import android.widget.Toast
 open class MainActivity : Activity() {
     private lateinit var clearUrlsRulesManager: ClearUrlsRulesManager
     private lateinit var qrCodeScanner: QRCodeScanner
+    private lateinit var notificationHelper: NotificationHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -23,6 +24,9 @@ open class MainActivity : Activity() {
         // Initialize QR code scanner
         qrCodeScanner = QRCodeScanner(applicationContext)
 
+        // Initialize notification helper
+        notificationHelper = NotificationHelper(applicationContext)
+
         handleShareIntent(intent)
     }
 
@@ -32,14 +36,18 @@ open class MainActivity : Activity() {
     }
 
     /**
-     * Show a toast on first use to help users discover they can pin the app
+     * Show a notification on first use to help users discover they can pin the app
      */
-    private fun showFirstTimeToast() {
+    private fun showFirstTimeNotification() {
         val prefs = getSharedPreferences("share2archive_prefs", Context.MODE_PRIVATE)
         val isFirstTime = prefs.getBoolean("is_first_time", true)
 
         if (isFirstTime) {
             Toast.makeText(this, "Hold icon to pin to share menu", Toast.LENGTH_LONG).show()
+            notificationHelper.showGeneralNotification(
+                "Share 2 Archive Today",
+                "Hold icon to pin to share menu"
+            )
 
             // Mark as no longer first time
             prefs.edit()
@@ -51,7 +59,7 @@ open class MainActivity : Activity() {
     private fun handleShareIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND) {
             // Show first-time usage tip only when actually sharing
-            showFirstTimeToast()
+            showFirstTimeNotification()
 
             when (intent.type) {
                 "text/plain" -> {
@@ -63,6 +71,10 @@ open class MainActivity : Activity() {
                             threeSteps(url)
                         } else {
                             Toast.makeText(this, "No URL found in shared text", Toast.LENGTH_SHORT).show()
+                            notificationHelper.showGeneralNotification(
+                                "Share 2 Archive Today",
+                                "No URL found in shared text"
+                            )
                             finish()
                         }
                     }
@@ -84,6 +96,10 @@ open class MainActivity : Activity() {
                         } catch (e: Exception) {
                             Log.e("MainActivity", "Error handling image share", e)
                             Toast.makeText(this, "Share 2 Archive did not like that image", Toast.LENGTH_SHORT).show()
+                            notificationHelper.showGeneralNotification(
+                                "Share 2 Archive Today",
+                                "Share 2 Archive did not like that image"
+                            )
                             finish()
                         }
                     }
@@ -107,14 +123,26 @@ open class MainActivity : Activity() {
             if (qrUrl != null) {
                 threeSteps(qrUrl)
                 Toast.makeText(this, "URL found in QR code", Toast.LENGTH_SHORT).show()
+                notificationHelper.showGeneralNotification(
+                    "Share 2 Archive Today",
+                    "URL found in QR code"
+                )
             } else {
                 Log.d("MainActivity", "No QR code found in image")
                 Toast.makeText(this, "No URL found in QR code image", Toast.LENGTH_SHORT).show()
+                notificationHelper.showGeneralNotification(
+                    "Share 2 Archive Today",
+                    "No URL found in QR code image"
+                )
                 finish()
             }
         } catch (e: Exception) {
             Log.e("MainActivity", "Error processing QR code", e)
             Toast.makeText(this, "Error processing QR code", Toast.LENGTH_SHORT).show()
+            notificationHelper.showGeneralNotification(
+                "Share 2 Archive Today",
+                "Error processing QR code"
+            )
             finish()
         }
     }

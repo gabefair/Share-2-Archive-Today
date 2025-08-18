@@ -72,4 +72,8 @@ dependencies {
     
     // Coroutines support
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    
+    // AndroidX dependencies for notifications
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.activity:activity-ktx:1.8.2")
 }
