@@ -1,60 +1,204 @@
 #!/bin/bash
 
-# Script to build youtubedl-android locally from source and integrate it
-# This approach gives you the latest source code without external dependencies
+# Comprehensive script to manage youtubedl-android submodules and build locally
+# This script handles: submodule initialization, updates, and local building
+# Usage: ./build-youtubedl-local.sh [--init-only] [--update-only] [--build-only]
 
-echo "🔨 Building youtubedl-android locally from source..."
+set -e  # Exit on any error
 
-# Check if the source directory exists
-if [ ! -d "youtubedl-android" ]; then
-    echo "❌ youtubedl-android source directory not found"
-    echo "🔄 Cloning the repository..."
-    git clone https://github.com/yausername/youtubedl-android.git
-fi
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-cd youtubedl-android
+# Function to print colored output
+print_status() {
+    echo -e "${BLUE}🔍 $1${NC}"
+}
 
-# Pull latest changes
-echo "📥 Pulling latest changes..."
-git fetch origin
-git checkout master
-git pull origin master
+print_success() {
+    echo -e "${GREEN}✅ $1${NC}"
+}
 
-# Get the latest commit hash
-LATEST_COMMIT=$(git rev-parse HEAD)
-echo "📝 Building from commit: $LATEST_COMMIT"
+print_warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+}
 
-# Build the library using the local Gradle wrapper
-echo "🔨 Building library..."
-./gradlew :library:assembleRelease
+print_error() {
+    echo -e "${RED}❌ $1${NC}"
+}
 
-if [ $? -eq 0 ]; then
-    echo "✅ Library built successfully!"
+print_build() {
+    echo -e "${BLUE}🔨 $1${NC}"
+}
+
+# Parse command line arguments
+INIT_ONLY=false
+UPDATE_ONLY=false
+BUILD_ONLY=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --init-only)
+            INIT_ONLY=true
+            shift
+            ;;
+        --update-only)
+            UPDATE_ONLY=true
+            shift
+            ;;
+        --build-only)
+            BUILD_ONLY=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --init-only     Only initialize submodules (don't build)"
+            echo "  --update-only   Only update submodules (don't build)"
+            echo "  --build-only    Only build (assume submodules are ready)"
+            echo "  --help, -h      Show this help message"
+            echo ""
+            echo "Default behavior: Initialize/update submodules and then build"
+            exit 0
+            ;;
+        *)
+            print_error "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+echo "🚀 youtubedl-android Management Script"
+echo "======================================"
+
+# Function to initialize submodules
+init_submodules() {
+    print_status "Checking Git repository status..."
     
-    # Copy the built AAR file to the app's libs directory
-    mkdir -p ../app/libs
-    cp library/build/outputs/aar/library-release.aar ../app/libs/
+    if [ ! -d ".git" ]; then
+        print_error "Not in a Git repository. Cannot initialize submodules."
+        echo "💡 Please run this script from within your Git repository."
+        exit 1
+    fi
     
-    echo "📁 AAR file copied to app/libs/"
+    if [ -d "youtubedl-android" ] && [ -f "youtubedl-android/.git" ]; then
+        print_success "Submodules already initialized"
+        return 0
+    fi
     
-    # Go back to main project
-    cd ..
+    print_status "Submodules not initialized, initializing now..."
+    if git submodule update --init --recursive; then
+        print_success "Submodules initialized successfully!"
+        return 0
+    else
+        print_error "Failed to initialize submodules"
+        echo "💡 Try running: git submodule update --init --recursive"
+        return 1
+    fi
+}
+
+# Function to update submodules
+update_submodules() {
+    print_status "Checking for submodule updates..."
     
-    # Update build.gradle.kts to use local AAR
-    echo "📝 Updating build.gradle.kts to use local AAR..."
+    if [ ! -d "youtubedl-android" ] || [ ! -f "youtubedl-android/.git" ]; then
+        print_warning "Submodules not initialized, initializing first..."
+        init_submodules
+    fi
     
-    # Create backup
-    cp app/build.gradle.kts app/build.gradle.kts.backup
+    if git submodule update --remote --recursive; then
+        print_success "Submodules updated successfully!"
+        return 0
+    else
+        print_warning "Submodule update failed, continuing with current version"
+        return 1
+    fi
+}
+
+# Function to build the library
+build_library() {
+    print_status "Ensuring youtubedl-android directory exists..."
     
-    # Replace the dependency with local file
-    sed -i.bak 's|implementation("com.github.yausername:youtubedl-android:.*")|implementation(fileTree(dir: "libs", include: ["*.aar"]))|' app/build.gradle.kts
+    if [ ! -d "youtubedl-android" ]; then
+        print_error "youtubedl-android directory not found"
+        exit 1
+    fi
     
-    echo "🎉 Local build complete! You now have the latest youtubedl-android source code."
-    echo "📱 The library is built locally and integrated into your project."
-    echo "🔄 You can now build your app with: ./gradlew build"
+    cd youtubedl-android
     
-else
-    echo "❌ Failed to build library"
-    cd ..
-    exit 1
-fi
+    # Get the current commit hash
+    CURRENT_COMMIT=$(git rev-parse HEAD)
+    print_status "Building from commit: $CURRENT_COMMIT"
+    
+    # Build the library using the local Gradle wrapper
+    print_build "Building library..."
+    if ./gradlew :library:assembleRelease; then
+        print_success "Library built successfully!"
+        
+        # Copy the built AAR file to the app's libs directory
+        mkdir -p ../app/libs
+        cp library/build/outputs/aar/library-release.aar ../app/libs/
+        
+        print_success "AAR file copied to app/libs/"
+        
+        # Go back to main project
+        cd ..
+        
+        echo ""
+        print_success "Local build complete! You now have the latest youtubedl-android source code."
+        echo "📱 The library is built locally and integrated into your project."
+        echo "🔄 You can now build your app with: ./gradlew build"
+        
+        return 0
+    else
+        print_error "Failed to build library"
+        cd ..
+        return 1
+    fi
+}
+
+# Main execution logic
+main() {
+    if [ "$INIT_ONLY" = true ]; then
+        print_status "Initialization only mode"
+        init_submodules
+        print_success "Ready to build!"
+        return 0
+    fi
+    
+    if [ "$UPDATE_ONLY" = true ]; then
+        print_status "Update only mode"
+        update_submodules
+        print_success "Submodules updated!"
+        return 0
+    fi
+    
+    if [ "$BUILD_ONLY" = true ]; then
+        print_status "Build only mode"
+        build_library
+        return $?
+    fi
+    
+    # Default behavior: initialize/update and build
+    print_status "Full mode: Initializing/updating submodules and building"
+    
+    if ! init_submodules; then
+        exit 1
+    fi
+    
+    if ! update_submodules; then
+        print_warning "Continuing with build despite update issues"
+    fi
+    
+    if ! build_library; then
+        exit 1
+    fi
+}
+
+# Run the main function
+main "$@"

@@ -582,14 +582,43 @@ Each external library is chosen for:
 
 ### Updating youtubedl-android
 
-The project includes automated update scripts:
+The project now uses a single, comprehensive script that handles all youtubedl-android management tasks:
 
 ```bash
-# Update to latest source code
-./update-youtubedl.sh
+# Comprehensive youtubedl-android management script
+./build-youtubedl-local.sh                    # Full build (init + update + build)
+./build-youtubedl-local.sh --init-only        # Only initialize submodules
+./build-youtubedl-local.sh --update-only      # Only update submodules
+./build-youtubedl-local.sh --build-only       # Only build (assume submodules ready)
+./build-youtubedl-local.sh --help             # Show usage options
 
-# Build locally from source
-./build-youtubedl-local.sh
+# Legacy update script (still available)
+./update-youtubedl.sh
+```
+
+**Script Features:**
+- **Automatic submodule management**: Initializes and updates Git submodules automatically
+- **Flexible operation modes**: Choose to initialize, update, or build independently
+- **Error handling**: Comprehensive error checking with helpful error messages
+- **Colored output**: Easy-to-read status messages with color coding
+- **Fallback support**: Handles both Git repository and direct clone scenarios
+```
+
+### Submodule Management
+
+Since the project now uses Git submodules for youtubedl-android:
+
+```bash
+# Option 1: Clone with submodules (recommended)
+git clone --recursive <repository-url>
+
+# Option 2: Clone then initialize submodules
+git clone <repository-url>
+cd Share2ArchiveToday
+./build-youtubedl-local.sh --init-only
+
+# Option 3: Let Gradle handle it automatically
+./gradlew build  # Will auto-initialize submodules if needed
 ```
 
 ### Manual Update Process
