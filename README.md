@@ -24,9 +24,7 @@ Find the companion chrome browser app on the [Chrome Web Store](https://chromewe
  - ⭐️ Finds the first link in any shared text, no need to select just the url
  - ⭐️ Protect your privacy by removing tracking tokens in URL
  - ⭐️ Substack email nag screens are now bypassed
- - ⭐️ Outlinks can be archived directly from archived pages
- - ⭐️ WesternJournal.com URLs can now be archived
- - ⭐ Can now copy a tracker free url to your clipboard instead of archiving the link
+ - ⭐ Copy a tracker free url to your clipboard using [ClearURLs' list of over 300 trackers](https://github.com/ClearURLs/Rules)
  - ⭐ Remove reddit's new chained-posts tracker
  - ⭐ Remove amazon ref url path tracker
  - ⭐ Remove mailchimp trackers
