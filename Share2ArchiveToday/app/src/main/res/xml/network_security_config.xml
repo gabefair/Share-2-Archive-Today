@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system"/>
+            <certificates src="user"/>
+        </trust-anchors>
+    </base-config>
+    
+    <!-- Allow connections to video hosting sites -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">youtube.com</domain>
+        <domain includeSubdomains="true">youtu.be</domain>
+        <domain includeSubdomains="true">vimeo.com</domain>
+        <domain includeSubdomains="true">dailymotion.com</domain>
+        <domain includeSubdomains="true">twitch.tv</domain>
+        <domain includeSubdomains="true">facebook.com</domain>
+        <domain includeSubdomains="true">instagram.com</domain>
+        <domain includeSubdomains="true">twitter.com</domain>
+        <domain includeSubdomains="true">tiktok.com</domain>
+        <domain includeSubdomains="true">reddit.com</domain>
+        <domain includeSubdomains="true">tumblr.com</domain>
+        <domain includeSubdomains="true">pinterest.com</domain>
+        <domain includeSubdomains="true">linkedin.com</domain>
+        <domain includeSubdomains="true">snapchat.com</domain>
+        <domain includeSubdomains="true">discord.com</domain>
+    </domain-config>
+    
+    <!-- Allow connections to common CDNs and services -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">google.com</domain>
+        <domain includeSubdomains="true">cloudflare.com</domain>
+        <domain includeSubdomains="true">amazonaws.com</domain>
+        <domain includeSubdomains="true">fastly.com</domain>
+        <domain includeSubdomains="true">cdnjs.cloudflare.com</domain>
+    </domain-config>
+    
+    <!-- Debug configuration for development -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system"/>
+            <certificates src="user"/>
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

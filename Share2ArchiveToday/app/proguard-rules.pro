@@ -41,6 +41,30 @@
 # Keep ZXing classes (fallback)
 -keep class com.google.zxing.** { *; }
 
+# Keep Jackson classes required by youtubedl-android
+-keep class com.fasterxml.jackson.** { *; }
+-keep class com.fasterxml.jackson.databind.** { *; }
+-keep class com.fasterxml.jackson.core.** { *; }
+-keep class com.fasterxml.jackson.annotation.** { *; }
+
+# Keep youtubedl-android classes
+-keep class com.yausername.youtubedl_android.** { *; }
+-keep class com.yausername.youtubedl_common.** { *; }
+
+# Keep Commons IO and Commons Compress classes
+-keep class org.apache.commons.io.** { *; }
+-keep class org.apache.commons.compress.** { *; }
+
+# Additional Jackson-specific rules to prevent issues
+-keepclassmembers class * {
+    @com.fasterxml.jackson.annotation.JsonProperty *;
+    @com.fasterxml.jackson.annotation.JsonIgnore *;
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties *;
+}
+
+# Keep Jackson module classes
+-keep class com.fasterxml.jackson.module.** { *; }
+
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
