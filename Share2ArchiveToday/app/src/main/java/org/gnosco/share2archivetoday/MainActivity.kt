@@ -11,8 +11,8 @@ import android.util.Log
 import android.widget.Toast
 
 open class MainActivity : Activity() {
-    private lateinit var clearUrlsRulesManager: ClearUrlsRulesManager
-    private lateinit var qrCodeScanner: QRCodeScanner
+    protected lateinit var clearUrlsRulesManager: ClearUrlsRulesManager
+    protected lateinit var qrCodeScanner: QRCodeScanner
     protected lateinit var notificationHelper: NotificationHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,7 +56,7 @@ open class MainActivity : Activity() {
         }
     }
 
-    private fun handleShareIntent(intent: Intent?) {
+    open fun handleShareIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND) {
             // Show first-time usage tip only when actually sharing
             showFirstTimeNotification()
@@ -290,6 +290,7 @@ open class MainActivity : Activity() {
             "ref_creativetype", "ref_placement", "ref_network", "ref_sid", "ref_mc_eid",
             "ref_mc_cid", "ref_scid", "ref_click_id", "ref_trk", "ref_track", "ref_trk_sid",
             "ref_sid", "ref", "ref_url", "ref_campaign_id", "ref_adgroup_id", "ref_adset_id",
+            "wprov", //wikipedia's mostly harmless tracker
             "rcm", //Linkedin's new tracker
             "xmt", //threads new tracker
             "gc_id","h_ga_id","h_ad_id","h_keyword_id","gad_source", "impressionid", //reddit ad tracker

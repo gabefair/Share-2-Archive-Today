@@ -27,12 +27,18 @@ class VideoDownloadActivity : MainActivity() {
     
     private val coroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var currentProcessId: String? = null
+    private var isDownloadInProgress = false
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
         Log.d("VideoDownload", "VideoDownloadActivity onCreate started")
         Log.d("VideoDownload", "Network status: ${if (isNetworkAvailable()) "Available" else "Not Available"}")
+        
+        // Initialize parent class components manually to avoid calling handleShareIntent
+        clearUrlsRulesManager = ClearUrlsRulesManager(applicationContext)
+        qrCodeScanner = QRCodeScanner(applicationContext)
+        notificationHelper = NotificationHelper(applicationContext)
         
         // Initialize youtubedl-android with FFmpeg support
         try {
@@ -64,12 +70,68 @@ class VideoDownloadActivity : MainActivity() {
         }
         
         Log.d("VideoDownload", "VideoDownloadActivity onCreate completed successfully")
+        
+        // Handle the share intent for video downloads
+        handleVideoShareIntent(intent)
+    }
+    
+    /**
+     * Override handleShareIntent to prevent immediate finish() for video downloads
+     */
+    override fun handleShareIntent(intent: Intent?) {
+        // This method should not be called directly from onCreate in VideoDownloadActivity
+        // It's overridden to prevent the parent class from finishing the activity immediately
+        Log.d("VideoDownload", "handleShareIntent called - this should not happen in VideoDownloadActivity")
+    }
+    
+    /**
+     * Handle video share intent specifically for this activity
+     */
+    private fun handleVideoShareIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
+            intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText ->
+                Log.d("VideoDownload", "Processing video share intent: $sharedText")
+                val url = extractUrl(sharedText)
+                
+                if (url != null) {
+                    // Start the download process
+                    threeSteps(url)
+                } else {
+                    Log.d("VideoDownload", "No URL found in shared text")
+                    Toast.makeText(this, "No URL found in shared text", Toast.LENGTH_SHORT).show()
+                    notificationHelper.showGeneralNotification(
+                        "Video Download",
+                        "No URL found in shared text"
+                    )
+                    cleanupCoroutineScope()
+                    finish()
+                }
+            }
+        } else {
+            // Not a text share, finish immediately
+            cleanupCoroutineScope()
+            finish()
+        }
+    }
+    
+    /**
+     * Handle new intents that come in while the activity is running
+     */
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        Log.d("VideoDownload", "onNewIntent called with: ${intent?.action}")
+        
+        // If this is a new share intent, handle it
+        if (intent?.action == Intent.ACTION_SEND) {
+            handleVideoShareIntent(intent)
+        }
     }
     
     override fun threeSteps(url: String) {
         // Check if activity is still valid before proceeding
         if (isFinishing || isDestroyed) {
             Log.d("VideoDownload", "Activity destroyed, skipping threeSteps")
+            cleanupCoroutineScope()
             return
         }
         
@@ -117,34 +179,47 @@ class VideoDownloadActivity : MainActivity() {
         // Check if activity is still valid before proceeding
         if (isFinishing || isDestroyed) {
             Log.d("VideoDownload", "Activity destroyed, skipping network check")
+            cleanupCoroutineScope()
             return
         }
         
         if (!isNetworkAvailable()) {
             Log.e("VideoDownload", "No network connection available")
             Toast.makeText(this, "No internet connection available", Toast.LENGTH_LONG).show()
+            cleanupCoroutineScope()
             finish()
             return
         }
         
         Log.d("VideoDownload", "Network connection available, proceeding with download")
         
-        // Test basic network connectivity
+        // Set download in progress flag BEFORE starting the network test
+        // This prevents the coroutine scope from being cancelled in onDestroy
+        isDownloadInProgress = true
+        Log.d("VideoDownload", "Setting isDownloadInProgress = true before network test")
+        
+        // Start the network connectivity test
         testNetworkConnectivity { isConnected ->
-            // Check if activity is still valid before proceeding
-            if (isFinishing || isDestroyed) {
-                Log.d("VideoDownload", "Activity destroyed, skipping download after network test")
-                return@testNetworkConnectivity
-            }
-            
+            // This callback runs after the activity is finished, so just handle the result
             if (isConnected) {
+                // Start the download process
                 downloadVideo(url)
             } else {
                 Log.e("VideoDownload", "Network connectivity test failed")
-                Toast.makeText(this, "Network connectivity test failed", Toast.LENGTH_LONG).show()
-                finish()
+                notificationHelper.showGeneralNotification(
+                    "Video Download",
+                    "Network connectivity test failed"
+                )
+                // Reset flag since download failed
+                isDownloadInProgress = false
+                cleanupCoroutineScope()
             }
         }
+        
+        // Since this is a NoDisplay theme activity, we must finish after starting the download process
+        // The download will continue in the background via coroutines
+        Log.d("VideoDownload", "Download process started, finishing activity")
+        finish()
     }
     
     private fun testNetworkConnectivity(callback: (Boolean) -> Unit) {
@@ -156,6 +231,7 @@ class VideoDownloadActivity : MainActivity() {
                 // Check if the coroutine is still active before proceeding
                 if (!isActive) {
                     Log.d("VideoDownload", "Coroutine cancelled before network test, aborting")
+                    cleanupCoroutineScope()
                     return@launch
                 }
                 
@@ -180,15 +256,12 @@ class VideoDownloadActivity : MainActivity() {
                 // Check if still active before calling callback
                 if (isActive) {
                     withContext(Dispatchers.Main) {
-                        // Check if activity is still valid before calling callback
-                        if (!isFinishing && !isDestroyed) {
-                            callback(isConnected)
-                        } else {
-                            Log.d("VideoDownload", "Activity destroyed, skipping callback")
-                        }
+                        // Don't check activity state - we want the download to continue even after activity is destroyed
+                        callback(isConnected)
                     }
                 } else {
                     Log.d("VideoDownload", "Coroutine cancelled after network test, skipping callback")
+                    cleanupCoroutineScope()
                 }
             } catch (e: Exception) {
                 Log.e("VideoDownload", "Network connectivity test failed", e)
@@ -200,15 +273,12 @@ class VideoDownloadActivity : MainActivity() {
                 // Check if still active before calling callback
                 if (isActive) {
                     withContext(Dispatchers.Main) {
-                        // Check if activity is still valid before calling callback
-                        if (!isFinishing && !isDestroyed) {
-                            callback(false)
-                        } else {
-                            Log.d("VideoDownload", "Activity destroyed, skipping error callback")
-                        }
+                        // Don't check activity state - we want the download to continue even after activity is destroyed
+                        callback(false)
                     }
                 } else {
                     Log.d("VideoDownload", "Coroutine cancelled during error handling, skipping callback")
+                    cleanupCoroutineScope()
                 }
             }
         }
@@ -229,21 +299,17 @@ class VideoDownloadActivity : MainActivity() {
                 // Check if coroutine is still active before proceeding
                 if (!isActive) {
                     Log.d("VideoDownload", "Coroutine cancelled before download process, aborting")
+                    isDownloadInProgress = false
+                    cleanupCoroutineScope()
                     return@launch
                 }
                 
+                // isDownloadInProgress is already set to true in checkNetworkAndProceed
                 Log.d("VideoDownload", "Starting download process for URL: $url")
                 Log.d("VideoDownload", "Network status: ${if (isNetworkAvailable()) "Available" else "Not Available"}")
                 Log.d("VideoDownload", "Current thread: ${Thread.currentThread().name}")
                 
-                // Check if activity is still valid before showing UI elements
-                if (isFinishing || isDestroyed) {
-                    Log.d("VideoDownload", "Activity destroyed, aborting download process")
-                    return@launch
-                }
-                
-                // Show initial message
-                Toast.makeText(this@VideoDownloadActivity, "Analyzing video...", Toast.LENGTH_SHORT).show()
+                // Show initial message via notification only (activity may be finished)
                 notificationHelper.showDownloadNotification(
                     "Video Download",
                     "Analyzing video...",
@@ -271,14 +337,15 @@ class VideoDownloadActivity : MainActivity() {
                     }
                 }
                 
-                // Check if still active and activity is valid before proceeding
-                if (!isActive || isFinishing || isDestroyed) {
-                    Log.d("VideoDownload", "Coroutine cancelled or activity destroyed, aborting download")
+                // Check if still active before proceeding
+                if (!isActive) {
+                    Log.d("VideoDownload", "Coroutine cancelled, aborting download")
+                    isDownloadInProgress = false
+                    cleanupCoroutineScope()
                     return@launch
                 }
                 
                 if (videoInfo == null) {
-                    Toast.makeText(this@VideoDownloadActivity, "Could not analyze video. Trying direct download...", Toast.LENGTH_LONG).show()
                     notificationHelper.showGeneralNotification(
                         "Video Download",
                         "Could not analyze video. Trying direct download..."
@@ -303,7 +370,6 @@ class VideoDownloadActivity : MainActivity() {
                     val viewText = if (viewCount != null) " • ${formatViewCount(viewCount.toLongOrNull() ?: 0L)} views" else ""
                     
                     val infoText = "$title$durationText$uploaderText$viewText"
-                    Toast.makeText(this@VideoDownloadActivity, "Found: $infoText", Toast.LENGTH_LONG).show()
                     notificationHelper.showGeneralNotification(
                         "Video Download",
                         "Found: $infoText"
@@ -314,29 +380,24 @@ class VideoDownloadActivity : MainActivity() {
             } catch (e: Exception) {
                 Log.e("VideoDownload", "Error in download process", e)
                 
-                // Only show UI elements if activity is still valid
-                if (!isFinishing && !isDestroyed) {
-                    Toast.makeText(this@VideoDownloadActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-                    notificationHelper.showGeneralNotification(
-                        "Video Download",
-                        "Error: ${e.message}"
-                    )
-                    finish()
-                } else {
-                    Log.d("VideoDownload", "Activity destroyed, skipping error UI")
-                }
+                // Reset download in progress flag
+                isDownloadInProgress = false
+                Log.d("VideoDownload", "Download error, setting isDownloadInProgress = false")
+                
+                // Clean up coroutine scope since download failed
+                cleanupCoroutineScope()
+                
+                // Show error via notification only (activity may be finished)
+                notificationHelper.showGeneralNotification(
+                    "Video Download",
+                    "Error: ${e.message}"
+                )
             }
         }
     }
 
     private fun startDownload(url: String, title: String, format: String = "mp4") {
         try {
-            // Check if activity is still valid before proceeding
-            if (isFinishing || isDestroyed) {
-                Log.d("VideoDownload", "Activity destroyed, skipping download start")
-                return
-            }
-            
             // Create download directory
             val downloadDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Share2Archive")
             if (!downloadDir.exists()) {
@@ -384,34 +445,27 @@ class VideoDownloadActivity : MainActivity() {
                         else -> "Download complete!"
                     }
                     
-                    runOnUiThread {
-                        Toast.makeText(this@VideoDownloadActivity, progressText, Toast.LENGTH_SHORT).show()
-                        notificationHelper.updateDownloadNotification(
-                            "Video Download",
-                            progressText,
-                            progress.toInt()
-                        )
-                    }
+                    // Update notification directly (no need for runOnUiThread since activity is finished)
+                    notificationHelper.updateDownloadNotification(
+                        "Video Download",
+                        progressText,
+                        progress.toInt()
+                    )
                     
-                    // If download is complete, share the file
+                    // If download is complete, handle completion
                     if (progress >= 100f) {
-                        runOnUiThread {
-                            onDownloadComplete(outputPath, filename)
-                        }
+                        onDownloadComplete(outputPath, filename)
                     }
                     
                     // Handle download errors (negative progress values)
                     if (progress < -1f) {
-                        runOnUiThread {
-                            handleDownloadError(progress.toInt())
-                        }
+                        handleDownloadError(progress.toInt())
                     }
                     
                     // Log progress for debugging
                     Log.d("VideoDownload", "Progress: $progress%, ETA: ${etaInSeconds}s")
                 }
                 
-                Toast.makeText(this, "Download started: $filename", Toast.LENGTH_LONG).show()
                 notificationHelper.showGeneralNotification(
                     "Video Download",
                     "Download started: $filename"
@@ -422,38 +476,47 @@ class VideoDownloadActivity : MainActivity() {
                 Log.e("VideoDownload", "Exception type: ${e.javaClass.simpleName}")
                 Log.e("VideoDownload", "Exception message: ${e.message}")
                 e.printStackTrace()
-                Toast.makeText(this, "Download execution failed: ${e.message}", Toast.LENGTH_LONG).show()
+                
+                // Reset download in progress flag
+                isDownloadInProgress = false
+                Log.d("VideoDownload", "Download execution error, setting isDownloadInProgress = false")
+                
+                // Clean up coroutine scope since download failed
+                cleanupCoroutineScope()
+                
                 notificationHelper.showGeneralNotification(
                     "Video Download",
                     "Download execution failed: ${e.message}"
                 )
-                finish()
             }
             
         } catch (e: Exception) {
             Log.e("VideoDownload", "Error starting download", e)
-            Toast.makeText(this, "Failed to start download: ${e.message}", Toast.LENGTH_LONG).show()
+            
+            // Reset download in progress flag
+            isDownloadInProgress = false
+            Log.d("VideoDownload", "Download start error, setting isDownloadInProgress = false")
+            
+            // Clean up coroutine scope since download failed
+            cleanupCoroutineScope()
+            
             notificationHelper.showGeneralNotification(
                 "Video Download",
                 "Failed to start download: ${e.message}"
             )
-            finish()
         }
     }
 
     private fun onDownloadComplete(filePath: String, filename: String) {
         try {
-            // Check if activity is still valid before proceeding
-            if (isFinishing || isDestroyed) {
-                Log.d("VideoDownload", "Activity destroyed, skipping download completion")
-                return
-            }
+            // Reset download in progress flag
+            isDownloadInProgress = false
+            Log.d("VideoDownload", "Download completed, setting isDownloadInProgress = false")
             
             val file = File(filePath)
             if (file.exists() && file.length() > 0) {
                 val fileSizeMB = file.length() / (1024 * 1024)
                 val fileSizeText = if (fileSizeMB > 0) " (${fileSizeMB}MB)" else ""
-                Toast.makeText(this, "Download complete!$fileSizeText Sharing video...", Toast.LENGTH_LONG).show()
                 notificationHelper.completeDownloadNotification(
                     "Video Download",
                     "Download complete!$fileSizeText Sharing video..."
@@ -462,35 +525,33 @@ class VideoDownloadActivity : MainActivity() {
                 // Small delay to ensure file is fully written
                 coroutineScope.launch {
                     delay(1000)
-                    // Check if activity is still valid before sharing
-                    if (!isFinishing && !isDestroyed) {
-                        shareVideo(file)
-                    } else {
-                        Log.d("VideoDownload", "Activity destroyed, skipping video sharing")
-                    }
+                    shareVideo(file)
                 }
+                
+                // Clean up coroutine scope since download is complete
+                cleanupCoroutineScope()
             } else {
-                Toast.makeText(this, "Download failed or file is empty", Toast.LENGTH_LONG).show()
                 notificationHelper.showGeneralNotification(
                     "Video Download",
                     "Download failed or file is empty"
                 )
-                finish()
+                cleanupCoroutineScope()
             }
         } catch (e: Exception) {
             Log.e("VideoDownload", "Error handling download completion", e)
             
-            // Only show UI elements if activity is still valid
-            if (!isFinishing && !isDestroyed) {
-                Toast.makeText(this, "Error sharing video: ${e.message}", Toast.LENGTH_LONG).show()
-                notificationHelper.showGeneralNotification(
-                    "Video Download",
-                    "Error sharing video: ${e.message}"
-                )
-                finish()
-            } else {
-                Log.d("VideoDownload", "Activity destroyed, skipping error UI")
-            }
+            // Reset download in progress flag
+            isDownloadInProgress = false
+            Log.d("VideoDownload", "Download completion error, setting isDownloadInProgress = false")
+            
+            // Clean up coroutine scope since download failed
+            cleanupCoroutineScope()
+            
+            // Show error via notification only (activity may be finished)
+            notificationHelper.showGeneralNotification(
+                "Video Download",
+                "Error sharing video: ${e.message}"
+            )
         }
     }
 
@@ -529,28 +590,25 @@ class VideoDownloadActivity : MainActivity() {
                 putExtra(Intent.EXTRA_SUBJECT, "Media downloaded with Share2Archive")
                 putExtra(Intent.EXTRA_TEXT, "Check out this media I downloaded!")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             
-            // Start the share activity
-            startActivity(Intent.createChooser(shareIntent, "Share Media"))
+            // Start the share activity with new task flag since this activity is finished
+            applicationContext.startActivity(Intent.createChooser(shareIntent, "Share Media"))
             
-            // Finish this activity after sharing
-            finish()
+            // Activity is already finished, no need to call finish() again
             
         } catch (e: Exception) {
             Log.e("VideoDownload", "Error sharing video", e)
             
-            // Only show UI elements if activity is still valid
-            if (!isFinishing && !isDestroyed) {
-                Toast.makeText(this, "Error sharing video: ${e.message}", Toast.LENGTH_LONG).show()
-                notificationHelper.showGeneralNotification(
-                    "Video Download",
-                    "Error sharing video: ${e.message}"
-                )
-                finish()
-            } else {
-                Log.d("VideoDownload", "Activity destroyed, skipping error UI")
-            }
+            // Show error via notification only (activity is already finished)
+            notificationHelper.showGeneralNotification(
+                "Video Download",
+                "Error sharing video: ${e.message}"
+            )
+            
+            // Clean up coroutine scope since sharing failed
+            cleanupCoroutineScope()
         }
     }
 
@@ -563,42 +621,31 @@ class VideoDownloadActivity : MainActivity() {
             else -> "Download failed: Unknown error (code: $errorCode)"
         }
         
-        // Only show UI elements if activity is still valid
-        if (!isFinishing && !isDestroyed) {
-            Toast.makeText(this, errorMessage, Toast.LENGTH_LONG).show()
-            notificationHelper.showGeneralNotification(
-                "Video Download",
-                errorMessage
-            )
-            Log.e("VideoDownload", "Download error: $errorMessage")
-            
-            // Wait a bit before finishing to show the error message
-            coroutineScope.launch {
-                delay(2000)
-                // Check if activity is still valid before finishing
-                if (!isFinishing && !isDestroyed) {
-                    finish()
-                } else {
-                    Log.d("VideoDownload", "Activity destroyed, skipping finish call")
-                }
-            }
-        } else {
-            Log.d("VideoDownload", "Activity destroyed, skipping error handling UI")
-        }
+        // Reset download in progress flag
+        isDownloadInProgress = false
+        Log.d("VideoDownload", "Download error, setting isDownloadInProgress = false")
+        
+        // Clean up coroutine scope since download failed
+        cleanupCoroutineScope()
+        
+        // Show error via notification only (activity is already finished)
+        notificationHelper.showGeneralNotification(
+            "Video Download",
+            "Download error: $errorMessage"
+        )
+        Log.e("VideoDownload", "Download error: $errorMessage")
     }
 
     override fun openInBrowser(url: String) {
         // Override to prevent browser opening - this should never be called in video download mode
-        // Check if activity is still valid before proceeding
-        if (!isFinishing && !isDestroyed) {
-            downloadVideo(url)
-        } else {
-            Log.d("VideoDownload", "Activity destroyed, skipping browser override")
-        }
+        // Since the activity is already finished, just start the download process
+        downloadVideo(url)
     }
     
     override fun onDestroy() {
         super.onDestroy()
+        
+        Log.d("VideoDownload", "onDestroy called, download in progress: $isDownloadInProgress")
         
         // Cancel any ongoing download
         currentProcessId?.let { processId ->
@@ -613,9 +660,23 @@ class VideoDownloadActivity : MainActivity() {
         // Clean up notifications
         notificationHelper.cancelAllNotifications()
         
-        // Cancel all coroutines gracefully
-        Log.d("VideoDownload", "Cancelling coroutine scope in onDestroy")
-        coroutineScope.cancel("Activity destroyed")
+        // Only cancel coroutines if no download is in progress
+        if (!isDownloadInProgress) {
+            Log.d("VideoDownload", "No download in progress, cancelling coroutine scope")
+            coroutineScope.cancel("Activity destroyed")
+        } else {
+            Log.d("VideoDownload", "Download in progress, keeping coroutine scope alive")
+        }
+    }
+    
+    /**
+     * Clean up coroutine scope when download is really finished
+     */
+    private fun cleanupCoroutineScope() {
+        if (!isDownloadInProgress) {
+            Log.d("VideoDownload", "Cleaning up coroutine scope")
+            coroutineScope.cancel("Download finished")
+        }
     }
 }
 
