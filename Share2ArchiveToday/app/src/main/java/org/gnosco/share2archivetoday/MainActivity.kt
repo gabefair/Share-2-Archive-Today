@@ -262,6 +262,7 @@ open class MainActivity : Activity() {
             "ref_creativetype", "ref_placement", "ref_network", "ref_sid", "ref_mc_eid",
             "ref_mc_cid", "ref_scid", "ref_click_id", "ref_trk", "ref_track", "ref_trk_sid",
             "ref_sid", "ref", "ref_url", "ref_campaign_id", "ref_adgroup_id", "ref_adset_id",
+            "wprov", //wikipedia's mostly harmless tracker
             "rcm", //Linkedin's new tracker
             "xmt", //threads new tracker
             "gc_id","h_ga_id","h_ad_id","h_keyword_id","gad_source", "impressionid", //reddit ad tracker
