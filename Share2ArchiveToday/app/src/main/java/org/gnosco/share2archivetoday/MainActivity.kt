@@ -266,7 +266,8 @@ open class MainActivity : Activity() {
             "rcm", //Linkedin's new tracker
             "xmt", //threads new tracker
             "gc_id","h_ga_id","h_ad_id","h_keyword_id","gad_source", "impressionid", //reddit ad tracker
-            "ga_source", "ga_medium", "ga_campaign", "ga_content", "ga_term","chainedPosts", // Reddits new tracker
+            "ga_source", "ga_medium", "ga_campaign", "ga_content", "ga_term", "int_source",
+            "chainedPosts", // Reddits new tracker
             "mibextid" //facebooks new tracker
         )
         return param in trackingParams
