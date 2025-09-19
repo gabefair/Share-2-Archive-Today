@@ -130,6 +130,9 @@ open class MainActivity : Activity() {
         }
         rulesCleanedUrl = cleanTrackingParamsFromUrl(rulesCleanedUrl)
 
+        // Remove anchors and text fragments
+        rulesCleanedUrl = removeAnchorsAndTextFragments(rulesCleanedUrl)
+
         // Then apply additional platform-specific optimizations that might not be in the rules
         return applyPlatformSpecificOptimizations(rulesCleanedUrl)
     }
@@ -422,6 +425,50 @@ open class MainActivity : Activity() {
         } catch (e: Exception) {
             return false
         }
+    }
+
+    //Remove anchors and text fragments
+    internal fun removeAnchorsAndTextFragments(url: String): String {
+        try {
+            val uri = Uri.parse(url)
+            val fragment = uri.fragment
+            
+            // If no fragment, return URL as-is
+            if (fragment.isNullOrEmpty()) {
+                return url
+            }
+            
+            // Check if this is a Chrome text fragment (#:~:text=...)
+            if (fragment.startsWith(":~:text=") || fragment.contains(":~:text=")) {
+                // Remove the entire fragment for text fragments
+                val builder = uri.buildUpon()
+                builder.fragment(null)
+                return builder.build().toString()
+            }
+            
+            val builder = uri.buildUpon()
+            builder.fragment(null)
+            return builder.build().toString()
+            
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error removing anchors and text fragments from URL: $url", e)
+            // If parsing fails, try simple string manipulation as fallback
+            return removeAnchorsAndTextFragmentsSimple(url)
+        }
+    }
+    
+    //Fallback method
+    private fun removeAnchorsAndTextFragmentsSimple(url: String): String {
+        // This pattern matches #:~:text= followed by any characters until end of string
+        val textFragmentPattern = Regex("#:~:text=.*$")
+        var cleanedUrl = url.replace(textFragmentPattern, "")
+        
+        // Remove regular anchors (#fragment) but preserve query parameters
+        // This pattern matches # followed by any characters that are not ? until end of string
+        val anchorPattern = Regex("#[^?]*$")
+        cleanedUrl = cleanedUrl.replace(anchorPattern, "")
+        
+        return cleanedUrl
     }
 
     internal fun cleanUrl(url: String): String {
