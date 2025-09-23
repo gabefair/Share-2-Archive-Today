@@ -223,14 +223,17 @@ open class MainActivity : Activity() {
                 try {
                     // Parse the nested target URL
                     val targetUri = Uri.parse(targetUrl)
+
+                    val cleanedTargetUrl = cleanTrackingParamsFromUrl(targetUri.toString())
+                    val cleanedTargetUri = Uri.parse(cleanedTargetUrl)
                     
                     // Create a new URI builder with the target URL
-                    val newTargetUriBuilder = targetUri.buildUpon().legacyClearQuery()
+                    val newTargetUriBuilder = cleanedTargetUri.buildUpon().legacyClearQuery()
                     
                     // Add an empty parameter first to match expected format (?&ved=...)
                     newTargetUriBuilder.appendQueryParameter("", "")
                     
-                    // Add Google tracking parameters (ved, usg) to the target URL
+                    // Add Google tracking parameters (ved, usg) to the cleaned target URL
                     uri.getQueryParameter("ved")?.let { newTargetUriBuilder.appendQueryParameter("ved", it) }
                     uri.getQueryParameter("usg")?.let { newTargetUriBuilder.appendQueryParameter("usg", it) }
                     
@@ -383,8 +386,9 @@ open class MainActivity : Activity() {
     private fun ensureProperUrlFormat(url: String): String {
         try {
             val uri = Uri.parse(url)
+            val query = uri.query
             // If the URI has query parameters but the original string doesn't have a ?, fix it
-            if (uri.query != null && uri.query.isNotEmpty() && !url.contains("?")) {
+            if (query != null && query.isNotEmpty() && !url.contains("?")) {
                 // Find where the query parameters start in the original URL
                 val queryStart = url.indexOf("&")
                 if (queryStart != -1) {
@@ -572,7 +576,7 @@ open class MainActivity : Activity() {
         }
 
         // If the URL has query parameters, don't remove the '?' character
-        val hasQueryParams = uri.query != null && uri.query.isNotEmpty()
+        val hasQueryParams = uri.query != null //&& uri.query.isNotEmpty()
         
         return if (hasQueryParams) {
             // Only remove trailing characters that don't affect query parameters
