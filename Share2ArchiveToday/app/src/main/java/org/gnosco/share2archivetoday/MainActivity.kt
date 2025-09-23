@@ -216,6 +216,37 @@ open class MainActivity : Activity() {
             }
         }
 
+        // Google search result URL handling
+        else if (uri.host?.equals("www.google.com", ignoreCase = true) == true && uri.path?.equals("/url") == true) {
+            val targetUrl = uri.getQueryParameter("url")
+            if (targetUrl != null) {
+                try {
+                    // Parse the nested target URL
+                    val targetUri = Uri.parse(targetUrl)
+                    
+                    // Create a new URI builder with the target URL
+                    val newTargetUriBuilder = targetUri.buildUpon().legacyClearQuery()
+                    
+                    // Add an empty parameter first to match expected format (?&ved=...)
+                    newTargetUriBuilder.appendQueryParameter("", "")
+                    
+                    // Add Google tracking parameters (ved, usg) to the target URL
+                    uri.getQueryParameter("ved")?.let { newTargetUriBuilder.appendQueryParameter("ved", it) }
+                    uri.getQueryParameter("usg")?.let { newTargetUriBuilder.appendQueryParameter("usg", it) }
+                    
+                    // Build the final URL
+                    val finalUrl = newTargetUriBuilder.build().toString()
+                    
+                    // Return the target URL with Google tracking parameters
+                    return finalUrl
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Error processing Google URL: $url", e)
+                    // If parsing fails, return the original URL
+                    return url
+                }
+            }
+        }
+
         else if (uri.host?.equals("t.me", ignoreCase = true) == true) {
             val path = uri.path?.trimStart('/') ?: ""
             if (!path.startsWith("s/") && path.isNotEmpty()) {
@@ -236,11 +267,23 @@ open class MainActivity : Activity() {
             val embeddedUrl = pathSegments.subList(2, pathSegments.size).joinToString("/")
             return try {
                 val decoded = Uri.decode(embeddedUrl)
-                // Ensure we're only returning the embedded URL and not the trailing referrer
-                val trimmed = decoded.split("?")[0]
-                trimmed
+                
+                // Parse the decoded URL to extract the actual target URL
+                val decodedUri = Uri.parse(decoded)
+                
+                // Extract the target URL preserving query parameters but removing fragments
+                // The main URL is the scheme + authority + path + query, without fragment
+                val targetUrlBuilder = decodedUri.buildUpon()
+                    .fragment(null)
+                
+                return targetUrlBuilder.build().toString()
             } catch (e: Exception) {
-                embeddedUrl // fallback to raw decoded
+                // Fallback: try to extract URL from the decoded string more carefully
+                val decoded = Uri.decode(embeddedUrl)
+                // Look for the first complete URL in the decoded string
+                val urlPattern = Regex("https?://[^\\s&]+")
+                val match = urlPattern.find(decoded)
+                return match?.value ?: decoded
             }
         }
 
@@ -258,7 +301,7 @@ open class MainActivity : Activity() {
             "trk", "track", "trk_sid", "sid", "mibextid", "fb_action_ids",
             "fb_action_types", "fb_medium", "fb_campaign", "fb_source",
             "m_entstream_source", "twclid", "igshid", "s_kwcid", "sxsrf", "sca_esv",
-            "source", "tbo", "sa", "ved", "pi", "fbs", "fbc", "fb_ref", "client", "ei",
+            "source", "tbo", "sa", "ved", "usg", "pi", "fbs", "fbc", "fb_ref", "client", "ei",
             "gs_lp", "sclient", "oq", "uact", "bih", "biw", // sxsrf might be needed on some sites, but google uses it for tracking
             "ref_source", "ref_medium", "ref_campaign", "ref_content", "ref_term", "ref_keyword",
             "ref_type", "ref_campaign_id", "ref_ad_id", "ref_adgroup_id", "entstream_source",
@@ -332,6 +375,28 @@ open class MainActivity : Activity() {
             }
         }
         return newUriBuilder.build().toString()
+    }
+
+    /**
+     * Ensures a URL is properly formatted, particularly fixing missing ? before query parameters
+     */
+    private fun ensureProperUrlFormat(url: String): String {
+        try {
+            val uri = Uri.parse(url)
+            // If the URI has query parameters but the original string doesn't have a ?, fix it
+            if (uri.query != null && uri.query.isNotEmpty() && !url.contains("?")) {
+                // Find where the query parameters start in the original URL
+                val queryStart = url.indexOf("&")
+                if (queryStart != -1) {
+                    // Replace the first & with ?&
+                    return url.substring(0, queryStart) + "?" + url.substring(queryStart + 1)
+                }
+            }
+            return url
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error formatting URL: $url", e)
+            return url
+        }
     }
 
     internal fun extractUrl(text: String): String? {
@@ -489,16 +554,50 @@ open class MainActivity : Activity() {
             url.replace(Regex("%09+"), "")
         }
 
-        return cleanedUrl
-            .removeSuffix("?")
-            .removeSuffix("&")
-            .removeSuffix("#")
-            .removeSuffix(".")
-            .removeSuffix(",")
-            .removeSuffix(";")
-            .removeSuffix(")")
-            .removeSuffix("'")
-            .removeSuffix("\"")
+        // Parse the URL to check if it has query parameters
+        val uri = try {
+            Uri.parse(cleanedUrl)
+        } catch (e: Exception) {
+            // If parsing fails, fall back to simple suffix removal
+            return cleanedUrl
+                .removeSuffix("?")
+                .removeSuffix("&")
+                .removeSuffix("#")
+                .removeSuffix(".")
+                .removeSuffix(",")
+                .removeSuffix(";")
+                .removeSuffix(")")
+                .removeSuffix("'")
+                .removeSuffix("\"")
+        }
+
+        // If the URL has query parameters, don't remove the '?' character
+        val hasQueryParams = uri.query != null && uri.query.isNotEmpty()
+        
+        return if (hasQueryParams) {
+            // Only remove trailing characters that don't affect query parameters
+            cleanedUrl
+                .removeSuffix("&")
+                .removeSuffix("#")
+                .removeSuffix(".")
+                .removeSuffix(",")
+                .removeSuffix(";")
+                .removeSuffix(")")
+                .removeSuffix("'")
+                .removeSuffix("\"")
+        } else {
+            // No query parameters, safe to remove '?' and other trailing characters
+            cleanedUrl
+                .removeSuffix("?")
+                .removeSuffix("&")
+                .removeSuffix("#")
+                .removeSuffix(".")
+                .removeSuffix(",")
+                .removeSuffix(";")
+                .removeSuffix(")")
+                .removeSuffix("'")
+                .removeSuffix("\"")
+        }
     }
 
     open fun openInBrowser(url: String) {
