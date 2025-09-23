@@ -106,7 +106,8 @@ object TestConfiguration {
             Issue #2 Fix: Google URL Processing  
             - Should detect Google search result URLs (www.google.com/url)
             - Should extract the target URL from the 'url' parameter
-            - Should add Google tracking parameters (ved, usg) to the target URL
+            - Should clean tracking parameters from the target URL first
+            - Should add Google tracking parameters (ved, usg) to the cleaned target URL
             - Should ensure proper formatting with ? before query parameters
             - Should handle URLs without tracking parameters gracefully
             - Should return original URL if not a Google redirect URL

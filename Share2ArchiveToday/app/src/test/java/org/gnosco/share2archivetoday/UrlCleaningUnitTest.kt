@@ -64,11 +64,30 @@ class UrlCleaningUnitTest {
         
         val result = mainActivity.applyPlatformSpecificOptimizations(inputUrl)
         
-        // Should return the target URL with Google tracking parameters
+        // Should return the cleaned target URL with Google tracking parameters
         assertTrue("Result should contain the target URL", result.contains("amp.miamiherald.com/news/nation-world/world/americas/cuba/article312212357.html"))
         assertTrue("Result should contain ved parameter", result.contains("ved=2ahUKEwiVvabWme-PAxX3EmIAHS6qFPsQ0PADKAB6BQilARAB"))
         assertTrue("Result should contain usg parameter", result.contains("usg=AOvVaw2Doxr5AlAMZuiMilVbTOHV"))
         assertTrue("Result should start with https://", result.startsWith("https://"))
+    }
+
+    @Test
+    fun testGoogleUrlHandler_CleansTargetUrlTracking() {
+        val mainActivity = MainActivity()
+        
+        // Test that Google URLs clean tracking parameters from the target URL
+        val inputUrl = "https://www.google.com/url?url=https://example.com/page?utm_source=google&utm_medium=cpc&fbclid=123&other=keep&ved=google123&usg=google456"
+        
+        val result = mainActivity.applyPlatformSpecificOptimizations(inputUrl)
+        
+        // Should clean tracking parameters from target URL and add Google tracking params
+        assertTrue("Result should contain the base URL", result.contains("https://example.com/page"))
+        assertTrue("Result should contain non-tracking parameter", result.contains("other=keep"))
+        assertTrue("Result should contain Google ved parameter", result.contains("ved=google123"))
+        assertTrue("Result should contain Google usg parameter", result.contains("usg=google456"))
+        assertFalse("Should not contain utm_source from target URL", result.contains("utm_source"))
+        assertFalse("Should not contain utm_medium from target URL", result.contains("utm_medium"))
+        assertFalse("Should not contain fbclid from target URL", result.contains("fbclid"))
     }
 
     @Test
