@@ -218,9 +218,12 @@ class AdvancedFeaturesTest(private val context: Context) {
                     }
                 }
             )
+
+            Log.d(TAG,"videoDownloader Results: ${result}")
             
             if (result.success) {
                 Log.d(TAG, "Video download successful: ${result.filePath}")
+                Log.d(TAG, "Title: result.title")
                 Log.d(TAG, "File size: ${result.fileSize} bytes")
             } else {
                 Log.w(TAG, "Video download failed: ${result.error}")

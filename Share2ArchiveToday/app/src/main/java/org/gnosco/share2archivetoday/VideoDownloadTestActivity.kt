@@ -81,8 +81,10 @@ class VideoDownloadTestActivity : Activity() {
                         Log.d(TAG, "Title: ${videoInfo.title}")
                         Log.d(TAG, "Duration: ${videoInfo.duration} seconds")
                         Log.d(TAG, "Uploader: ${videoInfo.uploader}")
+                        Log.d(TAG, "View count: videoInfo.viewCount")
                         Log.d(TAG, "Description length: ${videoInfo.description.length} chars")
                         Log.d(TAG, "Thumbnail URL: ${videoInfo.thumbnail}")
+                        Log.d(TAG, "Webpage URL: videoInfo.webpageUrl")
 
                         withContext(Dispatchers.Main) {
                             Toast.makeText(
