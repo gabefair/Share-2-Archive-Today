@@ -77,6 +77,10 @@ class VideoDownloader:
     def is_cancelled(self):
         """Check if download is cancelled"""
         return self.cancelled
+    
+    def reset_cancellation(self):
+        """Reset the cancellation flag for a new download"""
+        self.cancelled = False
         
     def get_video_info(self, url: str) -> Dict[str, Any]:
         """
@@ -498,4 +502,10 @@ def is_cancelled():
     """Public API for checking if cancelled"""
     downloader = get_downloader()
     return downloader.is_cancelled()
+
+
+def reset_cancellation():
+    """Public API for resetting cancellation flag"""
+    downloader = get_downloader()
+    downloader.reset_cancellation()
 

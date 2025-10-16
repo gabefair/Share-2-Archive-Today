@@ -170,6 +170,9 @@ class BackgroundDownloadService : Service() {
     private fun startDownload(url: String, title: String, uploader: String, quality: String, formatId: String? = null) {
         val downloadId = "${url.hashCode()}_${System.currentTimeMillis()}"
         
+        // Reset cancellation flag from any previous downloads
+        pythonDownloader.resetCancellation()
+        
         currentDownloadJob = serviceScope.launch {
             try {
                 updateNotification("Getting video info...", title)

@@ -293,15 +293,81 @@ class PythonVideoDownloader(private val context: Context) {
             
             // Log raw result for debugging
             Log.d(TAG, "Parsing Python result: ${result.toString()}")
+            Log.d(TAG, "Result type: ${result.javaClass.name}")
             
-            // Try to extract each field and log any issues
-            val success = result["success"]?.toBoolean() ?: false
-            val error = result["error"]?.toString()
-            val filePath = result["file_path"]?.toString()
-            val videoPath = result["video_path"]?.toString()
-            val audioPath = result["audio_path"]?.toString()
-            val separateAv = result["separate_av"]?.toBoolean() ?: false
-            val fileSize = result["file_size"]?.toLong() ?: 0L
+            // Use Python's .get() method instead of [] operator for dictionary access
+            val success = try {
+                val successObj = result.callAttr("get", "success")
+                Log.d(TAG, "success object: $successObj, type: ${successObj?.javaClass?.name}")
+                successObj?.toBoolean() ?: false
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting success: ${e.message}", e)
+                false
+            }
+            
+            val error = try {
+                val errorObj = result.callAttr("get", "error")
+                if (errorObj != null && errorObj.toString() != "None") {
+                    errorObj.toString()
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting error field: ${e.message}", e)
+                null
+            }
+            
+            val filePath = try {
+                val filePathObj = result.callAttr("get", "file_path")
+                if (filePathObj != null && filePathObj.toString() != "None") {
+                    filePathObj.toString()
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting file_path: ${e.message}", e)
+                null
+            }
+            
+            val videoPath = try {
+                val videoPathObj = result.callAttr("get", "video_path")
+                if (videoPathObj != null && videoPathObj.toString() != "None") {
+                    videoPathObj.toString()
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting video_path: ${e.message}", e)
+                null
+            }
+            
+            val audioPath = try {
+                val audioPathObj = result.callAttr("get", "audio_path")
+                if (audioPathObj != null && audioPathObj.toString() != "None") {
+                    audioPathObj.toString()
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting audio_path: ${e.message}", e)
+                null
+            }
+            
+            val separateAv = try {
+                val separateAvObj = result.callAttr("get", "separate_av")
+                separateAvObj?.toBoolean() ?: false
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting separate_av: ${e.message}", e)
+                false
+            }
+            
+            val fileSize = try {
+                val fileSizeObj = result.callAttr("get", "file_size")
+                fileSizeObj?.toLong() ?: 0L
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting file_size: ${e.message}", e)
+                0L
+            }
             
             Log.d(TAG, "Parsed result - success: $success, error: $error, filePath: $filePath, videoPath: $videoPath, audioPath: $audioPath, separateAv: $separateAv, fileSize: $fileSize")
             
@@ -350,6 +416,18 @@ class PythonVideoDownloader(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Error checking cancelled status", e)
             false
+        }
+    }
+    
+    /**
+     * Reset cancellation flag for a new download
+     */
+    fun resetCancellation() {
+        try {
+            pythonModule?.callAttr("reset_cancellation")
+            Log.d(TAG, "Cancellation flag reset for new download")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error resetting cancellation flag", e)
         }
     }
     
