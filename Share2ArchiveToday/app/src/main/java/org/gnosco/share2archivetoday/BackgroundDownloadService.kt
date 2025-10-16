@@ -37,13 +37,16 @@ class BackgroundDownloadService : Service() {
         const val ACTION_START_DOWNLOAD = "start_download"
         const val ACTION_CANCEL_DOWNLOAD = "cancel_download"
         
-        fun startDownload(context: Context, url: String, title: String = "Unknown", uploader: String = "Unknown", quality: String = "best") {
+        fun startDownload(context: Context, url: String, title: String = "Unknown", uploader: String = "Unknown", quality: String = "best", formatId: String? = null) {
             val intent = Intent(context, BackgroundDownloadService::class.java).apply {
                 action = ACTION_START_DOWNLOAD
                 putExtra(EXTRA_URL, url)
                 putExtra(EXTRA_TITLE, title)
                 putExtra(EXTRA_UPLOADER, uploader)
                 putExtra(EXTRA_QUALITY, quality)
+                if (formatId != null) {
+                    putExtra("EXTRA_FORMAT_ID", formatId)
+                }
             }
             
             // Use the Activity context when possible to avoid background launch restrictions on Android 12+
@@ -87,9 +90,10 @@ class BackgroundDownloadService : Service() {
                 val title = intent.getStringExtra(EXTRA_TITLE) ?: "Unknown"
                 val uploader = intent.getStringExtra(EXTRA_UPLOADER) ?: "Unknown"
                 val quality = intent.getStringExtra(EXTRA_QUALITY) ?: "best"
+                val formatId = intent.getStringExtra("EXTRA_FORMAT_ID")
                 
                 startForeground(NOTIFICATION_ID, createNotification("Starting download...", title))
-                startDownload(url, title, uploader, quality)
+                startDownload(url, title, uploader, quality, formatId)
             }
             ACTION_CANCEL_DOWNLOAD -> {
                 Log.d(TAG, "Received cancellation request")
@@ -163,7 +167,7 @@ class BackgroundDownloadService : Service() {
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
     
-    private fun startDownload(url: String, title: String, uploader: String, quality: String) {
+    private fun startDownload(url: String, title: String, uploader: String, quality: String, formatId: String? = null) {
         val downloadId = "${url.hashCode()}_${System.currentTimeMillis()}"
         
         currentDownloadJob = serviceScope.launch {
@@ -270,7 +274,8 @@ class BackgroundDownloadService : Service() {
                             progressCallback = { progressInfo ->
                                 handleProgressUpdate(progressInfo, displayTitle, downloadId)
                             },
-                            estimatedSizeMB = estimatedSizeMB
+                            estimatedSizeMB = estimatedSizeMB,
+                            formatId = formatId
                         )
                     }
                 }

@@ -83,13 +83,18 @@ class PythonVideoDownloader(private val context: Context) {
         outputDir: String,
         quality: String = "best",
         progressCallback: ((ProgressInfo) -> Unit)? = null,
-        estimatedSizeMB: Long = 100
+        estimatedSizeMB: Long = 100,
+        formatId: String? = null
     ): DownloadResult {
         try {
             Log.d(TAG, "Starting video download")
             Log.d(TAG, "  URL: $url")
             Log.d(TAG, "  Output: $outputDir")
-            Log.d(TAG, "  Quality: $quality")
+            if (formatId != null) {
+                Log.d(TAG, "  Format ID: $formatId")
+            } else {
+                Log.d(TAG, "  Quality: $quality")
+            }
             
             // Create Python progress callback
             val pythonCallback = createPythonProgressCallback(progressCallback)
@@ -100,7 +105,8 @@ class PythonVideoDownloader(private val context: Context) {
                 url,
                 outputDir,
                 quality,
-                pythonCallback
+                pythonCallback,
+                formatId
             )
             
             // Parse result

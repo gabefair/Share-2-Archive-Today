@@ -113,20 +113,53 @@ class VideoDownloader:
             raise
             
     def _extract_format_info(self, formats: list) -> list:
-        """Extract useful format information"""
+        """Extract useful format information, filtering for video formats"""
         format_list = []
+        seen_resolutions = set()
         
         for fmt in formats:
+            # Only include formats with video (skip audio-only)
+            vcodec = fmt.get('vcodec', 'none')
+            if vcodec == 'none':
+                continue
+            
+            # Get format details
+            height = fmt.get('height', 0)
+            width = fmt.get('width', 0)
+            acodec = fmt.get('acodec', 'none')
+            has_audio = acodec != 'none'
+            
+            # Create resolution string
+            if height and width:
+                resolution = f"{width}x{height}"
+                quality_label = f"{height}p"
+            else:
+                resolution = fmt.get('resolution', 'unknown')
+                quality_label = resolution
+            
+            # Skip duplicate resolutions (keep first one which is usually best)
+            res_key = (height, has_audio)
+            if res_key in seen_resolutions:
+                continue
+            seen_resolutions.add(res_key)
+            
             format_list.append({
                 'format_id': fmt.get('format_id', ''),
                 'ext': fmt.get('ext', ''),
-                'resolution': fmt.get('resolution', 'audio only' if fmt.get('vcodec') == 'none' else 'unknown'),
-                'filesize': fmt.get('filesize', 0),
-                'vcodec': fmt.get('vcodec', 'none'),
-                'acodec': fmt.get('acodec', 'none'),
+                'resolution': resolution,
+                'height': height,
+                'quality_label': quality_label,
+                'filesize': fmt.get('filesize') or fmt.get('filesize_approx', 0),
+                'vcodec': vcodec,
+                'acodec': acodec,
+                'has_audio': has_audio,
                 'fps': fmt.get('fps', 0),
                 'format_note': fmt.get('format_note', ''),
+                'tbr': fmt.get('tbr', 0),  # Total bitrate
             })
+        
+        # Sort by height (descending) so best quality is first
+        format_list.sort(key=lambda x: x['height'], reverse=True)
             
         return format_list
         
@@ -135,7 +168,8 @@ class VideoDownloader:
         url: str,
         output_dir: str,
         quality: str = 'best',
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
+        format_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Download video without requiring ffmpeg
@@ -144,8 +178,9 @@ class VideoDownloader:
         Args:
             url: Video URL
             output_dir: Directory to save the video
-            quality: Quality selection (e.g., 'best', '1080p', '720p', 'worst')
+            quality: Quality selection (e.g., 'best', '1080p', '720p', 'worst') - used if format_id not specified
             progress_callback: Callback function for progress updates
+            format_id: Specific format ID to download (from get_video_info). If provided, overrides quality.
             
         Returns:
             Dictionary with download result
@@ -155,147 +190,141 @@ class VideoDownloader:
             
             print(f"[info] Starting download: {url}", flush=True)
             print(f"[info] Output directory: {output_dir}", flush=True)
-            print(f"[info] Quality: {quality}", flush=True)
+            if format_id:
+                print(f"[info] Format ID: {format_id}", flush=True)
+            else:
+                print(f"[info] Quality: {quality}", flush=True)
             
             # Create progress tracker
             progress_tracker = ProgressTracker(progress_callback)
             
-            # First, try to download a pre-merged format (no ffmpeg needed)
-            # Many sites provide pre-merged formats
-            ydl_opts_merged = {
-                'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
+            # Determine format string to use
+            if format_id:
+                # Use specific format ID provided by user
+                video_format = format_id
+                print(f"[info] Using specific format ID: {format_id}", flush=True)
+            else:
+                # Use quality-based selection (fallback for backward compatibility)
+                video_format = self._get_video_only_format(quality)
+                print(f"[info] Using quality-based format: {video_format}", flush=True)
+            
+            # Download video stream
+            print(f"[info] Downloading video stream...", flush=True)
+            video_opts = {
+                'outtmpl': os.path.join(output_dir, '%(title)s_video.%(ext)s'),
                 'progress_hooks': [progress_tracker],
                 'quiet': False,
                 'no_warnings': False,
-                # Try to get pre-merged format first
-                'format': self._get_merged_format_string(quality),
+                'format': video_format,
                 'ignoreerrors': False,
                 'postprocessors': [],
                 'retries': 10,
                 'fragment_retries': 10,
                 'skip_unavailable_fragments': True,
                 'socket_timeout': 30,
-                'prefer_ffmpeg': False,
             }
             
-            downloaded_files = []
-            needs_separate_streams = False
-            
+            video_path = None
+            video_has_audio = False
             try:
-                print(f"[info] Attempting to download pre-merged format", flush=True)
-                with yt_dlp.YoutubeDL(ydl_opts_merged) as ydl:
-                    info = ydl.extract_info(url, download=True)
-                    
-                    if info and 'requested_downloads' in info:
-                        for download in info['requested_downloads']:
-                            filepath = download.get('filepath')
-                            if filepath and os.path.exists(filepath):
-                                downloaded_files.append(filepath)
-                                print(f"[info] Downloaded pre-merged: {filepath}", flush=True)
-            except Exception as e:
-                # Pre-merged format not available, need to download separate streams
-                error_str = str(e).lower()
-                if ('requested merging' in error_str or 
-                    'ffmpeg' in error_str or 
-                    'format is not available' in error_str or
-                    'no video formats' in error_str):
-                    print(f"[info] Pre-merged format not available ({str(e)}), downloading separate streams", flush=True)
-                    needs_separate_streams = True
-                else:
-                    raise
-            
-            # If pre-merged failed, download video and audio separately
-            if needs_separate_streams or not downloaded_files:
-                print(f"[info] Downloading video and audio separately", flush=True)
-                
-                # Download video stream
-                video_opts = {
-                    'outtmpl': os.path.join(output_dir, '%(title)s_video.%(ext)s'),
-                    'progress_hooks': [progress_tracker],
-                    'quiet': False,
-                    'no_warnings': False,
-                    'format': self._get_video_only_format(quality),
-                    'ignoreerrors': False,
-                    'postprocessors': [],
-                    'retries': 10,
-                    'fragment_retries': 10,
-                    'skip_unavailable_fragments': True,
-                    'socket_timeout': 30,
-                }
-                
-                video_path = None
                 with yt_dlp.YoutubeDL(video_opts) as ydl:
                     info = ydl.extract_info(url, download=True)
                     if info and 'requested_downloads' in info:
                         video_path = info['requested_downloads'][0].get('filepath')
+                        # Check if video has audio
+                        acodec = info.get('acodec', 'none')
+                        video_has_audio = acodec not in ('none', None)
                         print(f"[info] Downloaded video: {video_path}", flush=True)
-                
-                # Download audio stream
-                audio_opts = {
-                    'outtmpl': os.path.join(output_dir, '%(title)s_audio.%(ext)s'),
-                    'progress_hooks': [progress_tracker],
-                    'quiet': False,
-                    'no_warnings': False,
-                    'format': 'bestaudio',
-                    'ignoreerrors': False,
-                    'postprocessors': [],
-                    'retries': 10,
-                    'fragment_retries': 10,
-                    'skip_unavailable_fragments': True,
-                    'socket_timeout': 30,
+                        print(f"[info] Video has audio: {video_has_audio}", flush=True)
+            except Exception as e:
+                error_msg = f"Failed to download video: {str(e)}"
+                print(f"[error] {error_msg}", file=sys.stderr, flush=True)
+                traceback.print_exc(file=sys.stderr)
+                return {
+                    'success': False,
+                    'error': error_msg,
+                    'file_path': None,
+                    'video_path': None,
+                    'audio_path': None,
+                    'separate_av': False,
+                    'file_size': 0
                 }
-                
-                audio_path = None
+            
+            # If video already has audio, we're done
+            if video_has_audio and video_path and os.path.exists(video_path):
+                print(f"[info] Video has audio, no separate audio needed", flush=True)
+                return {
+                    'success': True,
+                    'error': None,
+                    'file_path': video_path,
+                    'video_path': None,
+                    'audio_path': None,
+                    'separate_av': False,
+                    'file_size': os.path.getsize(video_path)
+                }
+            
+            # Download audio stream separately
+            print(f"[info] Downloading audio stream...", flush=True)
+            audio_opts = {
+                'outtmpl': os.path.join(output_dir, '%(title)s_audio.%(ext)s'),
+                'progress_hooks': [progress_tracker],
+                'quiet': False,
+                'no_warnings': False,
+                'format': 'bestaudio',
+                'ignoreerrors': False,
+                'postprocessors': [],
+                'retries': 10,
+                'fragment_retries': 10,
+                'skip_unavailable_fragments': True,
+                'socket_timeout': 30,
+            }
+            
+            audio_path = None
+            try:
                 with yt_dlp.YoutubeDL(audio_opts) as ydl:
                     info = ydl.extract_info(url, download=True)
                     if info and 'requested_downloads' in info:
                         audio_path = info['requested_downloads'][0].get('filepath')
                         print(f"[info] Downloaded audio: {audio_path}", flush=True)
-                
-                if video_path and audio_path and os.path.exists(video_path) and os.path.exists(audio_path):
-                    # Return separate streams for MediaMuxer to merge
-                    return {
-                        'success': True,
-                        'error': None,
-                        'file_path': None,
-                        'video_path': video_path,
-                        'audio_path': audio_path,
-                        'separate_av': True,
-                        'file_size': os.path.getsize(video_path) + os.path.getsize(audio_path)
-                    }
-                else:
-                    return {
-                        'success': False,
-                        'error': 'Failed to download video or audio stream',
-                        'file_path': None,
-                        'video_path': None,
-                        'audio_path': None,
-                        'separate_av': False,
-                        'file_size': 0
-                    }
-            
-            # Pre-merged download succeeded
-            if downloaded_files:
-                main_file = downloaded_files[0]
+            except Exception as e:
+                error_msg = f"Failed to download audio: {str(e)}"
+                print(f"[error] {error_msg}", file=sys.stderr, flush=True)
+                traceback.print_exc(file=sys.stderr)
                 return {
-                    'success': True,
-                    'error': None,
-                    'file_path': main_file,
+                    'success': False,
+                    'error': error_msg,
+                    'file_path': None,
                     'video_path': None,
                     'audio_path': None,
                     'separate_av': False,
-                    'file_size': os.path.getsize(main_file)
+                    'file_size': 0
                 }
             
-            return {
-                'success': False,
-                'error': 'No files were downloaded',
-                'file_path': None,
-                'video_path': None,
-                'audio_path': None,
-                'separate_av': False,
-                'file_size': 0
-            }
+            # Verify both files exist
+            if video_path and audio_path and os.path.exists(video_path) and os.path.exists(audio_path):
+                print(f"[info] Successfully downloaded video and audio separately", flush=True)
+                print(f"[info] Video: {video_path} ({os.path.getsize(video_path)} bytes)", flush=True)
+                print(f"[info] Audio: {audio_path} ({os.path.getsize(audio_path)} bytes)", flush=True)
+                # Return separate streams for MediaMuxer to merge
+                return {
+                    'success': True,
+                    'error': None,
+                    'file_path': None,
+                    'video_path': video_path,
+                    'audio_path': audio_path,
+                    'separate_av': True,
+                    'file_size': os.path.getsize(video_path) + os.path.getsize(audio_path)
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': 'Failed to download video or audio stream',
+                    'file_path': None,
+                    'video_path': None,
+                    'audio_path': None,
+                    'separate_av': False,
+                    'file_size': 0
+                }
                 
         except Exception as e:
             error_msg = str(e)
@@ -311,31 +340,6 @@ class VideoDownloader:
                 'separate_av': False,
                 'file_size': 0
             }
-            
-    def _get_merged_format_string(self, quality: str) -> str:
-        """
-        Get yt-dlp format string for pre-merged formats (no ffmpeg needed)
-        These formats have both video and audio already muxed together
-        """
-        # For audio-only downloads
-        if quality.startswith('audio_'):
-            return 'bestaudio/best'
-        
-        # Quality mapping - try to get pre-merged formats
-        # Format syntax: best[height<=X] means best pre-merged format at that height
-        quality_map = {
-            '2160p': 'best[height<=2160]/bestvideo[height<=2160][ext=mp4]+bestaudio[ext=m4a]/best',
-            '1440p': 'best[height<=1440]/bestvideo[height<=1440][ext=mp4]+bestaudio[ext=m4a]/best',
-            '1080p': 'best[height<=1080]/bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best',
-            '720p': 'best[height<=720]/bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best',
-            '480p': 'best[height<=480]/bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best',
-            '360p': 'best[height<=360]/bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best',
-            'worst': 'worst',
-            'best': 'best',
-        }
-        
-        # Default to best pre-merged format
-        return quality_map.get(quality, 'best')
     
     def _get_video_only_format(self, quality: str) -> str:
         """
@@ -464,10 +468,10 @@ def get_downloader():
 
 
 # Public API functions that can be called from Kotlin
-def download_video(url: str, output_dir: str, quality: str = 'best', progress_callback=None):
+def download_video(url: str, output_dir: str, quality: str = 'best', progress_callback=None, format_id=None):
     """Public API for downloading video"""
     downloader = get_downloader()
-    return downloader.download_video(url, output_dir, quality, progress_callback)
+    return downloader.download_video(url, output_dir, quality, progress_callback, format_id)
 
 
 def download_audio(url: str, output_dir: str, audio_format: str = 'mp3', progress_callback=None):

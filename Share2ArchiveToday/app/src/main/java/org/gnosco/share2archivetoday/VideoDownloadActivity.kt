@@ -176,61 +176,88 @@ class VideoDownloadActivity : Activity() {
     }
     
     private fun showQualitySelectionDialog(url: String) {
-        // Get video info first to determine optimal quality (this will log all available formats)
-        Log.d(TAG, "Getting video info for quality selection - formats will be logged for: $url")
-        val videoInfo = pythonDownloader.getVideoInfo(url)
-        val recommendedQuality = videoInfo?.let { determineOptimalQuality(it) } ?: "best"
-        val durationMinutes = videoInfo?.duration?.div(60.0) ?: 0.0
+        // Show loading dialog while getting video info
+        val loadingDialog = AlertDialog.Builder(this)
+            .setTitle("Loading")
+            .setMessage("Getting available formats...")
+            .setCancelable(false)
+            .create()
+        loadingDialog.show()
         
-        // Get network recommendation
-        val networkRecommendation = getNetworkBasedRecommendation()
-        
-        val qualityOptions = arrayOf(
-            "Auto (Recommended: ${if (recommendedQuality == "best") "Original Format" else "720p Original"})",
-            "Best Quality (Original Format)",
-            "720p (Original Format)",
-            "480p (Original Format)", 
-            "360p (Original Format)",
-            "Audio Only (Original Format)"
-        )
-        
-        val qualityValues = arrayOf(
-            recommendedQuality,  // Auto selection based on duration
-            "best",
-            "720p",
-            "480p",
-            "360p", 
-            "audio_mp3"
-        )
-        
-        val dialogTitle = buildString {
-            append("Select Download Quality")
-            if (videoInfo != null) {
-                append("\nDuration: ${formatDuration(videoInfo.duration.toLong())}")
-                append("\nUploader: ${videoInfo.uploader}")
-            }
-            if (networkRecommendation.isNotEmpty()) {
-                append("\nNetwork: $networkRecommendation")
-            }
-        }
-        
-        AlertDialog.Builder(this)
-            .setTitle(dialogTitle)
-            .setItems(qualityOptions) { _, which ->
-                val selectedQuality = qualityValues[which]
+        downloadScope.launch {
+            try {
+                // Get video info and available formats
+                Log.d(TAG, "Getting video info for quality selection: $url")
+                val videoInfo = pythonDownloader.getVideoInfo(url)
                 
-                // Show data usage warning if needed
-                if (networkMonitor.shouldWarnAboutDataUsage() && !selectedQuality.startsWith("audio_")) {
-                    showDataUsageWarning(url, selectedQuality)
-                } else {
-                    startDownloadWithQuality(url, selectedQuality)
+                withContext(Dispatchers.Main) {
+                    loadingDialog.dismiss()
+                    
+                    if (videoInfo == null) {
+                        Toast.makeText(
+                            this@VideoDownloadActivity,
+                            "Failed to get video information",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        finish()
+                        return@withContext
+                    }
+                    
+                    // Get network recommendation
+                    val networkRecommendation = getNetworkBasedRecommendation()
+                    
+                    val dialogTitle = buildString {
+                        append("Select Download Quality")
+                        append("\nDuration: ${formatDuration(videoInfo.duration.toLong())}")
+                        append("\nUploader: ${videoInfo.uploader}")
+                        if (networkRecommendation.isNotEmpty()) {
+                            append("\nNetwork: $networkRecommendation")
+                        }
+                    }
+                    
+                    // Always add audio-only option at the end
+                    val qualityOptions = mutableListOf<String>()
+                    val qualityValues = mutableListOf<String>()
+                    
+                    // Add "best" option
+                    qualityOptions.add("Best Available Quality")
+                    qualityValues.add("best")
+                    
+                    // Add audio-only option
+                    qualityOptions.add("Audio Only (MP3)")
+                    qualityValues.add("audio_mp3")
+                    
+                    AlertDialog.Builder(this@VideoDownloadActivity)
+                        .setTitle(dialogTitle)
+                        .setItems(qualityOptions.toTypedArray()) { _, which ->
+                            val selectedQuality = qualityValues[which]
+                            
+                            // Show data usage warning if needed
+                            if (networkMonitor.shouldWarnAboutDataUsage() && !selectedQuality.startsWith("audio_")) {
+                                showDataUsageWarning(url, selectedQuality, null)
+                            } else {
+                                startDownloadWithQuality(url, selectedQuality, null)
+                            }
+                        }
+                        .setNegativeButton("Cancel") { _, _ ->
+                            finish()
+                        }
+                        .setCancelable(false)
+                        .show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting video info", e)
+                withContext(Dispatchers.Main) {
+                    loadingDialog.dismiss()
+                    Toast.makeText(
+                        this@VideoDownloadActivity,
+                        "Error: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    finish()
                 }
             }
-            .setNegativeButton("Cancel") { _, _ ->
-                finish()
-            }
-            .setCancelable(false)
-            .show()
+        }
     }
     
     /**
@@ -247,7 +274,7 @@ class VideoDownloadActivity : Activity() {
     /**
      * Show data usage warning for mobile users
      */
-    private fun showDataUsageWarning(url: String, quality: String) {
+    private fun showDataUsageWarning(url: String, quality: String, formatId: String?) {
         val estimatedSize = estimateDownloadSize(quality)
         
         AlertDialog.Builder(this)
@@ -259,7 +286,7 @@ class VideoDownloadActivity : Activity() {
                 "Do you want to continue?"
             )
             .setPositiveButton("Continue") { _, _ ->
-                startDownloadWithQuality(url, quality)
+                startDownloadWithQuality(url, quality, formatId)
             }
             .setNegativeButton("Cancel") { _, _ ->
                 finish()
@@ -311,7 +338,7 @@ class VideoDownloadActivity : Activity() {
         }
     }
     
-    private fun startDownloadWithQuality(url: String, quality: String) {
+    private fun startDownloadWithQuality(url: String, quality: String, formatId: String?) {
         // Show initial toast
         Toast.makeText(this, "Starting video download...", Toast.LENGTH_SHORT).show()
         
@@ -325,7 +352,9 @@ class VideoDownloadActivity : Activity() {
                 
                 Log.d(TAG, "Video info: $title by $uploader")
                 Log.d(TAG, "Selected quality: $quality")
-                Log.d(TAG, "Check logs for detailed format list (--list-formats equivalent)")
+                if (formatId != null) {
+                    Log.d(TAG, "Selected format ID: $formatId")
+                }
                 
                 // Show video info to user
                 withContext(Dispatchers.Main) {
@@ -342,7 +371,8 @@ class VideoDownloadActivity : Activity() {
                     url = url,
                     title = title,
                     uploader = uploader,
-                    quality = quality
+                    quality = quality,
+                    formatId = formatId
                 )
                 
                 withContext(Dispatchers.Main) {
