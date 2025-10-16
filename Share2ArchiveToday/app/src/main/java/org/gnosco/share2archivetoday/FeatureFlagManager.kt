@@ -28,6 +28,7 @@ class FeatureFlagManager private constructor(private val context: Context) {
         const val FALLBACK_HANDLING = "fallback_handling"
         const val DEBUG_LOGGING = "debug_logging"
         const val EXPERIMENTAL_UI = "experimental_ui"
+        const val DISABLE_YOUTUBE_BLOCKING = "disable_youtube_blocking" // DEVELOPMENT ONLY
     }
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

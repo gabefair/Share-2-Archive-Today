@@ -177,6 +177,94 @@ class VideoDownloader:
             
         return format_list
         
+    def _execute_download(self, ydl_opts: dict, url: str, download_type: str = "video") -> dict:
+        """
+        Execute a yt-dlp download with the given options and handle errors gracefully.
+        
+        Args:
+            ydl_opts: yt-dlp options dictionary
+            url: Video URL to download
+            download_type: Type of download ("video" or "audio") for logging
+            
+        Returns:
+            dict: Download result with success status and file information
+        """
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                
+                if info and 'requested_downloads' in info:
+                    filepath = info['requested_downloads'][0].get('filepath')
+                    
+                    if filepath and os.path.exists(filepath):
+                        # Check if video has audio (for video downloads)
+                        video_has_audio = False
+                        if download_type == "video":
+                            acodec = info.get('acodec', 'none')
+                            video_has_audio = acodec not in ('none', None)
+                        
+                        return {
+                            'success': True,
+                            'error': None,
+                            'file_path': filepath,
+                            'video_path': filepath if download_type == "video" else None,
+                            'audio_path': filepath if download_type == "audio" else None,
+                            'separate_av': False,
+                            'file_size': os.path.getsize(filepath),
+                            'video_has_audio': video_has_audio
+                        }
+                
+                return {
+                    'success': False,
+                    'error': f'{download_type.capitalize()} file was not downloaded',
+                    'file_path': None,
+                    'video_path': None,
+                    'audio_path': None,
+                    'separate_av': False,
+                    'file_size': 0,
+                    'video_has_audio': False
+                }
+                
+        except Exception as e:
+            error_msg = str(e)
+            print(f"[error] {download_type.capitalize()} download failed: {error_msg}", file=sys.stderr, flush=True)
+            
+            # Try fallback if the error is format-related
+            if "format is not available" in error_msg.lower() or "requested format" in error_msg.lower():
+                print(f"[info] Trying {download_type} fallback (no format specified)...", flush=True)
+                try:
+                    # Try with no format specified - let yt-dlp choose automatically
+                    fallback_opts = ydl_opts.copy()
+                    if 'format' in fallback_opts:
+                        del fallback_opts['format']  # Remove format constraint
+                    
+                    return self._execute_download(fallback_opts, url, download_type)
+                    
+                except Exception as fallback_e:
+                    print(f"[error] {download_type.capitalize()} fallback also failed: {str(fallback_e)}", file=sys.stderr, flush=True)
+                    return {
+                        'success': False,
+                        'error': f"Failed to download {download_type}: {error_msg}",
+                        'file_path': None,
+                        'video_path': None,
+                        'audio_path': None,
+                        'separate_av': False,
+                        'file_size': 0,
+                        'video_has_audio': False
+                    }
+            else:
+                traceback.print_exc(file=sys.stderr)
+                return {
+                    'success': False,
+                    'error': f"Failed to download {download_type}: {error_msg}",
+                    'file_path': None,
+                    'video_path': None,
+                    'audio_path': None,
+                    'separate_av': False,
+                    'file_size': 0,
+                    'video_has_audio': False
+                }
+
     def download_video(
         self,
         url: str,
@@ -217,8 +305,12 @@ class VideoDownloader:
                 # Use specific format ID provided by user
                 video_format = format_id
                 print(f"[info] Using specific format ID: {format_id}", flush=True)
+            elif quality == "best":
+                # Don't specify format - let yt-dlp choose the best automatically
+                video_format = None
+                print(f"[info] Using yt-dlp default (best available)", flush=True)
             else:
-                # Use quality-based selection (fallback for backward compatibility)
+                # Use quality-based selection for specific qualities
                 video_format = self._get_video_only_format(quality)
                 print(f"[info] Using quality-based format: {video_format}", flush=True)
             
@@ -229,40 +321,29 @@ class VideoDownloader:
                 'progress_hooks': [progress_tracker],
                 'quiet': False,
                 'no_warnings': False,
-                'format': video_format,
-                'ignoreerrors': False,
-                'postprocessors': [],
+                'ignoreerrors': False,  # Show all errors in debug builds
+                'postprocessors': [],  # No post-processing (no ffmpeg)
                 'retries': 10,
                 'fragment_retries': 10,
                 'skip_unavailable_fragments': True,
                 'socket_timeout': 30,
             }
             
-            video_path = None
-            video_has_audio = False
-            try:
-                with yt_dlp.YoutubeDL(video_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
-                    if info and 'requested_downloads' in info:
-                        video_path = info['requested_downloads'][0].get('filepath')
-                        # Check if video has audio
-                        acodec = info.get('acodec', 'none')
-                        video_has_audio = acodec not in ('none', None)
-                        print(f"[info] Downloaded video: {video_path}", flush=True)
-                        print(f"[info] Video has audio: {video_has_audio}", flush=True)
-            except Exception as e:
-                error_msg = f"Failed to download video: {str(e)}"
-                print(f"[error] {error_msg}", file=sys.stderr, flush=True)
-                traceback.print_exc(file=sys.stderr)
-                return {
-                    'success': False,
-                    'error': error_msg,
-                    'file_path': None,
-                    'video_path': None,
-                    'audio_path': None,
-                    'separate_av': False,
-                    'file_size': 0
-                }
+            # Only add format if we have a specific one
+            if video_format is not None:
+                video_opts['format'] = video_format
+            
+            # Execute video download using helper method
+            video_result = self._execute_download(video_opts, url, "video")
+            
+            if not video_result['success']:
+                return video_result
+            
+            video_path = video_result['video_path']
+            video_has_audio = video_result['video_has_audio']
+            
+            print(f"[info] Downloaded video: {video_path}", flush=True)
+            print(f"[info] Video has audio: {video_has_audio}", flush=True)
             
             # If video already has audio, we're done
             if video_has_audio and video_path and os.path.exists(video_path):
@@ -362,20 +443,10 @@ class VideoDownloader:
         Get yt-dlp format string for video-only stream
         Used when downloading video and audio separately
         """
-        # Quality mapping for video-only
+        # More flexible quality mapping with fallbacks
         quality_map = {
-            '2160p': 'bestvideo[height<=2160]',
-            '1440p': 'bestvideo[height<=1440]',
-            '1080p': 'bestvideo[height<=1080]',
-            '720p': 'bestvideo[height<=720]',
-            '480p': 'bestvideo[height<=480]',
-            '360p': 'bestvideo[height<=360]',
-            'worst': 'worstvideo',
-            'best': 'bestvideo',
         }
         
-        # Default to best video
-        return quality_map.get(quality, 'bestvideo')
         
     def download_audio(
         self,
@@ -408,52 +479,33 @@ class VideoDownloader:
             
             # Configure yt-dlp options for audio
             ydl_opts = {
-                'format': 'bestaudio/best',
                 'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
                 'progress_hooks': [progress_tracker],
                 'quiet': False,
                 'no_warnings': False,
+                'ignoreerrors': False,  # Show all errors in debug builds
                 'postprocessors': [],  # No post-processing (no ffmpeg)
-                # Retry settings
                 'retries': 10,
                 'fragment_retries': 10,
                 'skip_unavailable_fragments': True,
-                # Network settings  
                 'socket_timeout': 30,
             }
             
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                
-                if info:
-                    # Get the downloaded file path
-                    if 'requested_downloads' in info:
-                        filepath = info['requested_downloads'][0].get('filepath')
-                    else:
-                        title = info.get('title', 'audio')
-                        ext = info.get('ext', audio_format)
-                        filepath = os.path.join(output_dir, f"{title}.{ext}")
-                    
-                    if filepath and os.path.exists(filepath):
-                        return {
-                            'success': True,
-                            'error': None,
-                            'file_path': filepath,
-                            'video_path': None,
-                            'audio_path': None,
-                            'separate_av': False,
-                            'file_size': os.path.getsize(filepath)
-                        }
+            # Only specify audio format if we need a specific one
+            # For "best", let yt-dlp choose automatically
+            if audio_format != "best":
+                ydl_opts['format'] = f'bestaudio[ext={audio_format}]/bestaudio/best'
+            else:
+                # Don't specify format - let yt-dlp choose the best audio automatically
+                print(f"[info] Using yt-dlp default for audio (best available)", flush=True)
             
-            return {
-                'success': False,
-                'error': 'Audio file was not downloaded',
-                'file_path': None,
-                'video_path': None,
-                'audio_path': None,
-                'separate_av': False,
-                'file_size': 0
-            }
+            # Execute audio download using helper method
+            audio_result = self._execute_download(ydl_opts, url, "audio")
+            
+            if audio_result['success']:
+                print(f"[info] Audio download successful: {audio_result['file_path']}", flush=True)
+            
+            return audio_result
             
         except Exception as e:
             error_msg = str(e)

@@ -297,6 +297,17 @@ class FFmpegWrapper(private val context: Context) {
             // Get video format and add to muxer
             videoExtractor.selectTrack(videoTrackIndex)
             val videoFormat = videoExtractor.getTrackFormat(videoTrackIndex)
+            
+            // Check if video codec is supported by MediaMuxer
+            val videoMime = videoFormat.getString(MediaFormat.KEY_MIME)
+            if (!isCodecSupported(videoMime)) {
+                Log.w(TAG, "Video codec $videoMime not supported by MediaMuxer, skipping merge")
+                videoExtractor.release()
+                audioExtractor.release()
+                muxer.release()
+                return false
+            }
+            
             val muxerVideoTrackIndex = muxer.addTrack(videoFormat)
             
             // Get audio format and add to muxer
@@ -667,6 +678,31 @@ class FFmpegWrapper(private val context: Context) {
     // ============================================================================
     // HELPER FUNCTIONS
     // ============================================================================
+    
+    /**
+     * Check if a codec is supported by Android MediaMuxer
+     */
+    private fun isCodecSupported(mimeType: String?): Boolean {
+        if (mimeType == null) return false
+        
+        // MediaMuxer supported codecs
+        val supportedVideoCodecs = setOf(
+            "video/avc",           // H.264
+            "video/mp4v-es",       // MPEG-4
+            "video/3gpp",          // 3GPP
+            "video/hevc"           // H.265 (on supported devices)
+        )
+        
+        val supportedAudioCodecs = setOf(
+            "audio/mp4a-latm",     // AAC
+            "audio/mpeg",          // MP3
+            "audio/3gpp",          // 3GPP audio
+            "audio/amr-wb",        // AMR-WB
+            "audio/amr-nb"         // AMR-NB
+        )
+        
+        return supportedVideoCodecs.contains(mimeType) || supportedAudioCodecs.contains(mimeType)
+    }
     
     /**
      * Find the index of the first video track in a MediaExtractor

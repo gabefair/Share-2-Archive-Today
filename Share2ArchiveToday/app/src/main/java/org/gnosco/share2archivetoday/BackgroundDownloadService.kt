@@ -192,7 +192,7 @@ class BackgroundDownloadService : Service() {
                 val displayTitle = when {
                     // Best case: we have actual video title from yt-dlp
                     !videoInfo?.title.isNullOrBlank() && videoInfo?.title != "Unknown" -> {
-                        videoInfo!!.title
+                        videoInfo?.title ?: title
                     }
                     // Second best: use the title parameter if it's meaningful
                     !title.isNullOrBlank() && title != "Unknown" && title != "Unknown Video" -> {
@@ -229,6 +229,22 @@ class BackgroundDownloadService : Service() {
                 if (!networkMonitor.isConnected()) {
                     updateNotification("No internet connection", displayTitle)
                     showErrorNotification(displayTitle, "No internet connection. Please check your network settings.")
+                    
+                    // Mark download as failed due to network
+                    downloadResumptionManager.failDownload(downloadId, "No internet connection")
+                    
+                    // Add failed download to history
+                    downloadHistoryManager.addDownload(
+                        url = url,
+                        title = displayTitle,
+                        uploader = displayUploader,
+                        quality = quality,
+                        filePath = null,
+                        fileSize = 0,
+                        success = false,
+                        error = "No internet connection"
+                    )
+                    
                     stopSelf()
                     return@launch
                 }
@@ -249,9 +265,6 @@ class BackgroundDownloadService : Service() {
                     stopSelf()
                     return@launch
                 }
-                
-                // Get estimated file size for memory planning (use default since VideoInfo doesn't have fileSize)
-                val estimatedSizeMB = 100L  // Default estimate: 100MB
                 
                 // Start tracking this download
                 downloadResumptionManager.startDownload(downloadId, url, displayTitle, quality, downloadDir)
@@ -277,7 +290,6 @@ class BackgroundDownloadService : Service() {
                             progressCallback = { progressInfo ->
                                 handleProgressUpdate(progressInfo, displayTitle, downloadId)
                             },
-                            estimatedSizeMB = estimatedSizeMB,
                             formatId = formatId
                         )
                     }
@@ -293,7 +305,7 @@ class BackgroundDownloadService : Service() {
                     // Handle separate A/V streams if needed
                     val finalResult = if (result.separateAv && result.videoPath != null && result.audioPath != null) {
                         Log.d(TAG, "Merging separate video and audio streams")
-                        val mergedPath = mergeVideoAudio(result.videoPath!!, result.audioPath!!, displayTitle)
+                        val mergedPath = mergeVideoAudio(result.videoPath, result.audioPath, displayTitle)
                         if (mergedPath != null) {
                             result.copy(filePath = mergedPath, separateAv = false)
                         } else {
@@ -328,6 +340,9 @@ class BackgroundDownloadService : Service() {
                         success = true
                     )
                     
+                    // Log successful download for analytics/monitoring
+                    Log.i(TAG, "Download completed successfully: $displayTitle ($quality) - ${finalResult.fileSize} bytes")
+                    
                     // Show completion notification
                     showCompletionNotification(displayTitle, mediaStoreUri, finalResult.filePath)
                 } else {
@@ -341,10 +356,13 @@ class BackgroundDownloadService : Service() {
                     Log.e(TAG, "  Free space MB: ${getAvailableStorageSpace(getDownloadDirectory())}")
                     Log.e(TAG, "  Error: ${result.error}")
                     
-                    updateNotification("Download failed: ${result.error}", displayTitle)
+                    // Convert technical error to user-friendly message
+                    val userFriendlyError = convertToUserFriendlyError(result.error ?: "Unknown error")
+                    
+                    updateNotification("Download failed: $userFriendlyError", displayTitle)
                     
                     // Mark download as failed
-                    downloadResumptionManager.failDownload(downloadId, result.error ?: "Unknown error")
+                    downloadResumptionManager.failDownload(downloadId, userFriendlyError)
                     
                     // Add failed download to history
                     downloadHistoryManager.addDownload(
@@ -355,10 +373,10 @@ class BackgroundDownloadService : Service() {
                         filePath = null,
                         fileSize = 0,
                         success = false,
-                        error = result.error
+                        error = userFriendlyError
                     )
                     
-                    showErrorNotification(displayTitle, result.error ?: "Unknown error")
+                    showErrorNotification(displayTitle, userFriendlyError)
                 }
                 
             } catch (e: Exception) {
@@ -485,7 +503,7 @@ class BackgroundDownloadService : Service() {
                 updateNotification("Processing completed file...", title)
                 Log.d(TAG, "Finished: ${progressInfo.filename}")
                 
-                // Mark as processing
+                // Mark as processing - this will be updated to COMPLETED when the file is moved to MediaStore
                 downloadResumptionManager.updateStatus(downloadId, DownloadResumptionManager.DownloadStatus.PROCESSING)
             }
             
@@ -767,6 +785,57 @@ class BackgroundDownloadService : Service() {
         }
         
         return null
+    }
+    
+    /**
+     * Convert technical error messages to user-friendly messages
+     */
+    private fun convertToUserFriendlyError(error: String): String {
+        return when {
+            error.contains("format is not available", ignoreCase = true) -> 
+                "This video format is not available. Try a different quality setting."
+            error.contains("requested format", ignoreCase = true) -> 
+                "The selected video quality is not available for this video."
+            error.contains("network", ignoreCase = true) || error.contains("connection", ignoreCase = true) -> 
+                "Network connection problem. Please check your internet connection."
+            error.contains("timeout", ignoreCase = true) -> 
+                "Download timed out. Please try again."
+            error.contains("permission", ignoreCase = true) -> 
+                "Permission denied. Please check app permissions."
+            error.contains("storage", ignoreCase = true) || error.contains("space", ignoreCase = true) -> 
+                "Not enough storage space available."
+            error.contains("not found", ignoreCase = true) -> 
+                "Video not found. The link may be invalid or the video may have been removed."
+            error.contains("private", ignoreCase = true) || error.contains("unavailable", ignoreCase = true) -> 
+                "This video is private or unavailable."
+            error.contains("age", ignoreCase = true) || error.contains("restricted", ignoreCase = true) -> 
+                "This video has age restrictions and cannot be downloaded."
+            error.contains("blocked", ignoreCase = true) || error.contains("forbidden", ignoreCase = true) -> 
+                "This video is blocked or restricted in your region."
+            error.contains("server error", ignoreCase = true) || error.contains("http 5", ignoreCase = true) -> 
+                "Server error occurred. Please try again later."
+            error.contains("rate limit", ignoreCase = true) || error.contains("too many requests", ignoreCase = true) -> 
+                "Too many requests. Please wait a moment before trying again."
+            error.contains("invalid url", ignoreCase = true) || error.contains("malformed", ignoreCase = true) -> 
+                "Invalid video URL. Please check the link and try again."
+            error.contains("extractor", ignoreCase = true) || error.contains("unsupported", ignoreCase = true) -> 
+                "This video site is not supported or the video format is incompatible."
+            error.contains("cookies", ignoreCase = true) || error.contains("login", ignoreCase = true) -> 
+                "This video requires login or special access that cannot be provided."
+            error.contains("copyright", ignoreCase = true) || error.contains("dmca", ignoreCase = true) -> 
+                "This video cannot be downloaded due to copyright restrictions."
+            error.contains("geo", ignoreCase = true) || error.contains("region", ignoreCase = true) -> 
+                "This video is not available in your region."
+            error.contains("live", ignoreCase = true) || error.contains("streaming", ignoreCase = true) -> 
+                "Live streams cannot be downloaded. Please try with a regular video."
+            error.contains("playlist", ignoreCase = true) -> 
+                "Playlist downloads are not supported. Please try with individual video links."
+            else -> {
+                // Log the novel error for debugging while showing a generic message
+                Log.w(TAG, "Novel error encountered: $error")
+                "Download failed due to an unexpected error. Please try again or contact support if the problem persists."
+            }
+        }
     }
 }
 

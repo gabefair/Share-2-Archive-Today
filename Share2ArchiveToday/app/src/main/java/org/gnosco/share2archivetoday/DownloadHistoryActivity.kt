@@ -48,25 +48,7 @@ class DownloadHistoryActivity : Activity() {
             
             val allDownloads = mutableListOf<DownloadHistoryItem>()
             
-            // Add active downloads
-            activeDownloads.forEach { download ->
-                allDownloads.add(
-                    DownloadHistoryItem(
-                        title = download.title,
-                        url = download.url,
-                        uploader = "Unknown",
-                        quality = download.quality,
-                        filePath = download.partialFilePath,
-                        fileSize = download.totalBytes,
-                        success = download.status == DownloadResumptionManager.DownloadStatus.COMPLETED,
-                        error = download.error,
-                        timestamp = download.startTime,
-                        status = download.status.name
-                    )
-                )
-            }
-            
-            // Add completed downloads
+            // Only add completed downloads to history (not active/in-progress ones)
             completedDownloads.forEach { download: DownloadHistoryManager.DownloadHistoryEntry ->
                 allDownloads.add(
                     DownloadHistoryItem(
@@ -84,12 +66,34 @@ class DownloadHistoryActivity : Activity() {
                 )
             }
             
+            // Add active downloads only if they are truly completed (not in progress)
+            activeDownloads.forEach { download ->
+                if (download.status == DownloadResumptionManager.DownloadStatus.COMPLETED) {
+                    allDownloads.add(
+                        DownloadHistoryItem(
+                            title = download.title,
+                            url = download.url,
+                            uploader = "Unknown",
+                            quality = download.quality,
+                            filePath = download.partialFilePath,
+                            fileSize = download.totalBytes,
+                            success = true,
+                            error = null,
+                            timestamp = download.startTime,
+                            status = "COMPLETED"
+                        )
+                    )
+                }
+            }
+            
             // Sort by timestamp (newest first)
             allDownloads.sortByDescending { it.timestamp }
             
             // Create simple string list for ListView
             val displayItems = allDownloads.map { item ->
-                "${item.title} - ${item.status} (${item.quality})"
+                val statusIcon = if (item.success) "✅" else "❌"
+                val fileSizeText = if (item.fileSize > 0) " (${formatFileSize(item.fileSize)})" else ""
+                "$statusIcon ${item.title} - ${item.status}$fileSizeText"
             }
             
             adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, displayItems)

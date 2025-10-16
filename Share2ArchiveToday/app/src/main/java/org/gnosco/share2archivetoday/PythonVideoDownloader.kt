@@ -40,10 +40,34 @@ class PythonVideoDownloader(private val context: Context) {
             val py = Python.getInstance()
             pythonModule = py.getModule(PYTHON_MODULE)
             
+            // Disable Python stdout/stderr in release builds
+            if (!BuildConfig.DEBUG) {
+                disablePythonLogging(py)
+            }
+            
             Log.d(TAG, "Python initialized successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize Python", e)
             throw RuntimeException("Failed to initialize Python: ${e.message}", e)
+        }
+    }
+    
+    /**
+     * Disable Python stdout/stderr logging in production builds
+     */
+    private fun disablePythonLogging(py: Python) {
+        try {
+            val sys = py.getModule("sys")
+            val os = py.getModule("os")
+            
+            // Redirect stdout and stderr to devnull
+            val devnull = os.callAttr("open", "/dev/null", "w")
+            sys.put("stdout", devnull)
+            sys.put("stderr", devnull)
+            
+            Log.d(TAG, "Python logging disabled for production")
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not disable Python logging: ${e.message}")
         }
     }
     
@@ -97,7 +121,6 @@ class PythonVideoDownloader(private val context: Context) {
         outputDir: String,
         quality: String = "best",
         progressCallback: ((ProgressInfo) -> Unit)? = null,
-        estimatedSizeMB: Long = 100,
         formatId: String? = null
     ): DownloadResult {
         try {
@@ -113,15 +136,28 @@ class PythonVideoDownloader(private val context: Context) {
             // Create Python progress callback
             val pythonCallback = createPythonProgressCallback(progressCallback)
             
-            // Call Python download function
-            val result = pythonModule?.callAttr(
-                "download_video",
-                url,
-                outputDir,
-                quality,
-                pythonCallback,
-                formatId
-            )
+            // Call Python download function with fallback if callback fails
+            val result = try {
+                pythonModule?.callAttr(
+                    "download_video",
+                    url,
+                    outputDir,
+                    quality,
+                    pythonCallback,
+                    formatId
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Download with callback failed, retrying without callback: ${e.message}")
+                // Fallback: try without callback
+                pythonModule?.callAttr(
+                    "download_video",
+                    url,
+                    outputDir,
+                    quality,
+                    null, // No callback
+                    formatId
+                )
+            }
             
             // Parse result
             return parseDownloadResult(result)
@@ -173,14 +209,26 @@ class PythonVideoDownloader(private val context: Context) {
             // Create Python progress callback
             val pythonCallback = createPythonProgressCallback(progressCallback)
             
-            // Call Python download function
-            val result = pythonModule?.callAttr(
-                "download_audio",
-                url,
-                outputDir,
-                audioFormat,
-                pythonCallback
-            )
+            // Call Python download function with fallback if callback fails
+            val result = try {
+                pythonModule?.callAttr(
+                    "download_audio",
+                    url,
+                    outputDir,
+                    audioFormat,
+                    pythonCallback
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Audio download with callback failed, retrying without callback: ${e.message}")
+                // Fallback: try without callback
+                pythonModule?.callAttr(
+                    "download_audio",
+                    url,
+                    outputDir,
+                    audioFormat,
+                    null // No callback
+                )
+            }
             
             // Parse result
             return parseDownloadResult(result)
@@ -221,17 +269,31 @@ class PythonVideoDownloader(private val context: Context) {
         
         return try {
             val py = Python.getInstance()
-            val builtins = py.getBuiltins()
             
-            // Create a Python-compatible callback function
-            py.getModule("__main__").put("kotlin_callback", object : Any() {
-                fun __call__(progress: PyObject) {
-                    val progressInfo = parsePythonProgress(progress)
-                    kotlinCallback(progressInfo)
-                }
-            })
+            // Create a simple Python function that handles the callback
+            val callbackCode = """
+                import sys
+                def progress_callback(progress_dict):
+                    try:
+                        # Store progress info for Kotlin to read
+                        global _last_progress
+                        _last_progress = progress_dict
+                    except Exception as e:
+                        print(f"Error in progress callback: {e}", file=sys.stderr)
+                
+                progress_callback
+            """.trimIndent()
             
-            py.getModule("__main__")["kotlin_callback"]
+            // Execute the callback code
+            py.getBuiltins().get("exec")?.call(callbackCode) //Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'com.chaquo.python.PyObject?'.
+            
+            // Get the callback function
+            val callback = py.getModule("__main__").get("progress_callback")
+            
+            // Store the Kotlin callback for later use
+            py.getModule("__main__").put("_kotlin_callback", kotlinCallback)
+            
+            callback
         } catch (e: Exception) {
             Log.e(TAG, "Error creating Python callback", e)
             null
