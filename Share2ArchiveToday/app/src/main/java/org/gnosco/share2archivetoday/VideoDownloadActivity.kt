@@ -549,12 +549,6 @@ class VideoDownloadActivity : Activity() {
         return appDownloadsDir.absolutePath
     }
     
-    private fun downloadAndSaveToDownloads(url: String, fileName: String) {
-        // This method is no longer used - downloads are handled by BackgroundDownloadService
-        Toast.makeText(this, "Download functionality moved to background service", Toast.LENGTH_SHORT).show()
-        finish()
-    }
-    
     private fun getMimeType(filePath: String): String {
         val extension = filePath.substringAfterLast('.', "").lowercase()
         return when (extension) {

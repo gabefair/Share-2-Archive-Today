@@ -534,7 +534,8 @@ class BackgroundDownloadService : Service() {
             "timeout",
             "temporary",
             "server error",
-            "rate limit"
+            "rate limit",
+            "HTTP 500", "502", "503", "504"
         )
         
         val errorLower = error.lowercase()

@@ -70,13 +70,20 @@
             </intent-filter>
         </activity>
 
-        <!-- Test activity for debugging video download functionality -->
+        <!-- Test activity for debugging video download functionality (debug builds only) -->
         <activity
             android:name=".VideoDownloadTestActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="Test Video Download"
             android:icon="@drawable/ic_video_download"
             android:theme="@android:style/Theme.NoDisplay" />
+
+        <!-- Debug activity for feature flags (debug builds only) -->
+        <activity
+            android:name=".FeatureFlagDebugActivity"
+            android:exported="false"
+            android:label="Feature Flag Debug"
+            android:theme="@android:style/Theme.Material.Light" />
 
         <!-- Download history activity -->
         <activity

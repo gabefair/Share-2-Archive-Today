@@ -23,6 +23,11 @@ open class MainActivity : Activity() {
         // Initialize QR code scanner
         qrCodeScanner = QRCodeScanner(applicationContext)
 
+        // Test debug features (only in debug builds)
+        if (BuildConfig.ENABLE_DEBUG_TESTING) {
+            DebugFeatureTester.logTestResults(this)
+        }
+
         handleShareIntent(intent)
     }
 
