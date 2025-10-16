@@ -309,16 +309,21 @@ class BackgroundDownloadService : Service() {
                         moveToMediaStore(filePath, displayTitle)
                     }
                     
-                    // Mark download as completed
-                    downloadResumptionManager.completeDownload(downloadId, finalResult.filePath ?: "", finalResult.fileSize)
+                    // Get the actual file path from MediaStore URI for history
+                    val finalFilePath = mediaStoreUri?.let { uri ->
+                        getFilePathFromMediaStoreUri(uri)
+                    } ?: finalResult.filePath
                     
-                    // Add to download history
+                    // Mark download as completed
+                    downloadResumptionManager.completeDownload(downloadId, finalFilePath ?: "", finalResult.fileSize)
+                    
+                    // Add to download history with the final file path
                     downloadHistoryManager.addDownload(
                         url = url,
                         title = displayTitle,
                         uploader = displayUploader,
                         quality = quality,
-                        filePath = finalResult.filePath,
+                        filePath = finalFilePath,
                         fileSize = finalResult.fileSize,
                         success = true
                     )
@@ -689,6 +694,26 @@ class BackgroundDownloadService : Service() {
      * Move downloaded file from app-specific dir to MediaStore Downloads
      * Returns the content URI that can be used to open the file
      */
+    /**
+     * Get actual file path from MediaStore URI
+     */
+    private fun getFilePathFromMediaStoreUri(uri: android.net.Uri): String? {
+        try {
+            val projection = arrayOf(android.provider.MediaStore.MediaColumns.DATA)
+            contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val columnIndex = cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns.DATA)
+                    val path = cursor.getString(columnIndex)
+                    Log.d(TAG, "Resolved MediaStore URI $uri to path: $path")
+                    return path
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting file path from MediaStore URI", e)
+        }
+        return null
+    }
+    
     private fun moveToMediaStore(filePath: String, title: String): android.net.Uri? {
         try {
             val file = File(filePath)

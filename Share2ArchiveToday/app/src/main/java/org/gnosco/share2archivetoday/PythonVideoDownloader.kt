@@ -56,18 +56,32 @@ class PythonVideoDownloader(private val context: Context) {
             
             val result = pythonModule?.callAttr("get_video_info", url)
             
-            return result?.let {
-                VideoInfo(
-                    title = it["title"]?.toString() ?: "Unknown",
-                    uploader = it["uploader"]?.toString() ?: "Unknown",
-                    duration = it["duration"]?.toInt() ?: 0,
-                    thumbnail = it["thumbnail"]?.toString() ?: "",
-                    description = it["description"]?.toString() ?: ""
-                )
+            if (result == null) {
+                Log.e(TAG, "Python returned null for video info")
+                return null
             }
+            
+            Log.d(TAG, "Python result: ${result.toString()}")
+            
+            // Use .callAttr("get", key) to access dictionary values
+            val title = result.callAttr("get", "title")?.toString() ?: "Unknown"
+            val uploader = result.callAttr("get", "uploader")?.toString() ?: "Unknown"
+            val duration = result.callAttr("get", "duration")?.toInt() ?: 0
+            val thumbnail = result.callAttr("get", "thumbnail")?.toString() ?: ""
+            val description = result.callAttr("get", "description")?.toString() ?: ""
+            
+            Log.d(TAG, "Parsed video info - Title: $title, Uploader: $uploader, Duration: $duration")
+            
+            return VideoInfo(
+                title = title,
+                uploader = uploader,
+                duration = duration,
+                thumbnail = thumbnail,
+                description = description
+            )
         } catch (e: PyException) {
             Log.e(TAG, "Python error getting video info: ${e.message}")
-            Log.e(TAG, "Python traceback: ${e.printStackTrace()}")
+            e.printStackTrace()
             return null
         } catch (e: Exception) {
             Log.e(TAG, "Error getting video info", e)

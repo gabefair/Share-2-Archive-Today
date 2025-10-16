@@ -93,6 +93,7 @@ class VideoDownloader:
             Dictionary with video info (title, uploader, formats, etc.)
         """
         try:
+            print(f"[info] Getting video info for: {url}", flush=True)
             ydl_opts = {
                 'quiet': True,
                 'no_warnings': True,
@@ -102,14 +103,23 @@ class VideoDownloader:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 
-                return {
-                    'title': info.get('title', 'Unknown'),
-                    'uploader': info.get('uploader', 'Unknown'),
-                    'duration': info.get('duration', 0),
+                title = info.get('title', 'Unknown')
+                uploader = info.get('uploader', 'Unknown')
+                duration = info.get('duration', 0)
+                
+                print(f"[info] Extracted info - Title: {title}, Uploader: {uploader}, Duration: {duration}s", flush=True)
+                
+                result = {
+                    'title': title,
+                    'uploader': uploader,
+                    'duration': duration,
                     'formats': self._extract_format_info(info.get('formats', [])),
                     'thumbnail': info.get('thumbnail', ''),
                     'description': info.get('description', ''),
                 }
+                
+                print(f"[info] Returning video info: {result}", flush=True)
+                return result
                 
         except Exception as e:
             print(f"Error getting video info: {e}", file=sys.stderr, flush=True)

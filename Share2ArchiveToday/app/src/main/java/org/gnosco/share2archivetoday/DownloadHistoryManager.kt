@@ -149,6 +149,42 @@ class DownloadHistoryManager(private val context: Context) {
     }
     
     /**
+     * Check if a URL was already successfully downloaded
+     * @param url URL to check
+     * @return DownloadHistoryEntry if found and file still exists, null otherwise
+     */
+    fun findSuccessfulDownload(url: String): DownloadHistoryEntry? {
+        Log.d(TAG, "Searching for existing download of URL: $url")
+        val successfulDownloads = getSuccessfulDownloads()
+        Log.d(TAG, "Total successful downloads in history: ${successfulDownloads.size}")
+        
+        successfulDownloads.forEach { entry ->
+            Log.d(TAG, "Checking entry: URL=${entry.url}, Title=${entry.title}, FilePath=${entry.filePath}")
+        }
+        
+        val matchingEntry = successfulDownloads.firstOrNull { it.url == url }
+        if (matchingEntry != null) {
+            Log.d(TAG, "Found matching URL entry: ${matchingEntry.title}")
+            if (matchingEntry.filePath != null) {
+                val fileExists = java.io.File(matchingEntry.filePath).exists()
+                Log.d(TAG, "File path: ${matchingEntry.filePath}, exists: $fileExists")
+                if (fileExists) {
+                    Log.d(TAG, "Returning existing download entry")
+                    return matchingEntry
+                } else {
+                    Log.d(TAG, "File no longer exists, ignoring entry")
+                }
+            } else {
+                Log.d(TAG, "File path is null, ignoring entry")
+            }
+        } else {
+            Log.d(TAG, "No matching URL found in history")
+        }
+        
+        return null
+    }
+    
+    /**
      * Remove a download from history
      * @param id Download ID
      * @return true if removed successfully, false otherwise
