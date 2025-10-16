@@ -279,6 +279,7 @@ class PythonVideoDownloader(private val context: Context) {
     private fun parseDownloadResult(result: PyObject?): DownloadResult {
         return try {
             if (result == null) {
+                Log.e(TAG, "Python returned null result")
                 return DownloadResult(
                     success = false,
                     error = "No result from Python",
@@ -290,6 +291,10 @@ class PythonVideoDownloader(private val context: Context) {
                 )
             }
             
+            // Log raw result for debugging
+            Log.d(TAG, "Parsing Python result: ${result.toString()}")
+            
+            // Try to extract each field and log any issues
             val success = result["success"]?.toBoolean() ?: false
             val error = result["error"]?.toString()
             val filePath = result["file_path"]?.toString()
@@ -297,6 +302,8 @@ class PythonVideoDownloader(private val context: Context) {
             val audioPath = result["audio_path"]?.toString()
             val separateAv = result["separate_av"]?.toBoolean() ?: false
             val fileSize = result["file_size"]?.toLong() ?: 0L
+            
+            Log.d(TAG, "Parsed result - success: $success, error: $error, filePath: $filePath, videoPath: $videoPath, audioPath: $audioPath, separateAv: $separateAv, fileSize: $fileSize")
             
             DownloadResult(
                 success = success,

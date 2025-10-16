@@ -306,7 +306,7 @@ class VideoDownloader:
                 print(f"[info] Video: {video_path} ({os.path.getsize(video_path)} bytes)", flush=True)
                 print(f"[info] Audio: {audio_path} ({os.path.getsize(audio_path)} bytes)", flush=True)
                 # Return separate streams for MediaMuxer to merge
-                return {
+                result = {
                     'success': True,
                     'error': None,
                     'file_path': None,
@@ -315,6 +315,8 @@ class VideoDownloader:
                     'separate_av': True,
                     'file_size': os.path.getsize(video_path) + os.path.getsize(audio_path)
                 }
+                print(f"[info] Returning result: {result}", flush=True)
+                return result
             else:
                 return {
                     'success': False,
