@@ -2,6 +2,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Permissions for video downloading and notifications -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Only needed on API <= 28 to write public storage. We target MediaStore on Q+ so scope it. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <!-- Read not required for our MediaStore writes; scoped storage avoids this on 29+. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
@@ -10,16 +21,23 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.NoDisplay">
 
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
-                <data android:mimeType="image/*" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
@@ -35,6 +53,43 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".VideoDownloadActivity"
+            android:exported="true"
+            android:label="Download Video/Media"
+            android:icon="@drawable/ic_share_video_download"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:taskAffinity=""
+            android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity>
+
+        <!-- Test activity for debugging video download functionality -->
+        <activity
+            android:name=".VideoDownloadTestActivity"
+            android:exported="true"
+            android:label="Test Video Download"
+            android:icon="@drawable/ic_video_download"
+            android:theme="@android:style/Theme.NoDisplay" />
+
+        <!-- Download history activity -->
+        <activity
+            android:name=".DownloadHistoryActivity"
+            android:exported="false"
+            android:label="Download History"
+            android:theme="@android:style/Theme.Material.Light" />
+
+        <!-- Background service for video downloads -->
+        <service
+            android:name=".BackgroundDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProcessing" />
 
     </application>
 

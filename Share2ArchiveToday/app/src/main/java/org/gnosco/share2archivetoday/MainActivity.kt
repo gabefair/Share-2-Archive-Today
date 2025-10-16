@@ -1,7 +1,7 @@
 package org.gnosco.share2archivetoday
 // This file is: MainActivity.kt
 
-import WebURLMatcher
+import org.gnosco.share2archivetoday.WebURLMatcher
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -499,6 +499,33 @@ open class MainActivity : Activity() {
             .removeSuffix(")")
             .removeSuffix("'")
             .removeSuffix("\"")
+    }
+
+    /**
+     * Test method to verify anchor and text fragment removal functionality
+     * This can be called for testing purposes
+     */
+    internal fun testAnchorAndTextFragmentRemoval() {
+        val testUrls = listOf(
+            "https://example.com/page#section1",
+            "https://example.com/page#:~:text=some%20text%20to%20highlight",
+            "https://example.com/page?param=value#anchor",
+            "https://example.com/page#:~:text=highlight%20this%20text&other=param",
+            "https://example.com/page#regular-anchor",
+            "https://example.com/page#:~:text=complex%20text%20with%20spaces%20and%20symbols!",
+            "https://example.com/page#:~:text=start,end",
+            "https://example.com/page#:~:text=prefix-,text,-suffix",
+            "https://example.com/page?query=value#:~:text=text%20fragment",
+            "https://example.com/page" // No fragment
+        )
+        
+        Log.d("MainActivity", "Testing anchor and text fragment removal:")
+        testUrls.forEach { url ->
+            val cleaned = removeAnchorsAndTextFragments(url)
+            Log.d("MainActivity", "Original: $url")
+            Log.d("MainActivity", "Cleaned:  $cleaned")
+            Log.d("MainActivity", "---")
+        }
     }
 
     open fun openInBrowser(url: String) {

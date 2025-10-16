@@ -1,3 +1,5 @@
+package org.gnosco.share2archivetoday
+
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    
+    <!-- Background circle using path -->
+    <path
+        android:fillColor="@android:color/holo_blue_light"
+        android:pathData="M12,1C6.48,1 2,5.48 2,11s4.48,10 10,10s10,-4.48 10,-10S17.52,1 12,1z"/>
+    
+    <!-- Video play icon -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M8,5v14l11,-7z"/>
+    
+    <!-- Download arrow -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12,15l-3,-3h2V9h2v3h2l-3,3z"/>
+    
+    <!-- Small download indicator -->
+    <path
+        android:fillColor="@android:color/holo_orange_light"
+        android:pathData="M18,6h-2v2h2V6zM18,8h-2v2h2V8z"/>
+</vector>
