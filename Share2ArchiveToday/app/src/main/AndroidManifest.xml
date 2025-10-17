@@ -54,6 +54,7 @@
             </intent-filter>
         </activity>
 
+        <!-- Video download activity - only available in full flavor -->
         <activity
             android:name=".VideoDownloadActivity"
             android:exported="true"
@@ -61,7 +62,8 @@
             android:icon="@drawable/ic_share_video_download"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:taskAffinity=""
-            android:excludeFromRecents="true">
+            android:excludeFromRecents="true"
+            tools:ignore="MissingClass">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -90,6 +92,13 @@
             android:name=".DownloadHistoryActivity"
             android:exported="false"
             android:label="Download History"
+            android:theme="@android:style/Theme.Material.Light" />
+
+        <!-- Download resumption activity -->
+        <activity
+            android:name=".DownloadResumptionActivity"
+            android:exported="false"
+            android:label="Download Manager"
             android:theme="@android:style/Theme.Material.Light" />
 
         <!-- Background service for video downloads -->

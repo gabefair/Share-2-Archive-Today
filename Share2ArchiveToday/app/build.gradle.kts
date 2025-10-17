@@ -10,13 +10,33 @@ android {
 
     defaultConfig {
         applicationId = "org.gnosco.share2archivetoday"
-        minSdk = 30
+        minSdk = 28
         targetSdk = 36
         versionCode = 70
         versionName = "7.0"
         
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+        
+        // Feature flags for different architectures
+        buildConfigField("boolean", "SUPPORTS_VIDEO_DOWNLOAD", "true")
+    }
+    
+    // Create product flavors for different feature sets
+    flavorDimensions += "features"
+    productFlavors {
+        create("full") {
+            dimension = "features"
+            buildConfigField("boolean", "SUPPORTS_VIDEO_DOWNLOAD", "true")
+            buildConfigField("boolean", "SUPPORTS_ARCHIVE_FEATURES", "true")
+            versionNameSuffix = "-full"
+        }
+        create("archive") {
+            dimension = "features"
+            buildConfigField("boolean", "SUPPORTS_VIDEO_DOWNLOAD", "false")
+            buildConfigField("boolean", "SUPPORTS_ARCHIVE_FEATURES", "true")
+            versionNameSuffix = "-archive"
         }
     }
 
