@@ -8,6 +8,7 @@ import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import kotlinx.coroutines.Job
 import java.io.File
+import org.gnosco.share2archivetoday.BuildConfig
 
 /**
  * Kotlin wrapper for Python yt-dlp video downloader
@@ -89,12 +90,17 @@ class PythonVideoDownloader(private val context: Context) {
             val result = pythonModule?.callAttr("get_video_info", url)
             
             return result?.let {
+                val formats = parseFormats(it["formats"])
                 VideoInfo(
                     title = it["title"]?.toString() ?: "Unknown",
                     uploader = it["uploader"]?.toString() ?: "Unknown",
                     duration = it["duration"]?.toInt() ?: 0,
                     thumbnail = it["thumbnail"]?.toString() ?: "",
-                    description = it["description"]?.toString() ?: ""
+                    description = it["description"]?.toString() ?: "",
+                    formats = formats,
+                    extractor = it["extractor"]?.toString(),
+                    extractorKey = it["extractor_key"]?.toString(),
+                    webpageUrl = it["webpage_url"]?.toString()
                 )
             }
         } catch (e: PyException) {
@@ -108,6 +114,38 @@ class PythonVideoDownloader(private val context: Context) {
     }
     
     /**
+     * Parse formats from Python result
+     */
+    private fun parseFormats(formatsPyObject: PyObject?): List<FormatInfo> {
+        if (formatsPyObject == null) return emptyList()
+        
+        return try {
+            val formatsList = formatsPyObject.asList()
+            formatsList.map { formatObj ->
+                FormatInfo(
+                    formatId = formatObj["format_id"]?.toString() ?: "",
+                    ext = formatObj["ext"]?.toString() ?: "",
+                    resolution = formatObj["resolution"]?.toString() ?: "",
+                    height = formatObj["height"]?.toInt() ?: 0,
+                    qualityLabel = formatObj["quality_label"]?.toString() ?: "",
+                    filesize = formatObj["filesize"]?.toLong() ?: 0L,
+                    vcodec = formatObj["vcodec"]?.toString() ?: "",
+                    acodec = formatObj["acodec"]?.toString() ?: "",
+                    hasAudio = formatObj["has_audio"]?.toBoolean() ?: false,
+                    hasVideo = formatObj["has_video"]?.toBoolean() ?: false,
+                    fps = formatObj["fps"]?.toInt() ?: 0,
+                    formatNote = formatObj["format_note"]?.toString() ?: "",
+                    tbr = formatObj["tbr"]?.toInt() ?: 0,
+                    url = formatObj["url"]?.toString() ?: ""
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing formats: ${e.message}", e)
+            emptyList()
+        }
+    }
+    
+    /**
      * Download video with progress tracking
      */
     fun downloadVideo(
@@ -115,7 +153,7 @@ class PythonVideoDownloader(private val context: Context) {
         outputDir: String,
         quality: String = "best",
         progressCallback: ((ProgressInfo) -> Unit)? = null,
-        estimatedSizeMB: Long = 100,
+        @Suppress("UNUSED_PARAMETER") estimatedSizeMB: Long = 100,
         formatId: String? = null
     ): DownloadResult {
         try {
@@ -525,7 +563,31 @@ class PythonVideoDownloader(private val context: Context) {
         val uploader: String,
         val duration: Int,
         val thumbnail: String,
-        val description: String
+        val description: String,
+        val formats: List<FormatInfo> = emptyList(),
+        val extractor: String? = null,
+        val extractorKey: String? = null,
+        val webpageUrl: String? = null
+    )
+    
+    /**
+     * Format information data class
+     */
+    data class FormatInfo(
+        val formatId: String,
+        val ext: String,
+        val resolution: String,
+        val height: Int,
+        val qualityLabel: String,
+        val filesize: Long,
+        val vcodec: String,
+        val acodec: String,
+        val hasAudio: Boolean,
+        val hasVideo: Boolean,
+        val fps: Int,
+        val formatNote: String,
+        val tbr: Int,
+        val url: String
     )
     
     /**

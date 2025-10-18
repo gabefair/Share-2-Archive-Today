@@ -1,6 +1,7 @@
 package org.gnosco.share2archivetoday
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -15,7 +16,6 @@ import android.widget.ListView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
 import java.io.File
 
 /**
@@ -109,46 +109,48 @@ class DownloadHistoryActivity : Activity() {
             
             allDownloads.clear()
             
-            // Only add completed downloads to history (not active/in-progress ones)
+            // Create a map to deduplicate downloads by URL
+            val downloadMap = mutableMapOf<String, DownloadHistoryItem>()
+            
+            // Add completed downloads from history manager
             completedDownloads.forEach { download: DownloadHistoryManager.DownloadHistoryEntry ->
-                allDownloads.add(
-                    DownloadHistoryItem(
+                if (download.success) {  // Only show successful downloads
+                    downloadMap[download.url] = DownloadHistoryItem(
                         title = download.title,
                         url = download.url,
                         uploader = download.uploader,
                         quality = download.quality,
                         filePath = download.filePath,
                         fileSize = download.fileSize,
-                        success = download.success,
-                        error = download.error,
+                        success = true,
+                        error = null,
                         timestamp = download.timestamp,
-                        status = if (download.success) "COMPLETED" else "FAILED"
-                    )
-                )
-            }
-            
-            // Add active downloads only if they are truly completed (not in progress)
-            activeDownloads.forEach { download ->
-                if (download.status == DownloadResumptionManager.DownloadStatus.COMPLETED) {
-                    allDownloads.add(
-                        DownloadHistoryItem(
-                            title = download.title,
-                            url = download.url,
-                            uploader = "Unknown",
-                            quality = download.quality,
-                            filePath = download.partialFilePath,
-                            fileSize = download.totalBytes,
-                            success = true,
-                            error = null,
-                            timestamp = download.startTime,
-                            status = "COMPLETED"
-                        )
+                        status = "COMPLETED"
                     )
                 }
             }
             
-            // Sort by timestamp (newest first)
-            allDownloads.sortByDescending { it.timestamp }
+            // Add completed downloads from resumption manager (only if not already in history)
+            activeDownloads.forEach { download ->
+                if (download.status == DownloadResumptionManager.DownloadStatus.COMPLETED && 
+                    !downloadMap.containsKey(download.url)) {
+                    downloadMap[download.url] = DownloadHistoryItem(
+                        title = download.title,
+                        url = download.url,
+                        uploader = "Unknown",
+                        quality = download.quality,
+                        filePath = download.partialFilePath,
+                        fileSize = download.totalBytes,
+                        success = true,
+                        error = null,
+                        timestamp = download.startTime,
+                        status = "COMPLETED"
+                    )
+                }
+            }
+            
+            // Convert map to list and sort by timestamp (newest first)
+            allDownloads.addAll(downloadMap.values.sortedByDescending { it.timestamp })
             
             // Show/hide empty state
             if (allDownloads.isEmpty()) {
@@ -344,7 +346,7 @@ class DownloadHistoryActivity : Activity() {
             append("URL: ${item.url}")
         }
         
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        AlertDialog.Builder(this)
             .setTitle("Download Details")
             .setMessage(message)
             .setPositiveButton("OK", null)
@@ -358,7 +360,7 @@ class DownloadHistoryActivity : Activity() {
             append("URL: ${item.url}")
         }
         
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        AlertDialog.Builder(this)
             .setTitle("Download Failed")
             .setMessage(message)
             .setPositiveButton("OK", null)

@@ -221,22 +221,53 @@ class VideoDownloadActivity : Activity() {
                         append("Select Download Quality")
                         append("\nDuration: ${formatDuration(videoInfo.duration.toLong())}")
                         append("\nUploader: ${videoInfo.uploader}")
+                        append("\nExtractor: ${videoInfo.extractor ?: "unknown"}")
                         if (networkRecommendation.isNotEmpty()) {
                             append("\nNetwork: $networkRecommendation")
                         }
                     }
                     
-                    // Always add audio-only option at the end
+                    // Build quality options from available formats
                     val qualityOptions = mutableListOf<String>()
                     val qualityValues = mutableListOf<String>()
                     
-                    // Add "best" option
-                    qualityOptions.add("Best Available Quality")
-                    qualityValues.add("best")
+                    // Filter and sort formats based on quality rules
+                    val filteredFormats = filterFormatsByQualityRules(videoInfo.formats)
                     
-                    // Add audio-only option
-                    qualityOptions.add("Audio Only (MP3)")
-                    qualityValues.add("audio_mp3")
+                    Log.d(TAG, "Available formats: ${videoInfo.formats.size}, Filtered formats: ${filteredFormats.size}")
+                    
+                    if (filteredFormats.isEmpty()) {
+                        // Fallback if no formats available
+                        qualityOptions.add("Best Available Quality")
+                        qualityValues.add("best")
+                        Log.w(TAG, "No formats available, using fallback 'best' option")
+                    } else {
+                        // Add video formats
+                        for (format in filteredFormats) {
+                            if (format.hasVideo) {
+                                val qualityLabel = buildString {
+                                    append(format.qualityLabel)
+                                    if (format.hasAudio) {
+                                        append(" (Video+Audio)")
+                                    } else {
+                                        append(" (Video Only)")
+                                    }
+                                    if (format.filesize > 0) {
+                                        append(" - ${formatFileSize(format.filesize)}")
+                                    }
+                                }
+                                qualityOptions.add(qualityLabel)
+                                qualityValues.add(format.formatId)
+                            }
+                        }
+                        
+                        // Add audio-only option if available
+                        val audioFormats = filteredFormats.filter { !it.hasVideo && it.hasAudio }
+                        if (audioFormats.isNotEmpty()) {
+                            qualityOptions.add("Audio Only (MP3)")
+                            qualityValues.add("audio_mp3")
+                        }
+                    }
                     
                     AlertDialog.Builder(this@VideoDownloadActivity)
                         .setTitle(dialogTitle)
@@ -742,5 +773,52 @@ class VideoDownloadActivity : Activity() {
                host.contains("yt3.ggpht.com") ||
                host.contains("ytstatic.com") ||
                host.contains("youtubei.googleapis.com")
+    }
+    
+    /**
+     * Filter formats based on quality rules:
+     * - Don't offer anything less than 360p if the quality available is at least 360p
+     * - Don't offer anything less than 720p if at least 720p is available
+     * - Always keep "Original Quality" formats (height = 9999) from generic extractors
+     */
+    private fun filterFormatsByQualityRules(formats: List<PythonVideoDownloader.FormatInfo>): List<PythonVideoDownloader.FormatInfo> {
+        if (formats.isEmpty()) return formats
+        
+        // Find the highest available video quality (excluding special "Original Quality" marker)
+        val videoFormats = formats.filter { it.hasVideo && it.height < 9999 }
+        val maxHeight = videoFormats.maxOfOrNull { it.height } ?: 0
+        
+        Log.d(TAG, "Max available height: ${maxHeight}p (excluding unknown resolutions)")
+        
+        // Apply quality filtering rules
+        val filteredFormats = formats.filter { format ->
+            if (!format.hasVideo) {
+                // Keep all audio-only formats
+                true
+            } else if (format.height >= 9999) {
+                // Always keep "Original Quality" formats (unknown resolution from generic extractor)
+                Log.d(TAG, "Keeping format ${format.formatId}: Original Quality (unknown resolution)")
+                true
+            } else if (maxHeight == 0) {
+                // If we have no known resolutions, keep all video formats
+                Log.d(TAG, "No known resolutions, keeping all video formats")
+                true
+            } else {
+                val height = format.height
+                val shouldKeep = when {
+                    maxHeight >= 720 -> height >= 720  // If 720p+ available, only show 720p+
+                    maxHeight >= 360 -> height >= 360  // If 360p+ available, only show 360p+
+                    else -> true  // If less than 360p available, show all
+                }
+                if (!shouldKeep) {
+                    Log.d(TAG, "Filtering out format ${format.formatId}: ${height}p (below threshold)")
+                }
+                shouldKeep
+            }
+        }
+        
+        Log.d(TAG, "Filtered formats: ${filteredFormats.size} (from ${formats.size})")
+        return filteredFormats.sortedWith(compareByDescending<PythonVideoDownloader.FormatInfo> { it.hasVideo }
+            .thenByDescending { it.height })
     }
 }
