@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.util.Log
+import android.util.TypedValue
 import android.widget.Toast
 import android.widget.LinearLayout
 import android.widget.ListView
@@ -52,54 +53,93 @@ class DownloadHistoryActivity : Activity() {
     }
     
     private fun createLayout() {
+        // Convert dp to pixels for consistent sizing across devices
+        val dp16 = dpToPx(16f)
+        val dp12 = dpToPx(12f)
+        val dp8 = dpToPx(8f)
+        val dp48 = dpToPx(48f)  // Standard Android button height
+        
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(32, 32, 32, 32)
+            setPadding(dp16, dp16, dp16, dp16)
         }
         
         // Title
         val titleText = TextView(this).apply {
             text = "Download History"
-            textSize = 24f
-            setPadding(0, 0, 0, 32)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+            setPadding(0, 0, 0, dp16)
         }
         layout.addView(titleText)
         
-        // Action buttons
-        val buttonLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-        
+        // Clear History button
         clearHistoryButton = Button(this).apply {
-            text = "Clear History"
+            text = "CLEAR HISTORY"
+            isAllCaps = true
+            minHeight = dp48
+            setPadding(dp16, dp12, dp16, dp12)
             setOnClickListener { showClearHistoryDialog() }
         }
         
+        val clearButtonParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            setMargins(0, 0, 0, dp8)
+        }
+        layout.addView(clearHistoryButton, clearButtonParams)
+        
+        // Open Downloads Folder button
         openFolderButton = Button(this).apply {
-            text = "Open Downloads Folder"
+            text = "OPEN DOWNLOADS FOLDER"
+            isAllCaps = true
+            minHeight = dp48
+            setPadding(dp16, dp12, dp16, dp12)
             setOnClickListener { openDownloadsFolder() }
         }
         
-        buttonLayout.addView(clearHistoryButton)
-        buttonLayout.addView(openFolderButton)
-        layout.addView(buttonLayout)
+        val openButtonParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            setMargins(0, 0, 0, dp16)
+        }
+        layout.addView(openFolderButton, openButtonParams)
         
         // Empty state text
         emptyStateText = TextView(this).apply {
             text = "No downloads yet"
-            textSize = 16f
-            setPadding(0, 32, 0, 0)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setPadding(0, dp8, 0, 0)
             visibility = android.view.View.GONE
         }
         layout.addView(emptyStateText)
         
         // List view
         listView = ListView(this).apply {
-            setPadding(0, 32, 0, 0)
+            setPadding(0, 0, 0, 0)
         }
-        layout.addView(listView)
+        
+        val listParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
+            1f  // Take remaining space with weight
+        )
+        layout.addView(listView, listParams)
         
         setContentView(layout)
+    }
+    
+    /**
+     * Convert density-independent pixels (dp) to actual pixels based on screen density
+     * This ensures consistent sizing across different screen sizes and densities
+     */
+    private fun dpToPx(dp: Float): Int {
+        return TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            dp,
+            resources.displayMetrics
+        ).toInt()
     }
     
     private fun loadDownloadHistory() {
@@ -218,6 +258,10 @@ class DownloadHistoryActivity : Activity() {
         actions.add("View Details")
         actionCallbacks.add { showDownloadDetails(item) }
         
+        // Delete this download from history
+        actions.add("Delete from History")
+        actionCallbacks.add { showDeleteItemDialog(item) }
+        
         AlertDialog.Builder(this)
             .setTitle(item.title)
             .setItems(actions.toTypedArray()) { _, which ->
@@ -269,8 +313,8 @@ class DownloadHistoryActivity : Activity() {
     private fun showClearHistoryDialog() {
         AlertDialog.Builder(this)
             .setTitle("Clear Download History")
-            .setMessage("Are you sure you want to clear all download history? This action cannot be undone.")
-            .setPositiveButton("Clear") { _, _ ->
+            .setMessage("Are you sure you want to clear all download history? This will remove all entries from the list.\n\nNote: Downloaded files will NOT be deleted.")
+            .setPositiveButton("Clear All") { _, _ ->
                 downloadHistoryManager.clearHistory()
                 downloadResumptionManager.cleanupOldDownloads(0) // Clear all
                 loadDownloadHistory() // Refresh the list
@@ -278,6 +322,51 @@ class DownloadHistoryActivity : Activity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+    
+    private fun showDeleteItemDialog(item: DownloadHistoryItem) {
+        AlertDialog.Builder(this)
+            .setTitle("Delete from History")
+            .setMessage("Remove \"${item.title}\" from download history?\n\nNote: The downloaded file will NOT be deleted.")
+            .setPositiveButton("Delete") { _, _ ->
+                deleteHistoryItem(item)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun deleteHistoryItem(item: DownloadHistoryItem) {
+        try {
+            // Remove from history manager by URL
+            val history = downloadHistoryManager.getDownloadHistory().toMutableList()
+            val removed = history.removeAll { it.url == item.url && it.timestamp == item.timestamp }
+            
+            if (removed) {
+                // Save updated history
+                downloadHistoryManager.clearHistory()
+                history.forEach { entry ->
+                    downloadHistoryManager.addDownload(
+                        url = entry.url,
+                        title = entry.title,
+                        uploader = entry.uploader,
+                        quality = entry.quality,
+                        filePath = entry.filePath,
+                        fileSize = entry.fileSize,
+                        success = entry.success,
+                        error = entry.error
+                    )
+                }
+                
+                // Refresh the list
+                loadDownloadHistory()
+                Toast.makeText(this, "Removed from history", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Item not found in history", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting history item", e)
+            Toast.makeText(this, "Error removing item from history", Toast.LENGTH_SHORT).show()
+        }
     }
     
     private fun openDownloadsFolder() {
@@ -337,12 +426,31 @@ class DownloadHistoryActivity : Activity() {
     
     private fun showDownloadDetails(item: DownloadHistoryItem) {
         val message = buildString {
-            append("Title: ${item.title}\n")
-            append("Status: ${item.status}\n")
-            append("Quality: ${item.quality}\n")
+            append("Title: ${item.title}\n\n")
+            append("Status: ${item.status}\n\n")
+            append("Quality: ${item.quality}\n\n")
+            
             if (item.fileSize > 0) {
-                append("Size: ${formatFileSize(item.fileSize)}\n")
+                append("Size: ${formatFileSize(item.fileSize)}\n\n")
             }
+            
+            if (item.uploader.isNotEmpty() && item.uploader != "Unknown") {
+                append("Uploader: ${item.uploader}\n\n")
+            }
+            
+            // Format the download date
+            val dateStr = try {
+                java.text.SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", java.util.Locale.getDefault())
+                    .format(java.util.Date(item.timestamp))
+            } catch (e: Exception) {
+                "Unknown"
+            }
+            append("Downloaded: $dateStr\n\n")
+            
+            if (item.filePath != null) {
+                append("Location: ${item.filePath}\n\n")
+            }
+            
             append("URL: ${item.url}")
         }
         
@@ -350,6 +458,9 @@ class DownloadHistoryActivity : Activity() {
             .setTitle("Download Details")
             .setMessage(message)
             .setPositiveButton("OK", null)
+            .setNeutralButton("Copy URL") { _, _ ->
+                copyUrlToClipboard(item.url)
+            }
             .show()
     }
     

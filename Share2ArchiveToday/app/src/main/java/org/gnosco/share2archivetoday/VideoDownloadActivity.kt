@@ -135,8 +135,7 @@ class VideoDownloadActivity : Activity() {
         if (isYouTubeUrl(url)) {
             Toast.makeText(
                 this,
-                "YouTube video downloads are not allowed by Play Store. " +
-                "This app only supports non-YouTube video downloads.",
+                "YouTube video downloads are not allowed by Play Store. ",
                 Toast.LENGTH_LONG
             ).show()
             Log.w(TAG, "Blocked YouTube download attempt: $url")
