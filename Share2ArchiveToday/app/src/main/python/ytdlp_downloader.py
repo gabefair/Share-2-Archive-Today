@@ -121,17 +121,25 @@ class VideoDownloader:
                 for i, fmt in enumerate(formats):
                     print(f"[DEBUG] Format {i}: {fmt.get('format_id', 'unknown')} - {fmt.get('resolution', 'unknown')} - {fmt.get('ext', 'unknown')} - {fmt.get('vcodec', 'none')}/{fmt.get('acodec', 'none')}", flush=True)
                 
-                return {
+                extracted_formats = self._extract_format_info(formats)
+                print(f"[DEBUG] Extracted formats for Kotlin: {len(extracted_formats)} formats", flush=True)
+                for i, fmt in enumerate(extracted_formats):
+                    print(f"[DEBUG] Extracted format {i}: {fmt.get('format_id')} - {fmt.get('quality_label')} - has_video={fmt.get('has_video')}, has_audio={fmt.get('has_audio')}", flush=True)
+                
+                result = {
                     'title': info.get('title', 'Unknown'),
                     'uploader': info.get('uploader', 'Unknown'),
                     'duration': info.get('duration', 0),
-                    'formats': self._extract_format_info(formats),
+                    'formats': extracted_formats,
                     'thumbnail': info.get('thumbnail', ''),
                     'description': info.get('description', ''),
                     'extractor': info.get('extractor', 'unknown'),
                     'extractor_key': info.get('extractor_key', 'unknown'),
                     'webpage_url': info.get('webpage_url', url),
                 }
+                
+                print(f"[DEBUG] Returning video info with {len(result.get('formats', []))} formats", flush=True)
+                return result
                 
         except Exception as e:
             print(f"Error getting video info: {e}", file=sys.stderr, flush=True)

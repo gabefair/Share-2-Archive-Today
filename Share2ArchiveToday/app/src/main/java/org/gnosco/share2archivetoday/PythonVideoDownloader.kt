@@ -90,17 +90,22 @@ class PythonVideoDownloader(private val context: Context) {
             val result = pythonModule?.callAttr("get_video_info", url)
             
             return result?.let {
-                val formats = parseFormats(it["formats"])
+                // Use .get() method instead of bracket notation for Chaquopy compatibility
+                val formatsObj = it.callAttr("get", "formats")
+                Log.d(TAG, "Formats object from Python: $formatsObj")
+                
+                val formats = parseFormats(formatsObj)
+                
                 VideoInfo(
-                    title = it["title"]?.toString() ?: "Unknown",
-                    uploader = it["uploader"]?.toString() ?: "Unknown",
-                    duration = it["duration"]?.toInt() ?: 0,
-                    thumbnail = it["thumbnail"]?.toString() ?: "",
-                    description = it["description"]?.toString() ?: "",
+                    title = it.callAttr("get", "title")?.toString() ?: "Unknown",
+                    uploader = it.callAttr("get", "uploader")?.toString() ?: "Unknown",
+                    duration = it.callAttr("get", "duration")?.toInt() ?: 0,
+                    thumbnail = it.callAttr("get", "thumbnail")?.toString() ?: "",
+                    description = it.callAttr("get", "description")?.toString() ?: "",
                     formats = formats,
-                    extractor = it["extractor"]?.toString(),
-                    extractorKey = it["extractor_key"]?.toString(),
-                    webpageUrl = it["webpage_url"]?.toString()
+                    extractor = it.callAttr("get", "extractor")?.toString(),
+                    extractorKey = it.callAttr("get", "extractor_key")?.toString(),
+                    webpageUrl = it.callAttr("get", "webpage_url")?.toString()
                 )
             }
         } catch (e: PyException) {
@@ -117,30 +122,51 @@ class PythonVideoDownloader(private val context: Context) {
      * Parse formats from Python result
      */
     private fun parseFormats(formatsPyObject: PyObject?): List<FormatInfo> {
-        if (formatsPyObject == null) return emptyList()
+        if (formatsPyObject == null) {
+            Log.w(TAG, "formatsPyObject is null")
+            return emptyList()
+        }
         
         return try {
+            Log.d(TAG, "Parsing formats from Python, type: ${formatsPyObject.javaClass.name}")
+            
             val formatsList = formatsPyObject.asList()
-            formatsList.map { formatObj ->
-                FormatInfo(
-                    formatId = formatObj["format_id"]?.toString() ?: "",
-                    ext = formatObj["ext"]?.toString() ?: "",
-                    resolution = formatObj["resolution"]?.toString() ?: "",
-                    height = formatObj["height"]?.toInt() ?: 0,
-                    qualityLabel = formatObj["quality_label"]?.toString() ?: "",
-                    filesize = formatObj["filesize"]?.toLong() ?: 0L,
-                    vcodec = formatObj["vcodec"]?.toString() ?: "",
-                    acodec = formatObj["acodec"]?.toString() ?: "",
-                    hasAudio = formatObj["has_audio"]?.toBoolean() ?: false,
-                    hasVideo = formatObj["has_video"]?.toBoolean() ?: false,
-                    fps = formatObj["fps"]?.toInt() ?: 0,
-                    formatNote = formatObj["format_note"]?.toString() ?: "",
-                    tbr = formatObj["tbr"]?.toInt() ?: 0,
-                    url = formatObj["url"]?.toString() ?: ""
-                )
-            }
+            Log.d(TAG, "Formats list size: ${formatsList.size}")
+            
+            val parsedFormats = formatsList.mapIndexed { index, formatObj ->
+                try {
+                    Log.d(TAG, "Parsing format $index")
+                    // Use .callAttr("get", key) for Chaquopy compatibility
+                    // Convert floats to ints by going through Double first
+                    val formatInfo = FormatInfo(
+                        formatId = formatObj.callAttr("get", "format_id")?.toString() ?: "",
+                        ext = formatObj.callAttr("get", "ext")?.toString() ?: "",
+                        resolution = formatObj.callAttr("get", "resolution")?.toString() ?: "",
+                        height = formatObj.callAttr("get", "height")?.toInt() ?: 0,
+                        qualityLabel = formatObj.callAttr("get", "quality_label")?.toString() ?: "",
+                        filesize = formatObj.callAttr("get", "filesize")?.toLong() ?: 0L,
+                        vcodec = formatObj.callAttr("get", "vcodec")?.toString() ?: "",
+                        acodec = formatObj.callAttr("get", "acodec")?.toString() ?: "",
+                        hasAudio = formatObj.callAttr("get", "has_audio")?.toBoolean() ?: false,
+                        hasVideo = formatObj.callAttr("get", "has_video")?.toBoolean() ?: false,
+                        fps = formatObj.callAttr("get", "fps")?.toDouble()?.toInt() ?: 0,  // Handle Python floats
+                        formatNote = formatObj.callAttr("get", "format_note")?.toString() ?: "",
+                        tbr = formatObj.callAttr("get", "tbr")?.toDouble()?.toInt() ?: 0,  // Handle Python floats
+                        url = formatObj.callAttr("get", "url")?.toString() ?: ""
+                    )
+                    Log.d(TAG, "Successfully parsed format: ${formatInfo.formatId} - ${formatInfo.qualityLabel}")
+                    formatInfo
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing format $index: ${e.message}", e)
+                    null
+                }
+            }.filterNotNull()
+            
+            Log.d(TAG, "Successfully parsed ${parsedFormats.size} formats")
+            parsedFormats
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing formats: ${e.message}", e)
+            Log.e(TAG, "Error parsing formats list: ${e.message}", e)
+            e.printStackTrace()
             emptyList()
         }
     }
@@ -324,17 +350,17 @@ class PythonVideoDownloader(private val context: Context) {
      */
     private fun parsePythonProgress(progress: PyObject): ProgressInfo {
         return try {
-            val status = progress["status"]?.toString() ?: "unknown"
+            val status = progress.callAttr("get", "status")?.toString() ?: "unknown"
             
             when (status) {
                 "downloading" -> {
-                    val downloaded = progress["downloaded_bytes"]?.toLong() ?: 0L
-                    val total = progress["total_bytes"]?.toLong() 
-                        ?: progress["total_bytes_estimate"]?.toLong() 
+                    val downloaded = progress.callAttr("get", "downloaded_bytes")?.toLong() ?: 0L
+                    val total = progress.callAttr("get", "total_bytes")?.toLong() 
+                        ?: progress.callAttr("get", "total_bytes_estimate")?.toLong() 
                         ?: 0L
-                    val speed = progress["speed"]?.toDouble() ?: 0.0
-                    val eta = progress["eta"]?.toInt() ?: 0
-                    val filename = progress["filename"]?.toString() ?: ""
+                    val speed = progress.callAttr("get", "speed")?.toDouble() ?: 0.0
+                    val eta = progress.callAttr("get", "eta")?.toInt() ?: 0
+                    val filename = progress.callAttr("get", "filename")?.toString() ?: ""
                     
                     val percentage = if (total > 0) {
                         ((downloaded.toDouble() / total.toDouble()) * 100).toInt()
@@ -352,7 +378,7 @@ class PythonVideoDownloader(private val context: Context) {
                     )
                 }
                 "finished" -> {
-                    val filename = progress["filename"]?.toString() ?: ""
+                    val filename = progress.callAttr("get", "filename")?.toString() ?: ""
                     ProgressInfo.Finished(filename)
                 }
                 "error" -> {
