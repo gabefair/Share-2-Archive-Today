@@ -281,29 +281,29 @@ class DownloadHistoryActivity : Activity() {
     private fun shareVideo(item: DownloadHistoryItem) {
         if (item.filePath != null) {
             try {
-                val file = File(item.filePath)
-                if (file.exists()) {
-                    val uri = androidx.core.content.FileProvider.getUriForFile(
-                        this, packageName + ".fileprovider", file
-                    )
-                    val shareIntent = Intent().apply {
-                        action = Intent.ACTION_SEND
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        type = getMimeType(item.filePath)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    
-                    if (shareIntent.resolveActivity(packageManager) != null) {
-                        startActivity(Intent.createChooser(shareIntent, "Share Video"))
-                    } else {
-                        Toast.makeText(this, "No app found to share this file", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
+                val uri = parseFilePathOrUri(item.filePath)
+                
+                // Check if the file exists
+                if (!checkUriExists(uri)) {
                     Toast.makeText(this, "Video file no longer exists", Toast.LENGTH_SHORT).show()
+                    return
+                }
+                
+                val shareIntent = Intent().apply {
+                    action = Intent.ACTION_SEND
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    type = getMimeTypeFromUri(uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                
+                if (shareIntent.resolveActivity(packageManager) != null) {
+                    startActivity(Intent.createChooser(shareIntent, "Share Video"))
+                } else {
+                    Toast.makeText(this, "No app found to share this file", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error sharing video", e)
-                Toast.makeText(this, "Error sharing video", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Error sharing video: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         } else {
             Toast.makeText(this, "No file path available", Toast.LENGTH_SHORT).show()
@@ -371,56 +371,154 @@ class DownloadHistoryActivity : Activity() {
     
     private fun openDownloadsFolder() {
         try {
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val appDownloadsDir = File(downloadsDir, "Share2ArchiveToday")
-            
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(Uri.fromFile(appDownloadsDir), "resource/folder")
+            // Use Android's Downloads app/UI to show downloads
+            val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                // Try to open Downloads app via system UI
+                data = Uri.parse("package:com.android.documentsui")
             }
             
-            if (intent.resolveActivity(packageManager) != null) {
-                startActivity(intent)
-            } else {
-                // Fallback: try to open general downloads folder
-                val fallbackIntent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(Uri.fromFile(downloadsDir), "resource/folder")
+            // Fallback to generic intent to view downloads
+            if (intent.resolveActivity(packageManager) == null) {
+                // Use the MediaStore to show downloads
+                val downloadsIntent = Intent(Intent.ACTION_VIEW).apply {
+                    type = "*/*"
+                    putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("video/*", "audio/*"))
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 
-                if (fallbackIntent.resolveActivity(packageManager) != null) {
-                    startActivity(fallbackIntent)
-                } else {
-                    Toast.makeText(this, "No file manager found to open downloads folder", Toast.LENGTH_SHORT).show()
+                if (downloadsIntent.resolveActivity(packageManager) != null) {
+                    startActivity(Intent.createChooser(downloadsIntent, "Open Downloads"))
+                    return
                 }
             }
+            
+            // Last resort: Show helpful message
+            Toast.makeText(
+                this, 
+                "Please open your device's Downloads app to view downloaded files",
+                Toast.LENGTH_LONG
+            ).show()
         } catch (e: Exception) {
             Log.e(TAG, "Error opening downloads folder", e)
-            Toast.makeText(this, "Error opening downloads folder", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "Please open your device's Downloads app to view files",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
     
     private fun openFile(filePath: String) {
         try {
-            val file = File(filePath)
-            if (file.exists()) {
-                val uri = androidx.core.content.FileProvider.getUriForFile(
-                    this, packageName + ".fileprovider", file
-                )
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(uri, getMimeType(filePath))
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-                
-                if (intent.resolveActivity(packageManager) != null) {
-                    startActivity(intent)
-                } else {
-                    Toast.makeText(this, "No app found to open this file", Toast.LENGTH_SHORT).show()
-                }
+            val uri = parseFilePathOrUri(filePath)
+            
+            // Check if the file exists
+            if (!checkUriExists(uri)) {
+                Toast.makeText(this, "File not found at: $filePath", Toast.LENGTH_LONG).show()
+                Log.e(TAG, "File not found: $filePath")
+                return
+            }
+            
+            val mimeType = getMimeTypeFromUri(uri)
+            Log.d(TAG, "Opening file: $uri with mime type: $mimeType")
+            
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            
+            if (intent.resolveActivity(packageManager) != null) {
+                startActivity(intent)
             } else {
-                Toast.makeText(this, "File not found", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "No app found to open this file", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error opening file", e)
-            Toast.makeText(this, "Error opening file", Toast.LENGTH_SHORT).show()
+            Log.e(TAG, "Error opening file: $filePath", e)
+            Toast.makeText(this, "Error opening file: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    /**
+     * Parse a file path or URI string into a proper Uri object
+     * Handles both content:// URIs and legacy file paths
+     */
+    private fun parseFilePathOrUri(pathOrUri: String): Uri {
+        return when {
+            pathOrUri.startsWith("content://") -> Uri.parse(pathOrUri)
+            pathOrUri.startsWith("file://") -> Uri.parse(pathOrUri)
+            else -> {
+                // Legacy file path - convert to FileProvider URI
+                val file = File(pathOrUri)
+                if (file.exists()) {
+                    androidx.core.content.FileProvider.getUriForFile(
+                        this, 
+                        "$packageName.fileprovider", 
+                        file
+                    )
+                } else {
+                    // If file doesn't exist, still try to parse as URI
+                    Uri.parse(pathOrUri)
+                }
+            }
+        }
+    }
+    
+    /**
+     * Check if a URI points to an existing file
+     */
+    private fun checkUriExists(uri: Uri): Boolean {
+        return try {
+            when (uri.scheme) {
+                "content" -> {
+                    // For content URIs, try to open an input stream
+                    contentResolver.openInputStream(uri)?.use { true } ?: false
+                }
+                "file" -> {
+                    // For file URIs, check if file exists
+                    File(uri.path ?: "").exists()
+                }
+                else -> false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking if URI exists: $uri", e)
+            false
+        }
+    }
+    
+    /**
+     * Get MIME type from a URI
+     */
+    private fun getMimeTypeFromUri(uri: Uri): String {
+        return try {
+            when (uri.scheme) {
+                "content" -> {
+                    // Query ContentResolver for MIME type
+                    contentResolver.getType(uri) ?: guessMimeTypeFromUri(uri)
+                }
+                else -> guessMimeTypeFromUri(uri)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting MIME type for URI: $uri", e)
+            "video/*"
+        }
+    }
+    
+    /**
+     * Guess MIME type from URI string
+     */
+    private fun guessMimeTypeFromUri(uri: Uri): String {
+        val uriString = uri.toString()
+        val extension = uriString.substringAfterLast('.', "").lowercase()
+        return when (extension) {
+            "mp4" -> "video/mp4"
+            "webm" -> "video/webm"
+            "mkv" -> "video/x-matroska"
+            "mp3" -> "audio/mpeg"
+            "aac" -> "audio/aac"
+            "m4a" -> "audio/mp4"
+            "ogg" -> "audio/ogg"
+            "opus" -> "audio/opus"
+            else -> "video/*"
         }
     }
     
@@ -476,19 +574,6 @@ class DownloadHistoryActivity : Activity() {
             .setMessage(message)
             .setPositiveButton("OK", null)
             .show()
-    }
-    
-    private fun getMimeType(filePath: String): String {
-        val extension = filePath.substringAfterLast('.', "").lowercase()
-        return when (extension) {
-            "mp4" -> "video/mp4"
-            "webm" -> "video/webm"
-            "mkv" -> "video/x-matroska"
-            "mp3" -> "audio/mpeg"
-            "aac" -> "audio/aac"
-            "m4a" -> "audio/mp4"
-            else -> "video/*"
-        }
     }
     
     private fun formatFileSize(bytes: Long): String {

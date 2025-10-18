@@ -523,7 +523,10 @@ class VideoDownloader:
         progress_callback: Optional[Callable] = None
     ) -> Dict[str, Any]:
         """
-        Download audio only
+        Download audio only with fallback strategies:
+        1. Try audio-only formats first
+        2. If not available, try DASH formats (which split audio/video)
+        3. If still not available, download video+audio and signal extraction needed
         
         Args:
             url: Video URL
@@ -532,7 +535,8 @@ class VideoDownloader:
             progress_callback: Callback function for progress updates
             
         Returns:
-            Dictionary with download result
+            Dictionary with download result. If 'needs_extraction' is True,
+            the caller should extract audio from the video file.
         """
         try:
             self.cancelled = False
@@ -544,52 +548,194 @@ class VideoDownloader:
             # Create progress tracker
             progress_tracker = ProgressTracker(progress_callback)
             
-            # Configure yt-dlp options for audio
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
-                'progress_hooks': [progress_tracker],
-                'quiet': False,
-                'no_warnings': False,
-                'postprocessors': [],  # No post-processing (no ffmpeg)
-                # Retry settings
-                'retries': 10,
-                'fragment_retries': 10,
-                'skip_unavailable_fragments': True,
-                # Network settings  
-                'socket_timeout': 30,
-            }
-            
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                
-                if info:
-                    # Get the downloaded file path
-                    if 'requested_downloads' in info:
-                        filepath = info['requested_downloads'][0].get('filepath')
-                    else:
-                        title = info.get('title', 'audio')
-                        ext = info.get('ext', audio_format)
-                        filepath = os.path.join(output_dir, f"{title}.{ext}")
+            # First, check what formats are available
+            print(f"[info] Checking available formats...", flush=True)
+            try:
+                with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    formats = info.get('formats', [])
                     
-                    if filepath and os.path.exists(filepath):
-                        return {
-                            'success': True,
-                            'error': None,
-                            'file_path': filepath,
-                            'video_path': None,
-                            'audio_path': None,
-                            'separate_av': False,
-                            'file_size': os.path.getsize(filepath)
-                        }
+                    # Check for audio-only formats
+                    has_audio_only = False
+                    has_dash_audio = False
+                    
+                    for fmt in formats:
+                        vcodec = fmt.get('vcodec', 'none')
+                        acodec = fmt.get('acodec', 'none')
+                        has_video = vcodec not in ('none', None, 'null') and vcodec != ''
+                        has_audio = acodec not in ('none', None, 'null') and acodec != ''
+                        
+                        if has_audio and not has_video:
+                            has_audio_only = True
+                            print(f"[info] Found audio-only format: {fmt.get('format_id')}", flush=True)
+                            break
+                        elif has_audio and fmt.get('protocol') in ('http_dash_segments', 'm3u8_native', 'm3u8'):
+                            has_dash_audio = True
+                            print(f"[info] Found DASH/HLS format with audio: {fmt.get('format_id')}", flush=True)
+                    
+                    if has_audio_only:
+                        print(f"[info] Strategy: Direct audio-only download", flush=True)
+                    elif has_dash_audio:
+                        print(f"[info] Strategy: DASH/HLS audio extraction", flush=True)
+                    else:
+                        print(f"[info] Strategy: Download video+audio, extraction needed", flush=True)
+                        
+            except Exception as e:
+                print(f"[warning] Could not check formats, will try all strategies: {e}", flush=True)
+                has_audio_only = None  # Unknown, will try all strategies
             
+            # Strategy 1: Try audio-only formats (m4a, aac, mp3, opus, etc.)
+            audio_only_formats = [
+                'bestaudio[ext=m4a]',
+                'bestaudio[ext=aac]', 
+                'bestaudio[ext=mp3]',
+                'bestaudio[ext=opus]',
+                'bestaudio[ext=ogg]',
+                'bestaudio'
+            ]
+            
+            for audio_fmt in audio_only_formats:
+                if self.cancelled:
+                    return self._cancelled_result()
+                
+                try:
+                    print(f"[info] Trying audio format: {audio_fmt}", flush=True)
+                    ydl_opts = {
+                        'format': audio_fmt,
+                        'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
+                        'progress_hooks': [progress_tracker],
+                        'quiet': False,
+                        'no_warnings': False,
+                        'postprocessors': [],
+                        'retries': 10,
+                        'fragment_retries': 10,
+                        'skip_unavailable_fragments': True,
+                        'socket_timeout': 30,
+                        'ignoreerrors': True,
+                    }
+                    
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(url, download=True)
+                        
+                        if info and 'requested_downloads' in info and len(info['requested_downloads']) > 0:
+                            filepath = info['requested_downloads'][0].get('filepath')
+                            
+                            if filepath and os.path.exists(filepath):
+                                print(f"[info] Successfully downloaded audio-only: {filepath}", flush=True)
+                                return {
+                                    'success': True,
+                                    'error': None,
+                                    'file_path': filepath,
+                                    'video_path': None,
+                                    'audio_path': None,
+                                    'separate_av': False,
+                                    'needs_extraction': False,
+                                    'file_size': os.path.getsize(filepath)
+                                }
+                except Exception as e:
+                    print(f"[warning] Audio format {audio_fmt} failed: {e}", flush=True)
+                    continue
+            
+            # Strategy 2: Try DASH formats which often separate audio/video
+            # These formats will have audio without video
+            print(f"[info] Audio-only formats not available, trying DASH audio streams...", flush=True)
+            dash_audio_formats = [
+                'bestaudio[protocol*=dash]',
+                'bestaudio[protocol*=m3u8]',
+            ]
+            
+            for dash_fmt in dash_audio_formats:
+                if self.cancelled:
+                    return self._cancelled_result()
+                    
+                try:
+                    print(f"[info] Trying DASH audio format: {dash_fmt}", flush=True)
+                    ydl_opts = {
+                        'format': dash_fmt,
+                        'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
+                        'progress_hooks': [progress_tracker],
+                        'quiet': False,
+                        'no_warnings': False,
+                        'postprocessors': [],
+                        'retries': 10,
+                        'fragment_retries': 10,
+                        'skip_unavailable_fragments': True,
+                        'socket_timeout': 30,
+                        'ignoreerrors': True,
+                    }
+                    
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(url, download=True)
+                        
+                        if info and 'requested_downloads' in info and len(info['requested_downloads']) > 0:
+                            filepath = info['requested_downloads'][0].get('filepath')
+                            
+                            if filepath and os.path.exists(filepath):
+                                print(f"[info] Successfully downloaded DASH audio: {filepath}", flush=True)
+                                return {
+                                    'success': True,
+                                    'error': None,
+                                    'file_path': filepath,
+                                    'video_path': None,
+                                    'audio_path': None,
+                                    'separate_av': False,
+                                    'needs_extraction': False,
+                                    'file_size': os.path.getsize(filepath)
+                                }
+                except Exception as e:
+                    print(f"[warning] DASH audio format {dash_fmt} failed: {e}", flush=True)
+                    continue
+            
+            # Strategy 3: No audio-only formats available, download video+audio and signal extraction needed
+            print(f"[info] No audio-only formats available, downloading video+audio for extraction...", flush=True)
+            
+            try:
+                ydl_opts = {
+                    'format': 'best[height<=720]',  # Limit quality to save bandwidth for audio extraction
+                    'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
+                    'progress_hooks': [progress_tracker],
+                    'quiet': False,
+                    'no_warnings': False,
+                    'postprocessors': [],
+                    'retries': 10,
+                    'fragment_retries': 10,
+                    'skip_unavailable_fragments': True,
+                    'socket_timeout': 30,
+                    'ignoreerrors': True,
+                }
+                
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                    
+                    if info and 'requested_downloads' in info and len(info['requested_downloads']) > 0:
+                        filepath = info['requested_downloads'][0].get('filepath')
+                        
+                        if filepath and os.path.exists(filepath):
+                            print(f"[info] Downloaded video+audio for extraction: {filepath}", flush=True)
+                            return {
+                                'success': True,
+                                'error': None,
+                                'file_path': filepath,
+                                'video_path': None,
+                                'audio_path': None,
+                                'separate_av': False,
+                                'needs_extraction': True,  # Signal that audio extraction is needed
+                                'file_size': os.path.getsize(filepath)
+                            }
+            except Exception as e:
+                error_msg = f"Failed to download video+audio for extraction: {str(e)}"
+                print(f"[error] {error_msg}", file=sys.stderr, flush=True)
+                traceback.print_exc(file=sys.stderr)
+            
+            # All strategies failed
             return {
                 'success': False,
-                'error': 'Audio file was not downloaded',
+                'error': 'No audio formats available and could not download video for extraction',
                 'file_path': None,
                 'video_path': None,
                 'audio_path': None,
                 'separate_av': False,
+                'needs_extraction': False,
                 'file_size': 0
             }
             
@@ -605,8 +751,22 @@ class VideoDownloader:
                 'video_path': None,
                 'audio_path': None,
                 'separate_av': False,
+                'needs_extraction': False,
                 'file_size': 0
             }
+    
+    def _cancelled_result(self) -> Dict[str, Any]:
+        """Return a standardized cancelled result"""
+        return {
+            'success': False,
+            'error': 'Download cancelled by user',
+            'file_path': None,
+            'video_path': None,
+            'audio_path': None,
+            'separate_av': False,
+            'needs_extraction': False,
+            'file_size': 0
+        }
 
 
 # Module-level instance

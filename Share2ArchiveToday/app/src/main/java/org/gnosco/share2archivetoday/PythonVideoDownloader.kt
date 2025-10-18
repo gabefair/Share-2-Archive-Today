@@ -99,7 +99,7 @@ class PythonVideoDownloader(private val context: Context) {
                 VideoInfo(
                     title = it.callAttr("get", "title")?.toString() ?: "Unknown",
                     uploader = it.callAttr("get", "uploader")?.toString() ?: "Unknown",
-                    duration = it.callAttr("get", "duration")?.toInt() ?: 0,
+                    duration = it.callAttr("get", "duration")?.toDouble()?.toInt() ?: 0,
                     thumbnail = it.callAttr("get", "thumbnail")?.toString() ?: "",
                     description = it.callAttr("get", "description")?.toString() ?: "",
                     formats = formats,
@@ -490,7 +490,15 @@ class PythonVideoDownloader(private val context: Context) {
                 0L
             }
             
-            Log.d(TAG, "Parsed result - success: $success, error: $error, filePath: $filePath, videoPath: $videoPath, audioPath: $audioPath, separateAv: $separateAv, fileSize: $fileSize")
+            val needsExtraction = try {
+                val needsExtractionObj = result.callAttr("get", "needs_extraction")
+                needsExtractionObj?.toBoolean() ?: false
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting needs_extraction: ${e.message}", e)
+                false
+            }
+            
+            Log.d(TAG, "Parsed result - success: $success, error: $error, filePath: $filePath, videoPath: $videoPath, audioPath: $audioPath, separateAv: $separateAv, fileSize: $fileSize, needsExtraction: $needsExtraction")
             
             DownloadResult(
                 success = success,
@@ -499,7 +507,8 @@ class PythonVideoDownloader(private val context: Context) {
                 videoPath = videoPath,
                 audioPath = audioPath,
                 separateAv = separateAv,
-                fileSize = fileSize
+                fileSize = fileSize,
+                needsExtraction = needsExtraction
             )
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing download result", e)
@@ -626,7 +635,8 @@ class PythonVideoDownloader(private val context: Context) {
         val videoPath: String?,
         val audioPath: String?,
         val separateAv: Boolean,
-        val fileSize: Long
+        val fileSize: Long,
+        val needsExtraction: Boolean = false  // True if audio needs to be extracted from video
     )
     
     /**

@@ -241,31 +241,61 @@ class VideoDownloadActivity : Activity() {
                         qualityValues.add("best")
                         Log.w(TAG, "No formats available, using fallback 'best' option")
                     } else {
+                        // Sort video formats by quality (height desc, fps desc, tbr desc)
+                        val sortedVideoFormats = filteredFormats
+                            .filter { it.hasVideo }
+                            .sortedWith(
+                                compareByDescending<PythonVideoDownloader.FormatInfo> { it.height }
+                                    .thenByDescending { it.fps }
+                                    .thenByDescending { it.tbr }
+                            )
+                        
                         // Add video formats
-                        for (format in filteredFormats) {
-                            if (format.hasVideo) {
-                                val qualityLabel = buildString {
-                                    append(format.qualityLabel)
-                                    if (format.hasAudio) {
-                                        append(" (Video+Audio)")
-                                    } else {
-                                        append(" (Video Only)")
-                                    }
-                                    if (format.filesize > 0) {
-                                        append(" - ${formatFileSize(format.filesize)}")
-                                    }
+                        sortedVideoFormats.forEachIndexed { index, format ->
+                            val qualityLabel = buildString {
+                                // Add star for the highest quality option
+                                if (index == 0) {
+                                    append("★ ")
                                 }
-                                qualityOptions.add(qualityLabel)
-                                qualityValues.add(format.formatId)
+                                
+                                append(format.qualityLabel)
+                                
+                                // Always show FPS (assume 30fps if not specified)
+                                val displayFps = if (format.fps > 0) format.fps else 30
+                                append(" ${displayFps}fps")
+                                
+                                if (format.hasAudio) {
+                                    append(" (Video+Audio)")
+                                } else {
+                                    append(" (Video Only)")
+                                }
+                                
+                                // Calculate and show estimated file size
+                                val estimatedSize = when {
+                                    format.filesize > 0 -> format.filesize
+                                    format.tbr > 0 && videoInfo.duration > 0 -> {
+                                        // Calculate: bitrate (kbps) * duration (sec) * 125 (to convert kbps to bytes/sec)
+                                        (format.tbr * videoInfo.duration * 125).toLong()
+                                    }
+                                    else -> 0L
+                                }
+                                
+                                if (estimatedSize > 0) {
+                                    append(" - ${formatFileSize(estimatedSize)}")
+                                }
+                                
+                                // Mark the first option as highest quality
+                                if (index == 0) {
+                                    append(" (Highest Quality)")
+                                }
                             }
+                            qualityOptions.add(qualityLabel)
+                            qualityValues.add(format.formatId)
                         }
                         
-                        // Add audio-only option if available
-                        val audioFormats = filteredFormats.filter { !it.hasVideo && it.hasAudio }
-                        if (audioFormats.isNotEmpty()) {
-                            qualityOptions.add("Audio Only (MP3)")
-                            qualityValues.add("audio_mp3")
-                        }
+                        // Add audio-only option at the bottom
+                        qualityOptions.add("Audio Only")
+                        qualityValues.add("audio_mp3")
                     }
                     
                     AlertDialog.Builder(this@VideoDownloadActivity)
@@ -290,12 +320,11 @@ class VideoDownloadActivity : Activity() {
                 Log.e(TAG, "Error getting video info", e)
                 withContext(Dispatchers.Main) {
                     loadingDialog.dismiss()
-                    Toast.makeText(
-                        this@VideoDownloadActivity,
-                        "Error: ${e.message}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    finish()
+                    val friendlyError = parseFriendlyErrorMessage(e)
+                    showErrorDialog(
+                        title = "Unable to Get Video Information",
+                        message = friendlyError
+                    )
                 }
             }
         }
@@ -518,12 +547,11 @@ class VideoDownloadActivity : Activity() {
             } catch (e: Exception) {
                 Log.e(TAG, "Error starting download", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        this@VideoDownloadActivity,
-                        "Download error: ${e.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    finish()
+                    val friendlyError = parseFriendlyErrorMessage(e)
+                    showErrorDialog(
+                        title = "Download Failed",
+                        message = friendlyError
+                    )
                 }
             }
         }
@@ -554,13 +582,12 @@ class VideoDownloadActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Permissions Required")
             .setMessage(
-                "To download videos in their original format, this app needs:\n\n" +
-                "• Network Access: Required to download videos from the internet\n\n" +
-                "• Storage Access: Required to save downloaded videos to your Downloads folder\n\n" +
-                "• Notifications: To show download progress and completion\n\n" +
-                "Your privacy is important: This app only downloads the videos you explicitly request " +
-                "in their original format and quality, and does not access any other files on your device.\n\n" +
-                "Downloads are saved to your Downloads/Share2ArchiveToday folder."
+                "To archive videos , this app needs:\n\n" +
+                "• Network Access: Required to archive videos from the internet\n\n" +
+                "• Storage Access: Required to save archived videos to your Downloads folder\n\n" +
+                "• Notifications: To show archive progress and completion\n\n" +
+                "Your privacy is important: This app only archives the files you explicitly request " +
+                "and does no other netowrk traffic."
             )
             .setPositiveButton("Grant Permissions") { _, _ ->
                 permissionManager.requestPermissionsIfNeeded(this)
@@ -819,5 +846,117 @@ class VideoDownloadActivity : Activity() {
         Log.d(TAG, "Filtered formats: ${filteredFormats.size} (from ${formats.size})")
         return filteredFormats.sortedWith(compareByDescending<PythonVideoDownloader.FormatInfo> { it.hasVideo }
             .thenByDescending { it.height })
+    }
+    
+    /**
+     * Parse technical error messages into user-friendly messages
+     */
+    private fun parseFriendlyErrorMessage(exception: Exception): String {
+        val errorMessage = exception.message ?: "Unknown error occurred"
+        val lowerError = errorMessage.lowercase()
+        
+        return when {
+            // Rate limiting (check for rate-limit before other errors)
+            lowerError.contains("rate-limit") || lowerError.contains("rate limit") -> {
+                "Your current IP address has been rate-limited.\n\n" +
+                "Solutions:\n" +
+                "• Switch to a different network (WiFi/mobile data)\n" +
+                "• If using a VPN, add this app to split tunneling\n" +
+                "• Wait a few hours and try again\n" +
+                "• Use a different video source\n\n" +
+                "The website blocks IPs that make too many requests."
+            }
+            
+            lowerError.contains("login required") || lowerError.contains("sign in") -> {
+                "This content requires an account to access.\n\n" +
+                "The video owner may have restricted access to logged-in users only. " +
+                "Unfortunately, this app cannot download private or login-restricted content."
+            }
+            
+            // Geo-blocking
+            lowerError.contains("not available in your country") || 
+            lowerError.contains("geo") && lowerError.contains("block") -> {
+                "This content is not available in your region.\n\n" +
+                "The content owner has restricted access based on geographic location."
+            }
+            
+            // Copyright / DMCA
+            lowerError.contains("copyright") || lowerError.contains("dmca") || 
+            lowerError.contains("removed") && lowerError.contains("violation") -> {
+                "This content has been removed due to copyright claims.\n\n" +
+                "The video is no longer available on the platform."
+            }
+            
+            // Age-restricted
+            lowerError.contains("age") && (lowerError.contains("restrict") || lowerError.contains("verification")) -> {
+                "This content is age-restricted.\n\n" +
+                "The video requires age verification to view, which this app cannot provide."
+            }
+            
+            // Private/unavailable video
+            lowerError.contains("private") || lowerError.contains("unavailable") ||
+            lowerError.contains("video not found") || lowerError.contains("404") -> {
+                "This video is not accessible.\n\n" +
+                "The video may be:\n" +
+                "• Private or deleted\n" +
+                "• Temporarily unavailable\n" +
+                "• Moved to a different URL"
+            }
+            
+            // Network errors
+            lowerError.contains("network") || lowerError.contains("connection") ||
+            lowerError.contains("timeout") || lowerError.contains("refused") -> {
+                "Network connection problem.\n\n" +
+                "Please check your internet connection and try again."
+            }
+            
+            // Unsupported platform
+            lowerError.contains("unsupported url") || lowerError.contains("no suitable extractor") -> {
+                "This website is not supported.\n\n" +
+                "The URL you shared is not from a supported video platform."
+            }
+            
+            // SSL/Certificate errors
+            lowerError.contains("ssl") || lowerError.contains("certificate") -> {
+                "Secure connection error.\n\n" +
+                "There's a problem establishing a secure connection. This may be a temporary issue with the website."
+            }
+            
+            // Captcha
+            lowerError.contains("captcha") -> {
+                "Human verification required.\n\n" +
+                "The website is requesting verification that cannot be completed automatically."
+            }
+            
+            // Format not available
+            lowerError.contains("no video formats") || lowerError.contains("no formats found") -> {
+                "No downloadable formats found.\n\n" +
+                "The video may be a live stream, DRM-protected, or use an unsupported format."
+            }
+            
+            // Generic fallback with hint
+            else -> {
+                "Unable to access this video.\n\n" +
+                "This might be due to:\n" +
+                "• Website restrictions or changes\n" +
+                "• Login or subscription requirements\n" +
+                "• Temporary server issues\n\n" +
+                "Please try again later or use a different source."
+            }
+        }
+    }
+    
+    /**
+     * Show a user-friendly error dialog
+     */
+    private fun showErrorDialog(title: String, message: String) {
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("OK") { _, _ ->
+                finish()
+            }
+            .setCancelable(false)
+            .show()
     }
 }
