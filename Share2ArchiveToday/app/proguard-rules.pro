@@ -66,6 +66,11 @@
 -keep class org.gnosco.share2archivetoday.VideoDownloadActivity { *; }
 -keep class org.gnosco.share2archivetoday.BackgroundDownloadService { *; }
 
+# Remove debug activities from release builds
+-assumenosideeffects class org.gnosco.share2archivetoday.FeatureFlagDebugActivity { *; }
+-assumenosideeffects class org.gnosco.share2archivetoday.VideoDownloadTestActivity { *; }
+-assumenosideeffects class org.gnosco.share2archivetoday.DebugFeatureTester { *; }
+
 # Prevent obfuscation of data classes used by Python - VideoDownloader
 -keep class org.gnosco.share2archivetoday.VideoDownloader$VideoInfo { *; }
 -keep class org.gnosco.share2archivetoday.VideoDownloader$DownloadResult { *; }

@@ -229,6 +229,22 @@ class BackgroundDownloadService : Service() {
                 if (!networkMonitor.isConnected()) {
                     updateNotification("No internet connection", displayTitle)
                     showErrorNotification(displayTitle, "No internet connection. Please check your network settings.")
+                    
+                    // Mark download as failed due to network
+                    downloadResumptionManager.failDownload(downloadId, "No internet connection")
+                    
+                    // Add failed download to history
+                    downloadHistoryManager.addDownload(
+                        url = url,
+                        title = displayTitle,
+                        uploader = displayUploader,
+                        quality = quality,
+                        filePath = null,
+                        fileSize = 0,
+                        success = false,
+                        error = "No internet connection"
+                    )
+                    
                     stopSelf()
                     return@launch
                 }
@@ -309,8 +325,13 @@ class BackgroundDownloadService : Service() {
                         moveToMediaStore(filePath, displayTitle)
                     }
                     
+                    // Get the actual file path from MediaStore URI for history
+                    val finalFilePath = mediaStoreUri?.let { uri ->
+                        getFilePathFromMediaStoreUri(uri)
+                    } ?: finalResult.filePath
+                    
                     // Mark download as completed
-                    downloadResumptionManager.completeDownload(downloadId, finalResult.filePath ?: "", finalResult.fileSize)
+                    downloadResumptionManager.completeDownload(downloadId, finalFilePath ?: "", finalResult.fileSize)
                     
                     // Add to download history
                     downloadHistoryManager.addDownload(
@@ -318,10 +339,13 @@ class BackgroundDownloadService : Service() {
                         title = displayTitle,
                         uploader = displayUploader,
                         quality = quality,
-                        filePath = finalResult.filePath,
+                        filePath = finalFilePath,
                         fileSize = finalResult.fileSize,
                         success = true
                     )
+                    
+                    // Log successful download for analytics/monitoring
+                    Log.i(TAG, "Download completed successfully: $displayTitle ($quality) - ${finalResult.fileSize} bytes")
                     
                     // Show completion notification
                     showCompletionNotification(displayTitle, mediaStoreUri, finalResult.filePath)
@@ -336,10 +360,13 @@ class BackgroundDownloadService : Service() {
                     Log.e(TAG, "  Free space MB: ${getAvailableStorageSpace(getDownloadDirectory())}")
                     Log.e(TAG, "  Error: ${result.error}")
                     
-                    updateNotification("Download failed: ${result.error}", displayTitle)
+                    // Convert technical error to user-friendly message
+                    val userFriendlyError = convertToUserFriendlyError(result.error ?: "Unknown error")
+                    
+                    updateNotification("Download failed: $userFriendlyError", displayTitle)
                     
                     // Mark download as failed
-                    downloadResumptionManager.failDownload(downloadId, result.error ?: "Unknown error")
+                    downloadResumptionManager.failDownload(downloadId, userFriendlyError)
                     
                     // Add failed download to history
                     downloadHistoryManager.addDownload(
@@ -350,10 +377,10 @@ class BackgroundDownloadService : Service() {
                         filePath = null,
                         fileSize = 0,
                         success = false,
-                        error = result.error
+                        error = userFriendlyError
                     )
                     
-                    showErrorNotification(displayTitle, result.error ?: "Unknown error")
+                    showErrorNotification(displayTitle, userFriendlyError)
                 }
                 
             } catch (e: Exception) {
@@ -480,7 +507,7 @@ class BackgroundDownloadService : Service() {
                 updateNotification("Processing completed file...", title)
                 Log.d(TAG, "Finished: ${progressInfo.filename}")
                 
-                // Mark as processing
+                // Mark as processing - this will be updated to COMPLETED when the file is moved to MediaStore
                 downloadResumptionManager.updateStatus(downloadId, DownloadResumptionManager.DownloadStatus.PROCESSING)
             }
             
@@ -529,7 +556,8 @@ class BackgroundDownloadService : Service() {
             "timeout",
             "temporary",
             "server error",
-            "rate limit"
+            "rate limit",
+            "HTTP 500", "502", "503", "504"
         )
         
         val errorLower = error.lowercase()
@@ -689,6 +717,26 @@ class BackgroundDownloadService : Service() {
      * Move downloaded file from app-specific dir to MediaStore Downloads
      * Returns the content URI that can be used to open the file
      */
+    /**
+     * Get actual file path from MediaStore URI
+     */
+    private fun getFilePathFromMediaStoreUri(uri: android.net.Uri): String? {
+        try {
+            val projection = arrayOf(android.provider.MediaStore.MediaColumns.DATA)
+            contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val columnIndex = cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns.DATA)
+                    val path = cursor.getString(columnIndex)
+                    Log.d(TAG, "Resolved MediaStore URI $uri to path: $path")
+                    return path
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting file path from MediaStore URI", e)
+        }
+        return null
+    }
+    
     private fun moveToMediaStore(filePath: String, title: String): android.net.Uri? {
         try {
             val file = File(filePath)
@@ -741,6 +789,57 @@ class BackgroundDownloadService : Service() {
         }
         
         return null
+    }
+    
+    /**
+     * Convert technical error messages to user-friendly messages
+     */
+    private fun convertToUserFriendlyError(error: String): String {
+        return when {
+            error.contains("format is not available", ignoreCase = true) -> 
+                "This video format is not available. Try a different quality setting."
+            error.contains("requested format", ignoreCase = true) -> 
+                "The selected video quality is not available for this video."
+            error.contains("network", ignoreCase = true) || error.contains("connection", ignoreCase = true) -> 
+                "Network connection problem. Please check your internet connection."
+            error.contains("timeout", ignoreCase = true) -> 
+                "Download timed out. Please try again."
+            error.contains("permission", ignoreCase = true) -> 
+                "Permission denied. Please check app permissions."
+            error.contains("storage", ignoreCase = true) || error.contains("space", ignoreCase = true) -> 
+                "Not enough storage space available."
+            error.contains("not found", ignoreCase = true) -> 
+                "Video not found. The link may be invalid or the video may have been removed."
+            error.contains("private", ignoreCase = true) || error.contains("unavailable", ignoreCase = true) -> 
+                "This video is private or unavailable."
+            error.contains("age", ignoreCase = true) || error.contains("restricted", ignoreCase = true) -> 
+                "This video has age restrictions and cannot be downloaded."
+            error.contains("blocked", ignoreCase = true) || error.contains("forbidden", ignoreCase = true) -> 
+                "This video is blocked or restricted in your region."
+            error.contains("server error", ignoreCase = true) || error.contains("http 5", ignoreCase = true) -> 
+                "Server error occurred. Please try again later."
+            error.contains("rate limit", ignoreCase = true) || error.contains("too many requests", ignoreCase = true) -> 
+                "Too many requests. Please wait a moment before trying again."
+            error.contains("invalid url", ignoreCase = true) || error.contains("malformed", ignoreCase = true) -> 
+                "Invalid video URL. Please check the link and try again."
+            error.contains("extractor", ignoreCase = true) || error.contains("unsupported", ignoreCase = true) -> 
+                "This video site is not supported or the video format is incompatible."
+            error.contains("cookies", ignoreCase = true) || error.contains("login", ignoreCase = true) -> 
+                "This video requires login or special access that cannot be provided."
+            error.contains("copyright", ignoreCase = true) || error.contains("dmca", ignoreCase = true) -> 
+                "This video cannot be downloaded due to copyright restrictions."
+            error.contains("geo", ignoreCase = true) || error.contains("region", ignoreCase = true) -> 
+                "This video is not available in your region."
+            error.contains("live", ignoreCase = true) || error.contains("streaming", ignoreCase = true) -> 
+                "Live streams cannot be downloaded. Please try with a regular video."
+            error.contains("playlist", ignoreCase = true) -> 
+                "Playlist downloads are not supported. Please try with individual video links."
+            else -> {
+                // Log the novel error for debugging while showing a generic message
+                Log.w(TAG, "Novel error encountered: $error")
+                "Download failed due to an unexpected error. Please try again or contact support if the problem persists."
+            }
+        }
     }
 }
 

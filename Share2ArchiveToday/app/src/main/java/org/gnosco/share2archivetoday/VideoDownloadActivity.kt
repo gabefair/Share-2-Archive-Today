@@ -32,6 +32,7 @@ class VideoDownloadActivity : Activity() {
     private lateinit var pythonDownloader: PythonVideoDownloader
     private lateinit var permissionManager: PermissionManager
     private lateinit var networkMonitor: NetworkMonitor
+    private lateinit var downloadHistoryManager: DownloadHistoryManager
     private val downloadScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,6 +42,7 @@ class VideoDownloadActivity : Activity() {
         pythonDownloader = PythonVideoDownloader(applicationContext)
         permissionManager = PermissionManager(applicationContext)
         networkMonitor = NetworkMonitor(applicationContext)
+        downloadHistoryManager = DownloadHistoryManager(applicationContext)
         
         // Test Python functionality
         if (!pythonDownloader.testPythonFunctionality()) {
@@ -171,8 +173,17 @@ class VideoDownloadActivity : Activity() {
     }
     
     private fun downloadVideo(url: String) {
-        // Show quality selection dialog
-        showQualitySelectionDialog(url)
+        // Check if already downloaded
+        Log.d(TAG, "Checking if URL was already downloaded: $url")
+        val existingDownload = downloadHistoryManager.findSuccessfulDownload(url)
+        if (existingDownload != null) {
+            Log.d(TAG, "Found existing download: ${existingDownload.title}, file: ${existingDownload.filePath}")
+            showAlreadyDownloadedDialog(url, existingDownload)
+        } else {
+            Log.d(TAG, "No existing download found, proceeding with quality selection")
+            // Show quality selection dialog
+            showQualitySelectionDialog(url)
+        }
     }
     
     private fun showQualitySelectionDialog(url: String) {
@@ -257,6 +268,78 @@ class VideoDownloadActivity : Activity() {
                     finish()
                 }
             }
+        }
+    }
+    
+    /**
+     * Show dialog when video was already downloaded
+     */
+    private fun showAlreadyDownloadedDialog(url: String, existingDownload: DownloadHistoryManager.DownloadHistoryEntry) {
+        val message = buildString {
+            append("This video was already downloaded\n\n")
+            append("Title: ${existingDownload.title}\n")
+            append("Quality: ${existingDownload.quality}\n")
+            append("Size: ${existingDownload.getFormattedFileSize()}\n")
+            append("Downloaded: ${existingDownload.getFormattedDate()}")
+        }
+        
+        AlertDialog.Builder(this)
+            .setTitle("Already Downloaded")
+            .setMessage(message)
+            .setPositiveButton("Open Video") { _, _ ->
+                openVideoFile(existingDownload.filePath!!)
+            }
+            .setNeutralButton("Download Again") { _, _ ->
+                // Proceed with download
+                showQualitySelectionDialog(url)
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                finish()
+            }
+            .setCancelable(false)
+            .show()
+    }
+    
+    /**
+     * Open a video file with the default video player
+     */
+    private fun openVideoFile(filePath: String) {
+        try {
+            val file = java.io.File(filePath)
+            if (!file.exists()) {
+                Toast.makeText(this, "Video file no longer exists", Toast.LENGTH_SHORT).show()
+                finish()
+                return
+            }
+            
+            val uri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                androidx.core.content.FileProvider.getUriForFile(
+                    this,
+                    "${applicationContext.packageName}.fileprovider",
+                    file
+                )
+            } else {
+                android.net.Uri.fromFile(file)
+            }
+            
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, getMimeType(filePath))
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            
+            try {
+                startActivity(intent)
+                Toast.makeText(this, "Opening video...", Toast.LENGTH_SHORT).show()
+                finish()
+            } catch (e: android.content.ActivityNotFoundException) {
+                Toast.makeText(this, "No video player app found", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error opening video file", e)
+            Toast.makeText(this, "Error opening video: ${e.message}", Toast.LENGTH_SHORT).show()
+            finish()
         }
     }
     
@@ -464,12 +547,6 @@ class VideoDownloadActivity : Activity() {
         val appDownloadsDir = File(staging, "Share2ArchiveToday")
         if (!appDownloadsDir.exists()) appDownloadsDir.mkdirs()
         return appDownloadsDir.absolutePath
-    }
-    
-    private fun downloadAndSaveToDownloads(url: String, fileName: String) {
-        // This method is no longer used - downloads are handled by BackgroundDownloadService
-        Toast.makeText(this, "Download functionality moved to background service", Toast.LENGTH_SHORT).show()
-        finish()
     }
     
     private fun getMimeType(filePath: String): String {
