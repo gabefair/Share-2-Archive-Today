@@ -17,6 +17,9 @@ open class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Initialize debug logging
+        DebugLogger.init(applicationContext)
+
         // Initialize ClearURLs rules manager
         clearUrlsRulesManager = ClearUrlsRulesManager(applicationContext)
 

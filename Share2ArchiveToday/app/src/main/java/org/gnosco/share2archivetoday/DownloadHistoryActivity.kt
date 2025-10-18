@@ -1,14 +1,21 @@
 package org.gnosco.share2archivetoday
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.util.Log
 import android.widget.Toast
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.ArrayAdapter
+import android.widget.Button
+import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import java.io.File
 
 /**
@@ -25,6 +32,10 @@ class DownloadHistoryActivity : Activity() {
     private lateinit var downloadResumptionManager: DownloadResumptionManager
     private lateinit var listView: ListView
     private lateinit var adapter: ArrayAdapter<String>
+    private lateinit var clearHistoryButton: Button
+    private lateinit var openFolderButton: Button
+    private lateinit var emptyStateText: TextView
+    private var allDownloads = mutableListOf<DownloadHistoryItem>()
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,12 +44,62 @@ class DownloadHistoryActivity : Activity() {
         downloadHistoryManager = DownloadHistoryManager(applicationContext)
         downloadResumptionManager = DownloadResumptionManager(applicationContext)
         
-        // Create simple layout
-        listView = ListView(this)
-        setContentView(listView)
+        // Create layout with buttons
+        createLayout()
         
         // Load and display download history
         loadDownloadHistory()
+    }
+    
+    private fun createLayout() {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(32, 32, 32, 32)
+        }
+        
+        // Title
+        val titleText = TextView(this).apply {
+            text = "Download History"
+            textSize = 24f
+            setPadding(0, 0, 0, 32)
+        }
+        layout.addView(titleText)
+        
+        // Action buttons
+        val buttonLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        
+        clearHistoryButton = Button(this).apply {
+            text = "Clear History"
+            setOnClickListener { showClearHistoryDialog() }
+        }
+        
+        openFolderButton = Button(this).apply {
+            text = "Open Downloads Folder"
+            setOnClickListener { openDownloadsFolder() }
+        }
+        
+        buttonLayout.addView(clearHistoryButton)
+        buttonLayout.addView(openFolderButton)
+        layout.addView(buttonLayout)
+        
+        // Empty state text
+        emptyStateText = TextView(this).apply {
+            text = "No downloads yet"
+            textSize = 16f
+            setPadding(0, 32, 0, 0)
+            visibility = android.view.View.GONE
+        }
+        layout.addView(emptyStateText)
+        
+        // List view
+        listView = ListView(this).apply {
+            setPadding(0, 32, 0, 0)
+        }
+        layout.addView(listView)
+        
+        setContentView(layout)
     }
     
     private fun loadDownloadHistory() {
@@ -46,7 +107,7 @@ class DownloadHistoryActivity : Activity() {
             val completedDownloads = downloadHistoryManager.getDownloadHistory()
             val activeDownloads = downloadResumptionManager.getActiveDownloads()
             
-            val allDownloads = mutableListOf<DownloadHistoryItem>()
+            allDownloads.clear()
             
             // Only add completed downloads to history (not active/in-progress ones)
             completedDownloads.forEach { download: DownloadHistoryManager.DownloadHistoryEntry ->
@@ -89,18 +150,27 @@ class DownloadHistoryActivity : Activity() {
             // Sort by timestamp (newest first)
             allDownloads.sortByDescending { it.timestamp }
             
-            // Create simple string list for ListView
-            val displayItems = allDownloads.map { item ->
-                val statusIcon = if (item.success) "✅" else "❌"
-                val fileSizeText = if (item.fileSize > 0) " (${formatFileSize(item.fileSize)})" else ""
-                "$statusIcon ${item.title} - ${item.status}$fileSizeText"
-            }
-            
-            adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, displayItems)
-            listView.adapter = adapter
-            
-            listView.setOnItemClickListener { _, _, position, _ ->
-                handleDownloadItemClick(allDownloads[position])
+            // Show/hide empty state
+            if (allDownloads.isEmpty()) {
+                emptyStateText.visibility = android.view.View.VISIBLE
+                listView.visibility = android.view.View.GONE
+            } else {
+                emptyStateText.visibility = android.view.View.GONE
+                listView.visibility = android.view.View.VISIBLE
+                
+                // Create simple string list for ListView
+                val displayItems = allDownloads.map { item ->
+                    val statusIcon = if (item.success) "✅" else "❌"
+                    val fileSizeText = if (item.fileSize > 0) " (${formatFileSize(item.fileSize)})" else ""
+                    "$statusIcon ${item.title} - ${item.status}$fileSizeText"
+                }
+                
+                adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, displayItems)
+                listView.adapter = adapter
+                
+                listView.setOnItemClickListener { _, _, position, _ ->
+                    handleDownloadItemClick(allDownloads[position])
+                }
             }
             
         } catch (e: Exception) {
@@ -112,8 +182,8 @@ class DownloadHistoryActivity : Activity() {
     private fun handleDownloadItemClick(item: DownloadHistoryItem) {
         when {
             item.success && item.filePath != null -> {
-                // Open downloaded file
-                openFile(item.filePath)
+                // Show action dialog for successful downloads
+                showDownloadActionDialog(item)
             }
             item.status == "DOWNLOADING" || item.status == "PAUSED" -> {
                 // Show download details
@@ -123,6 +193,117 @@ class DownloadHistoryActivity : Activity() {
                 // Show error details
                 showErrorDetails(item)
             }
+        }
+    }
+    
+    private fun showDownloadActionDialog(item: DownloadHistoryItem) {
+        val actions = mutableListOf<String>()
+        val actionCallbacks = mutableListOf<() -> Unit>()
+        
+        // Open video file
+        actions.add("Open Video")
+        actionCallbacks.add { openFile(item.filePath!!) }
+        
+        // Copy source URL
+        actions.add("Copy Source URL")
+        actionCallbacks.add { copyUrlToClipboard(item.url) }
+        
+        // Share video
+        actions.add("Share Video")
+        actionCallbacks.add { shareVideo(item) }
+        
+        // Show download details
+        actions.add("View Details")
+        actionCallbacks.add { showDownloadDetails(item) }
+        
+        AlertDialog.Builder(this)
+            .setTitle(item.title)
+            .setItems(actions.toTypedArray()) { _, which ->
+                actionCallbacks[which]()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun copyUrlToClipboard(url: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("Video URL", url)
+        clipboard.setPrimaryClip(clip)
+        Toast.makeText(this, "URL copied to clipboard", Toast.LENGTH_SHORT).show()
+    }
+    
+    private fun shareVideo(item: DownloadHistoryItem) {
+        if (item.filePath != null) {
+            try {
+                val file = File(item.filePath)
+                if (file.exists()) {
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        this, packageName + ".fileprovider", file
+                    )
+                    val shareIntent = Intent().apply {
+                        action = Intent.ACTION_SEND
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        type = getMimeType(item.filePath)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    
+                    if (shareIntent.resolveActivity(packageManager) != null) {
+                        startActivity(Intent.createChooser(shareIntent, "Share Video"))
+                    } else {
+                        Toast.makeText(this, "No app found to share this file", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Toast.makeText(this, "Video file no longer exists", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sharing video", e)
+                Toast.makeText(this, "Error sharing video", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(this, "No file path available", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    private fun showClearHistoryDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Clear Download History")
+            .setMessage("Are you sure you want to clear all download history? This action cannot be undone.")
+            .setPositiveButton("Clear") { _, _ ->
+                downloadHistoryManager.clearHistory()
+                downloadResumptionManager.cleanupOldDownloads(0) // Clear all
+                loadDownloadHistory() // Refresh the list
+                Toast.makeText(this, "Download history cleared", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun openDownloadsFolder() {
+        try {
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val appDownloadsDir = File(downloadsDir, "Share2ArchiveToday")
+            
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(Uri.fromFile(appDownloadsDir), "resource/folder")
+            }
+            
+            if (intent.resolveActivity(packageManager) != null) {
+                startActivity(intent)
+            } else {
+                // Fallback: try to open general downloads folder
+                val fallbackIntent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(Uri.fromFile(downloadsDir), "resource/folder")
+                }
+                
+                if (fallbackIntent.resolveActivity(packageManager) != null) {
+                    startActivity(fallbackIntent)
+                } else {
+                    Toast.makeText(this, "No file manager found to open downloads folder", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error opening downloads folder", e)
+            Toast.makeText(this, "Error opening downloads folder", Toast.LENGTH_SHORT).show()
         }
     }
     

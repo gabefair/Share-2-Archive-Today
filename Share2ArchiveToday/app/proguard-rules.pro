@@ -1,13 +1,6 @@
-# Strip all log calls
--assumenosideeffects class android.util.Log {
-    public static boolean isLoggable(java.lang.String, int);
-    public static int v(...);
-    public static int d(...);
-    public static int i(...);
-    public static int w(...);
-    public static int e(...);
-    public static int wtf(...);
-}
+# Only strip log calls in release builds
+# Debug builds should keep all logging for debugging purposes
+# This will be handled by build type specific proguard files
 
 ##---------------Begin: General Optimization Rules ----------
 # Remove all debugging info from all classes

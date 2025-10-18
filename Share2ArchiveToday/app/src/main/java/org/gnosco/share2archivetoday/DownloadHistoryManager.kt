@@ -46,6 +46,16 @@ class DownloadHistoryManager(private val context: Context) {
         try {
             val history = getDownloadHistory().toMutableList()
             
+            // For successful downloads, check if this URL was already downloaded
+            if (success) {
+                val existingEntry = history.find { it.url == url && it.success }
+                if (existingEntry != null) {
+                    Log.d(TAG, "URL already exists in history, updating entry: $title")
+                    // Remove the old entry and add the new one
+                    history.removeAll { it.url == url && it.success }
+                }
+            }
+            
             val downloadEntry = DownloadHistoryEntry(
                 id = System.currentTimeMillis().toString(),
                 url = url,

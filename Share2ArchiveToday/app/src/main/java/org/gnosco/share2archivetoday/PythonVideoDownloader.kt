@@ -33,7 +33,10 @@ class PythonVideoDownloader(private val context: Context) {
      */
     private fun initPython() {
         try {
+            DebugLogger.python(TAG, "Initializing Python interpreter")
+            
             if (!Python.isStarted()) {
+                DebugLogger.python(TAG, "Starting Python platform")
                 Python.start(AndroidPlatform(context))
             }
             
@@ -42,11 +45,16 @@ class PythonVideoDownloader(private val context: Context) {
             
             // Disable Python stdout/stderr in release builds
             if (!BuildConfig.DEBUG) {
+                DebugLogger.python(TAG, "Disabling Python stdout/stderr for release build")
                 disablePythonLogging(py)
+            } else {
+                DebugLogger.python(TAG, "Keeping Python stdout/stderr for debug build")
             }
             
+            DebugLogger.python(TAG, "Python initialized successfully")
             Log.d(TAG, "Python initialized successfully")
         } catch (e: Exception) {
+            DebugLogger.e(TAG, "Failed to initialize Python", e)
             Log.e(TAG, "Failed to initialize Python", e)
             throw RuntimeException("Failed to initialize Python: ${e.message}", e)
         }

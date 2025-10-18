@@ -430,7 +430,25 @@ class VideoDownloadActivity : Activity() {
                 // Get video info first (this will log all available formats)
                 Log.d(TAG, "Getting video info and logging available formats for: $url")
                 val videoInfo = pythonDownloader.getVideoInfo(url)
-                val title = videoInfo?.title ?: "Unknown Video"
+                
+                // Determine the best title to use
+                val title = when {
+                    // Best case: we have actual video title from yt-dlp
+                    !videoInfo?.title.isNullOrBlank() && videoInfo?.title != "Unknown" -> {
+                        videoInfo!!.title
+                    }
+                    // Second best: extract domain from URL for a meaningful title
+                    else -> {
+                        try {
+                            val uri = android.net.Uri.parse(url)
+                            val domain = uri.host?.removePrefix("www.")?.removePrefix("m.") ?: "unknown"
+                            "Video from $domain"
+                        } catch (e: Exception) {
+                            "Downloaded Video"
+                        }
+                    }
+                }
+                
                 val uploader = videoInfo?.uploader ?: "Unknown"
                 
                 Log.d(TAG, "Video info: $title by $uploader")

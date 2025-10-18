@@ -58,6 +58,7 @@ android {
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
+                "proguard-release.pro",  // Release-specific rules (strips logs)
                 "build/python/proguard-rules.pro"
             )
             // Remove debug activities from release builds
@@ -70,6 +71,11 @@ android {
             // Keep debug activities in debug builds
             buildConfigField("boolean", "ENABLE_DEBUG_FEATURES", "true")
             buildConfigField("boolean", "ENABLE_DEBUG_TESTING", "true")
+            // Debug builds keep all logging - no log stripping
+            proguardFiles(
+                "proguard-rules.pro",
+                "build/python/proguard-rules.pro"
+            )
         }
     }
 
