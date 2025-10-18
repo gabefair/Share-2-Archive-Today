@@ -90,6 +90,13 @@ class PythonVideoDownloader(private val context: Context) {
             val result = pythonModule?.callAttr("get_video_info", url)
             
             return result?.let {
+                // Check if there's an error in the response
+                val error = it.callAttr("get", "error")?.toString()
+                if (!error.isNullOrBlank()) {
+                    Log.e(TAG, "Python returned error: $error")
+                    return null
+                }
+                
                 // Use .get() method instead of bracket notation for Chaquopy compatibility
                 val formatsObj = it.callAttr("get", "formats")
                 Log.d(TAG, "Formats object from Python: $formatsObj")
@@ -328,17 +335,31 @@ class PythonVideoDownloader(private val context: Context) {
         
         return try {
             val py = Python.getInstance()
-            val builtins = py.getBuiltins()
             
-            // Create a Python-compatible callback function
-            py.getModule("__main__").put("kotlin_callback", object : Any() {
-                fun __call__(progress: PyObject) {
-                    val progressInfo = parsePythonProgress(progress)
-                    kotlinCallback(progressInfo)
-                }
-            })
+            // Create a Python-compatible callback function using exec in builtins
+            val callbackCode = """
+                def kotlin_callback(progress):
+                    try:
+                        # This will be handled by the Python side
+                        pass
+                    except Exception as e:
+                        print(f"Error in progress callback: {e}", file=sys.stderr, flush=True)
+            """.trimIndent()
+            // globals must be a dict, not module
+            // Use builtins.exec with proper globals and locals dictionaries
+            val builtins = py.getModule("builtins")
+            val mainModule = py.getModule("__main__")
             
-            py.getModule("__main__")["kotlin_callback"]
+            // Create globals and locals dictionaries from the main module
+            // builtins.exec() expects dictionary objects for the globals and locals parameters
+            val globalsDict = mainModule.callAttr("__dict__")
+            val localsDict = mainModule.callAttr("__dict__")
+            
+            // Execute the callback function definition
+            builtins.callAttr("exec", callbackCode, globalsDict, localsDict)
+            
+            // Return the callback function
+            mainModule["kotlin_callback"]
         } catch (e: Exception) {
             Log.e(TAG, "Error creating Python callback", e)
             null

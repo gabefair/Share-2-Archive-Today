@@ -32,12 +32,13 @@ class BackgroundDownloadService : Service() {
         const val EXTRA_TITLE = "title"
         const val EXTRA_UPLOADER = "uploader"
         const val EXTRA_QUALITY = "quality"
+        const val EXTRA_QUALITY_LABEL = "quality_label"
         
         // Actions
         const val ACTION_START_DOWNLOAD = "start_download"
         const val ACTION_CANCEL_DOWNLOAD = "cancel_download"
         
-        fun startDownload(context: Context, url: String, title: String = "Unknown", uploader: String = "Unknown", quality: String = "best", formatId: String? = null) {
+        fun startDownload(context: Context, url: String, title: String = "Unknown", uploader: String = "Unknown", quality: String = "best", formatId: String? = null, qualityLabel: String? = null) {
             val intent = Intent(context, BackgroundDownloadService::class.java).apply {
                 action = ACTION_START_DOWNLOAD
                 putExtra(EXTRA_URL, url)
@@ -46,6 +47,9 @@ class BackgroundDownloadService : Service() {
                 putExtra(EXTRA_QUALITY, quality)
                 if (formatId != null) {
                     putExtra("EXTRA_FORMAT_ID", formatId)
+                }
+                if (qualityLabel != null) {
+                    putExtra(EXTRA_QUALITY_LABEL, qualityLabel)
                 }
             }
             
@@ -91,9 +95,10 @@ class BackgroundDownloadService : Service() {
                 val uploader = intent.getStringExtra(EXTRA_UPLOADER) ?: "Unknown"
                 val quality = intent.getStringExtra(EXTRA_QUALITY) ?: "best"
                 val formatId = intent.getStringExtra("EXTRA_FORMAT_ID")
+                val qualityLabel = intent.getStringExtra(EXTRA_QUALITY_LABEL)
                 
                 startForeground(NOTIFICATION_ID, createNotification("Starting download...", title))
-                startDownload(url, title, uploader, quality, formatId)
+                startDownload(url, title, uploader, quality, formatId, qualityLabel)
             }
             ACTION_CANCEL_DOWNLOAD -> {
                 Log.d(TAG, "Received cancellation request")
@@ -167,7 +172,7 @@ class BackgroundDownloadService : Service() {
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
     
-    private fun startDownload(url: String, title: String, uploader: String, quality: String, formatId: String? = null) {
+    private fun startDownload(url: String, title: String, uploader: String, quality: String, formatId: String? = null, qualityLabel: String? = null) {
         val downloadId = "${url.hashCode()}_${System.currentTimeMillis()}"
         
         // Reset cancellation flag from any previous downloads
@@ -213,6 +218,9 @@ class BackgroundDownloadService : Service() {
                 // Also get uploader info if available
                 val displayUploader = videoInfo?.uploader ?: uploader
                 
+                // Use quality label for display if available, otherwise fall back to quality parameter
+                val displayQuality = qualityLabel ?: quality
+                
                 Log.d(TAG, "Download starting - Title: '$displayTitle', Uploader: '$displayUploader'")
                 
                 updateNotification("Starting download...", displayTitle)
@@ -238,7 +246,7 @@ class BackgroundDownloadService : Service() {
                         url = url,
                         title = displayTitle,
                         uploader = displayUploader,
-                        quality = quality,
+                        quality = displayQuality,
                         filePath = null,
                         fileSize = 0,
                         success = false,
@@ -269,8 +277,8 @@ class BackgroundDownloadService : Service() {
                 // Get estimated file size for memory planning (use default since VideoInfo doesn't have fileSize)
                 val estimatedSizeMB = 100L  // Default estimate: 100MB
                 
-                // Start tracking this download
-                downloadResumptionManager.startDownload(downloadId, url, displayTitle, quality, downloadDir)
+                // Start tracking this download - use quality label for display if available
+                downloadResumptionManager.startDownload(downloadId, url, displayTitle, displayQuality, downloadDir)
                 
                 // Download video with selected quality and real-time progress tracking
                 val result = when {
@@ -289,12 +297,12 @@ class BackgroundDownloadService : Service() {
                         pythonDownloader.downloadVideo(
                             url = url,
                             outputDir = downloadDir,
-                            quality = quality,
+                            quality = quality, // Use quality preference instead of specific format ID
                             progressCallback = { progressInfo ->
                                 handleProgressUpdate(progressInfo, displayTitle, downloadId)
                             },
                             estimatedSizeMB = estimatedSizeMB,
-                            formatId = formatId
+                            formatId = null // Deprecated - let Python side handle quality selection
                         )
                     }
                 }
@@ -342,34 +350,66 @@ class BackgroundDownloadService : Service() {
                         result
                     }
                     
+                    // Process audio files that may need re-muxing (DASH m4a -> standard m4a)
+                    val processedResult = if (quality.startsWith("audio_")) {
+                        // For audio-only downloads, check if conversion is needed
+                        val filePath = finalResult.filePath
+                        if (filePath != null) {
+                            val file = File(filePath)
+                            if (AudioRemuxer.needsRemuxing(file, isAudioOnlyDownload = true)) {
+                                val processedPath = processAudioFile(filePath, displayTitle, true)
+                                finalResult.copy(filePath = processedPath)
+                            } else {
+                                finalResult
+                            }
+                        } else {
+                            finalResult
+                        }
+                    } else {
+                        // For video downloads, only process separate audio files if needed
+                        if (finalResult.separateAv && finalResult.audioPath != null) {
+                            val audioFile = File(finalResult.audioPath)
+                            if (AudioRemuxer.needsRemuxing(audioFile, isAudioOnlyDownload = false)) {
+                                val processedAudioPath = processAudioFile(finalResult.audioPath, displayTitle, false)
+                                finalResult.copy(audioPath = processedAudioPath)
+                            } else {
+                                finalResult
+                            }
+                        } else {
+                            finalResult
+                        }
+                    }
+                    
+                    val processedFilePath = processedResult.filePath
+                    
                     // Move file to MediaStore Downloads
-                    val mediaStoreUri = finalResult.filePath?.let { filePath ->
+                    val mediaStoreUri = processedFilePath?.let { filePath ->
                         moveToMediaStore(filePath, displayTitle)
                     }
                     
                     // Store the MediaStore URI as a string for history
                     // Modern Android uses content:// URIs, not file paths
-                    val uriString = mediaStoreUri?.toString() ?: finalResult.filePath
+                    val uriString = mediaStoreUri?.toString() ?: processedResult.filePath
                     
                     // Mark download as completed
-                    downloadResumptionManager.completeDownload(downloadId, uriString ?: "", finalResult.fileSize)
+                    downloadResumptionManager.completeDownload(downloadId, uriString ?: "", processedResult.fileSize)
                     
                     // Add to download history
                     downloadHistoryManager.addDownload(
                         url = url,
                         title = displayTitle,
                         uploader = displayUploader,
-                        quality = quality,
+                        quality = displayQuality,
                         filePath = uriString,
-                        fileSize = finalResult.fileSize,
+                        fileSize = processedResult.fileSize,
                         success = true
                     )
                     
                     // Log successful download for analytics/monitoring
-                    Log.i(TAG, "Download completed successfully: $displayTitle ($quality) - ${finalResult.fileSize} bytes")
+                    Log.i(TAG, "Download completed successfully: $displayTitle ($quality) - ${processedResult.fileSize} bytes")
                     
                     // Show completion notification
-                    showCompletionNotification(displayTitle, mediaStoreUri, finalResult.filePath)
+                    showCompletionNotification(displayTitle, mediaStoreUri, processedResult.filePath)
                 } else {
                     Log.e(TAG, "Download failed: ${result.error}")
                     Log.e(TAG, "Download failure details:")
@@ -394,7 +434,7 @@ class BackgroundDownloadService : Service() {
                         url = url,
                         title = displayTitle,
                         uploader = displayUploader,
-                        quality = quality,
+                        quality = displayQuality,
                         filePath = null,
                         fileSize = 0,
                         success = false,
@@ -621,23 +661,48 @@ class BackgroundDownloadService : Service() {
     
     
     private fun getMimeType(filePath: String): String {
-        val extension = filePath.substringAfterLast('.', "").lowercase()
-        return when (extension) {
-            "mp4" -> "video/mp4"
-            "webm" -> "video/webm"
-            "mkv" -> "video/x-matroska"
-            "avi" -> "video/x-msvideo"
-            "mov" -> "video/quicktime"
-            "mp3" -> "audio/mpeg"
-            "aac" -> "audio/aac"
-            "m4a" -> "audio/mp4"
-            "wav" -> "audio/wav"
-            "ogg" -> "audio/ogg"
-            "opus" -> "audio/opus"
-            else -> {
-                // If we don't recognize the extension, guess based on context
-                if (filePath.contains("_audio")) "audio/*" else "video/*"
+        return try {
+            // First, try to get MIME type from file extension
+            val extension = filePath.substringAfterLast('.', "").lowercase()
+            val mimeFromExtension = when (extension) {
+                "mp4" -> "video/mp4"
+                "webm" -> "video/webm"
+                "mkv" -> "video/x-matroska"
+                "avi" -> "video/x-msvideo"
+                "mov" -> "video/quicktime"
+                "mp3" -> "audio/mpeg"
+                "aac" -> "audio/aac"
+                "m4a" -> "audio/mp4"
+                "wav" -> "audio/wav"
+                "ogg" -> "audio/ogg"
+                "opus" -> "audio/opus"
+                else -> null
             }
+            
+            // If we have a specific MIME type from extension, use it
+            if (mimeFromExtension != null) {
+                return mimeFromExtension
+            }
+            
+            // Try Android's built-in MIME type detection
+            val file = File(filePath)
+            if (file.exists()) {
+                val mimeType = android.webkit.MimeTypeMap.getSingleton()
+                    .getMimeTypeFromExtension(extension)
+                if (!mimeType.isNullOrEmpty()) {
+                    return mimeType
+                }
+            }
+            
+            // Fallback based on file content analysis
+            if (filePath.contains("_audio") || extension in listOf("mp3", "aac", "m4a", "wav", "ogg", "opus")) {
+                "audio/mpeg" // Generic audio fallback
+            } else {
+                "video/mp4" // Default to MP4 for video files instead of generic video/*
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error determining MIME type for: $filePath", e)
+            "video/mp4" // Safe fallback
         }
     }
     
@@ -854,6 +919,69 @@ class BackgroundDownloadService : Service() {
             Log.e(TAG, "Error getting file path from MediaStore URI", e)
         }
         return null
+    }
+    
+    /**
+     * Process audio files that may need conversion (DASH m4a -> MP3)
+     * @param filePath The original file path
+     * @param title The file title for logging
+     * @return The processed file path (original if no processing needed or failed)
+     */
+    private fun processAudioFile(filePath: String, @Suppress("UNUSED_PARAMETER") title: String, isAudioOnlyDownload: Boolean = true): String? {
+        try {
+            val file = File(filePath)
+            if (!file.exists()) {
+                Log.e(TAG, "File does not exist for processing: $filePath")
+                return filePath
+            }
+            
+            // Check if this is an audio file that needs re-muxing
+            if (!AudioRemuxer.needsRemuxing(file, isAudioOnlyDownload)) {
+                Log.d(TAG, "File does not need re-muxing: ${file.name}")
+                return filePath
+            }
+            
+            Log.d(TAG, "Processing audio file for MP3 conversion: ${file.name}")
+            
+            // Create temporary file for re-muxed output
+            val tempFile = AudioRemuxer.createTempFile(file)
+            
+            // Perform re-muxing
+            val success = AudioRemuxer.remuxAudioFile(file, tempFile)
+            
+            if (success && tempFile.exists()) {
+                Log.d(TAG, "Audio conversion successful: ${tempFile.name}")
+                
+                // Create new M4A file with original name but .m4a extension
+                val m4aFile = File(file.parent, "${file.nameWithoutExtension}.m4a")
+                
+                // Replace original file with converted M4A version
+                if (file.delete()) {
+                    if (tempFile.renameTo(m4aFile)) {
+                        Log.d(TAG, "Replaced original file with M4A version: ${m4aFile.name}")
+                        return m4aFile.absolutePath
+                    } else {
+                        Log.e(TAG, "Failed to rename converted file to M4A name")
+                        // Restore original file if rename failed
+                        tempFile.renameTo(file)
+                    }
+                } else {
+                    Log.e(TAG, "Failed to delete original file for replacement")
+                }
+            } else {
+                Log.e(TAG, "Audio conversion failed for: ${file.name}")
+                // Clean up temp file if it exists
+                if (tempFile.exists()) {
+                    tempFile.delete()
+                }
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error processing audio file: $filePath", e)
+        }
+        
+        // Return original file path if processing failed
+        return filePath
     }
     
     private fun moveToMediaStore(filePath: String, title: String): android.net.Uri? {

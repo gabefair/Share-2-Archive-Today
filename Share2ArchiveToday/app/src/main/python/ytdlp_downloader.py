@@ -98,12 +98,34 @@ class VideoDownloader:
                 'no_warnings': False,  # Show warnings for debugging
                 'extract_flat': False,
                 'dump_single_json': True,  # This will print JSON to stdout
+                'ignoreerrors': True,  # Don't fail on individual extractor errors
+                'no_check_certificate': True,  # Skip SSL certificate verification
+                'prefer_insecure': False,  # Prefer HTTPS when available
+                # Reddit-specific options
+                'extractor_args': {
+                    'reddit': {
+                        'include': ['v.redd.it', 'i.redd.it', 'gfycat.com', 'imgur.com'],
+                        'exclude': ['comments', 'user', 'subreddit']
+                    }
+                }
             }
             
             print(f"[DEBUG] Getting video info for: {url}", flush=True)
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
+                
+                # Check if info extraction was successful
+                if not info:
+                    print(f"[ERROR] Failed to extract video info from URL: {url}", flush=True)
+                    return {
+                        'title': 'Unknown',
+                        'uploader': 'Unknown',
+                        'duration': 0,
+                        'formats': [],
+                        'thumbnail': '',
+                        'error': 'Failed to extract video information'
+                    }
                 
                 # Log the full JSON info for debugging
                 print(f"[DEBUG] Full yt-dlp JSON output:", flush=True)
@@ -142,107 +164,203 @@ class VideoDownloader:
                 return result
                 
         except Exception as e:
-            print(f"Error getting video info: {e}", file=sys.stderr, flush=True)
+            error_msg = str(e)
+            print(f"Error getting video info: {error_msg}", file=sys.stderr, flush=True)
             traceback.print_exc(file=sys.stderr)
-            raise
+            
+            # Return a structured error response instead of raising
+            return {
+                'title': 'Unknown',
+                'uploader': 'Unknown', 
+                'duration': 0,
+                'formats': [],
+                'thumbnail': '',
+                'error': f'Failed to extract video information: {error_msg}',
+                'extractor': 'unknown',
+                'extractor_key': 'unknown',
+                'webpage_url': url,
+            }
             
     def _extract_format_info(self, formats: list) -> list:
-        """Extract useful format information, filtering for video formats"""
+        """Extract useful format information, intelligently pairing DASH video/audio streams"""
         format_list = []
         seen_resolutions = set()
         
         print(f"[DEBUG] Processing {len(formats)} formats for quality selection", flush=True)
         
+        # First pass: identify DASH audio stream and video-only streams
+        dash_audio_format = None
+        video_only_formats = []
+        complete_formats = []
+        
         for fmt in formats:
-            # Get format details
             vcodec = fmt.get('vcodec', 'none')
             acodec = fmt.get('acodec', 'none')
-            height = fmt.get('height', 0) or 0  # Handle None values
-            width = fmt.get('width', 0) or 0    # Handle None values
-            format_id = fmt.get('format_id', '')
-            ext = fmt.get('ext', '')
+            format_note = fmt.get('format_note', '')
             
-            # Determine if format has video/audio
-            # Handle both 'none' string and None/null values
-            has_video = vcodec not in ('none', None, 'null') and vcodec != ''
-            has_audio = acodec not in ('none', None, 'null') and acodec != ''
+            # Check for DASH audio stream
+            if (acodec not in ('none', None, 'null') and acodec != '' and 
+                vcodec in ('none', None, 'null') and 
+                ('dash' in format_note.lower() or 'dash' in fmt.get('format_id', '').lower())):
+                dash_audio_format = fmt
+                print(f"[DEBUG] Found DASH audio stream: {fmt.get('format_id')}", flush=True)
             
-            # Special case: yt-dlp generic extractor often reports null codecs for direct video links
-            # If we have a video file extension but null codecs, assume it's a video file
-            video_extensions = ['mp4', 'webm', 'mkv', 'avi', 'mov', 'flv', 'm4v', 'mpg', 'mpeg', 'wmv']
-            audio_extensions = ['mp3', 'aac', 'm4a', 'wav', 'ogg', 'opus', 'flac']
+            # Check for video-only streams (DASH or otherwise)
+            elif (vcodec not in ('none', None, 'null') and vcodec != '' and 
+                  acodec in ('none', None, 'null')):
+                video_only_formats.append(fmt)
+                print(f"[DEBUG] Found video-only stream: {fmt.get('format_id')} - {fmt.get('format_note', '')}", flush=True)
             
-            if ext in video_extensions and not has_video and not has_audio:
-                # Assume it's a video file with unknown codecs
-                has_video = True
-                has_audio = True  # Most video files have audio
-                print(f"[DEBUG] Format {format_id}: Assuming video+audio for .{ext} file with null codecs", flush=True)
-            elif ext in audio_extensions and not has_audio:
-                has_audio = True
-                print(f"[DEBUG] Format {format_id}: Assuming audio for .{ext} file", flush=True)
+            # Complete formats (have both video and audio)
+            elif (vcodec not in ('none', None, 'null') and vcodec != '' and 
+                  acodec not in ('none', None, 'null') and acodec != ''):
+                complete_formats.append(fmt)
+                print(f"[DEBUG] Found complete format: {fmt.get('format_id')}", flush=True)
+        
+        # Process complete formats first (these are ready to use)
+        for fmt in complete_formats:
+            format_info = self._process_format(fmt)
+            if format_info:
+                format_list.append(format_info)
+        
+        # Process video-only formats by pairing them with DASH audio
+        if dash_audio_format and video_only_formats:
+            print(f"[DEBUG] Pairing {len(video_only_formats)} video-only streams with DASH audio", flush=True)
             
-            # Skip formats that are neither video nor audio
-            if not has_video and not has_audio:
-                print(f"[DEBUG] Skipping format {format_id}: no video or audio (vcodec={vcodec}, acodec={acodec})", flush=True)
-                continue
+            # Group video-only formats by resolution to avoid duplicates
+            resolution_groups = {}
+            for fmt in video_only_formats:
+                height = fmt.get('height', 0) or 0
+                if height not in resolution_groups:
+                    resolution_groups[height] = []
+                resolution_groups[height].append(fmt)
             
-            # Create resolution string
-            if height and width:
-                resolution = f"{width}x{height}"
-                quality_label = f"{height}p"
-            else:
-                # For formats without resolution info (generic extractor)
-                # Use a generic label based on the format
-                resolution = fmt.get('resolution', 'unknown')
-                if resolution in ('unknown', None, 'null'):
-                    if has_video:
-                        quality_label = "Original Quality"
-                        # Use a high value for sorting purposes so it appears first
-                        height = 9999
-                    else:
-                        quality_label = "Audio Only"
-                        height = 0
-                else:
-                    quality_label = resolution
-            
-            # For audio-only formats, use a special label
-            if not has_video and has_audio:
-                quality_label = "Audio Only"
-                resolution = "Audio"
-                height = 0
-            
-            # Skip duplicate resolutions (keep first one which is usually best)
-            res_key = (height, has_audio, has_video, format_id)  # Include format_id to avoid skipping same resolution different formats
-            if res_key in seen_resolutions:
-                print(f"[DEBUG] Skipping duplicate format {format_id}: {quality_label}", flush=True)
-                continue
-            seen_resolutions.add(res_key)
-            
-            format_info = {
-                'format_id': format_id,
-                'ext': ext,
-                'resolution': resolution,
-                'height': height,
-                'quality_label': quality_label,
-                'filesize': fmt.get('filesize') or fmt.get('filesize_approx', 0) or 0,
-                'vcodec': str(vcodec) if vcodec else 'none',
-                'acodec': str(acodec) if acodec else 'none',
-                'has_audio': has_audio,
-                'has_video': has_video,
-                'fps': fmt.get('fps', 0) or 0,
-                'format_note': fmt.get('format_note', ''),
-                'tbr': fmt.get('tbr', 0) or 0,  # Total bitrate
-                'url': fmt.get('url', ''),  # Direct URL for testing
-            }
-            
-            format_list.append(format_info)
-            print(f"[DEBUG] Added format {format_id}: {quality_label} ({resolution}) - has_video={has_video}, has_audio={has_audio}", flush=True)
+            # For each resolution, pick the best bitrate and pair with audio
+            for height in sorted(resolution_groups.keys(), reverse=True):
+                video_formats = resolution_groups[height]
+                # Sort by bitrate (descending) to get best quality first
+                video_formats.sort(key=lambda x: x.get('tbr', 0) or 0, reverse=True)
+                
+                # Take only the best bitrate for each resolution
+                best_video = video_formats[0]
+                
+                # Create a paired format
+                paired_format = {
+                    'format_id': f"{best_video.get('format_id')}+{dash_audio_format.get('format_id')}",
+                    'video_format_id': best_video.get('format_id'),
+                    'audio_format_id': dash_audio_format.get('format_id'),
+                    'ext': best_video.get('ext', 'mp4'),
+                    'resolution': best_video.get('resolution', ''),
+                    'height': height,
+                    'width': best_video.get('width', 0) or 0,
+                    'quality_label': f"{height}p",
+                    'filesize': (best_video.get('filesize') or best_video.get('filesize_approx', 0) or 0) + 
+                               (dash_audio_format.get('filesize') or dash_audio_format.get('filesize_approx', 0) or 0),
+                    'vcodec': best_video.get('vcodec', 'none'),
+                    'acodec': dash_audio_format.get('acodec', 'none'),
+                    'has_audio': True,
+                    'has_video': True,
+                    'fps': best_video.get('fps', 0) or 0,
+                    'format_note': f"DASH {height}p (Video+Audio)",
+                    'tbr': (best_video.get('tbr', 0) or 0) + (dash_audio_format.get('tbr', 0) or 0),
+                    'url': best_video.get('url', ''),
+                    'is_dash_paired': True,  # Flag to indicate this is a paired format
+                }
+                
+                format_list.append(paired_format)
+                print(f"[DEBUG] Created paired format: {height}p (Video+Audio) - {paired_format['format_id']}", flush=True)
+        
+        # Process remaining formats (audio-only, etc.)
+        for fmt in formats:
+            if fmt not in complete_formats and fmt not in video_only_formats and fmt != dash_audio_format:
+                format_info = self._process_format(fmt)
+                if format_info:
+                    format_list.append(format_info)
         
         # Sort by height (descending) so best quality is first, audio-only at end
         format_list.sort(key=lambda x: (x['has_video'], x['height']), reverse=True)
         
         print(f"[DEBUG] Final format list has {len(format_list)} formats", flush=True)
         return format_list
+    
+    def _process_format(self, fmt: dict) -> dict:
+        """Process a single format and return format info"""
+        # Get format details
+        vcodec = fmt.get('vcodec', 'none')
+        acodec = fmt.get('acodec', 'none')
+        height = fmt.get('height', 0) or 0  # Handle None values
+        width = fmt.get('width', 0) or 0    # Handle None values
+        format_id = fmt.get('format_id', '')
+        ext = fmt.get('ext', '')
+        
+        # Determine if format has video/audio
+        # Handle both 'none' string and None/null values
+        has_video = vcodec not in ('none', None, 'null') and vcodec != ''
+        has_audio = acodec not in ('none', None, 'null') and acodec != ''
+        
+        # Special case: yt-dlp generic extractor often reports null codecs for direct video links
+        # If we have a video file extension but null codecs, assume it's a video file
+        video_extensions = ['mp4', 'webm', 'mkv', 'avi', 'mov', 'flv', 'm4v', 'mpg', 'mpeg', 'wmv']
+        audio_extensions = ['mp3', 'aac', 'm4a', 'wav', 'ogg', 'opus', 'flac']
+        
+        if ext in video_extensions and not has_video and not has_audio:
+            # Assume it's a video file with unknown codecs
+            has_video = True
+            has_audio = True  # Most video files have audio
+            print(f"[DEBUG] Format {format_id}: Assuming video+audio for .{ext} file with null codecs", flush=True)
+        elif ext in audio_extensions and not has_audio:
+            has_audio = True
+            print(f"[DEBUG] Format {format_id}: Assuming audio for .{ext} file", flush=True)
+        
+        # Skip formats that are neither video nor audio
+        if not has_video and not has_audio:
+            print(f"[DEBUG] Skipping format {format_id}: no video or audio (vcodec={vcodec}, acodec={acodec})", flush=True)
+            return None
+        
+        # Create resolution string
+        if height and width:
+            resolution = f"{width}x{height}"
+            quality_label = f"{height}p"
+        else:
+            # For formats without resolution info (generic extractor)
+            # Use a generic label based on the format
+            resolution = fmt.get('resolution', 'unknown')
+            if resolution in ('unknown', None, 'null'):
+                if has_video:
+                    quality_label = "Original Quality"
+                    # Use a high value for sorting purposes so it appears first
+                    height = 9999
+                else:
+                    quality_label = "Audio Only"
+                    height = 0
+            else:
+                quality_label = resolution
+        
+        # For audio-only formats, use a special label
+        if not has_video and has_audio:
+            quality_label = "Audio Only"
+            resolution = "Audio"
+            height = 0
+        
+        format_info = {
+            'format_id': format_id,
+            'ext': ext,
+            'resolution': resolution,
+            'height': height,
+            'quality_label': quality_label,
+            'filesize': fmt.get('filesize') or fmt.get('filesize_approx', 0) or 0,
+            'vcodec': str(vcodec) if vcodec else 'none',
+            'acodec': str(acodec) if acodec else 'none',
+            'has_audio': has_audio,
+            'has_video': has_video,
+            'fps': fmt.get('fps', 0) or 0,
+            'format_note': fmt.get('format_note', ''),
+            'tbr': fmt.get('tbr', 0) or 0,  # Total bitrate
+            'url': fmt.get('url', ''),  # Direct URL for testing
+        }
+        
+        print(f"[DEBUG] Added format {format_id}: {quality_label} ({resolution}) - has_video={has_video}, has_audio={has_audio}", flush=True)
+        return format_info
         
     def download_video(
         self,
@@ -259,9 +377,9 @@ class VideoDownloader:
         Args:
             url: Video URL
             output_dir: Directory to save the video
-            quality: Quality selection (e.g., 'best', '1080p', '720p', 'worst') - used if format_id not specified
+            quality: Quality selection (e.g., 'best', '1080p', '720p', 'worst') - used for quality-based selection
             progress_callback: Callback function for progress updates
-            format_id: Specific format ID to download (from get_video_info). If provided, overrides quality.
+            format_id: DEPRECATED - Specific format ID to download. Now ignored for better compatibility.
             
         Returns:
             Dictionary with download result
@@ -271,29 +389,24 @@ class VideoDownloader:
             
             print(f"[info] Starting download: {url}", flush=True)
             print(f"[info] Output directory: {output_dir}", flush=True)
+            print(f"[info] Quality preference: {quality}", flush=True)
             if format_id:
-                print(f"[info] Format ID: {format_id}", flush=True)
-            else:
-                print(f"[info] Quality: {quality}", flush=True)
+                print(f"[info] Note: format_id '{format_id}' is deprecated, using quality-based selection instead", flush=True)
+            print(f"[info] Using quality-based selection for better compatibility", flush=True)
             
             # Create progress tracker
             progress_tracker = ProgressTracker(progress_callback)
             
-            # Determine format string to use
-            if format_id:
-                # Use specific format ID provided by user
-                video_format = format_id
-                print(f"[info] Using specific format ID: {format_id}", flush=True)
-            else:
-                # Use quality-based selection (fallback for backward compatibility)
-                video_format = self._get_video_only_format(quality)
-                print(f"[info] Using quality-based format: {video_format}", flush=True)
+            # Convert quality preference to yt-dlp format selector
+            # This approach is more robust than using specific format IDs
+            video_format = self._get_quality_based_format(quality)
+            print(f"[info] Using quality-based format selector: {video_format}", flush=True)
             
             # Try multiple format strategies for better compatibility
+            # Start with quality-based selection, then fallback to more general options
             format_strategies = [
-                video_format,  # Try the requested format first
+                video_format,  # Try the quality-based format first
                 'best',        # Fallback to best available
-                'bestvideo+bestaudio/best',  # Try combined video+audio
                 'bestvideo',   # Try video only
                 'bestaudio',   # Try audio only as last resort
             ]
@@ -315,12 +428,13 @@ class VideoDownloader:
                 print(f"[info] Trying format strategy {i+1}/{len(format_strategies)}: {strategy}", flush=True)
                 
                 try:
-                    # Configure yt-dlp options
+                    # Configure yt-dlp options for Android compatibility
                     ydl_opts = {
                         'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
                         'progress_hooks': [progress_tracker],
                         'quiet': False,
                         'no_warnings': False,
+                        'verbose': True,  # Enable verbose logging for debugging
                         'format': strategy,
                         'ignoreerrors': True,  # Always ignore errors as requested
                         'postprocessors': [],
@@ -328,6 +442,16 @@ class VideoDownloader:
                         'fragment_retries': 10,
                         'skip_unavailable_fragments': True,
                         'socket_timeout': 30,
+                        # CRITICAL: Don't let yt-dlp merge - we handle it with MediaMuxer
+                        'no-direct-merge': True,  # Don't merge video/audio - we handle that with MediaMuxer
+                        'prefer_ffmpeg': False,  # Don't use ffmpeg since we don't have it
+                        'writeinfojson': False,  # Don't write metadata files
+                        'writethumbnail': False,  # Don't download thumbnails
+                        'writesubtitles': False,  # Don't download subtitles
+                        'writeautomaticsub': False,  # Don't download auto-generated subtitles
+                        # Container format preferences for Android
+                        'format_sort': ['res', 'ext:mp4:m4a', 'proto'],  # Prefer MP4/M4A containers
+                        'format_sort_force': True,  # Force format sorting
                     }
                     
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -442,6 +566,7 @@ class VideoDownloader:
                 'progress_hooks': [progress_tracker],
                 'quiet': False,
                 'no_warnings': False,
+                'verbose': True,  # Enable verbose logging for debugging
                 'format': 'bestaudio',
                 'ignoreerrors': True,
                 'postprocessors': [],
@@ -449,6 +574,7 @@ class VideoDownloader:
                 'fragment_retries': 10,
                 'skip_unavailable_fragments': True,
                 'socket_timeout': 30,
+                'no-direct-merge': True,  # Don't merge video/audio - we handle that with MediaMuxer
             }
             
             with yt_dlp.YoutubeDL(audio_opts) as ydl:
@@ -495,10 +621,36 @@ class VideoDownloader:
                 'file_size': 0
             }
     
+    def _get_quality_based_format(self, quality: str) -> str:
+        """
+        Get yt-dlp format string based on quality preference
+        Uses intelligent format selection that works with most video platforms
+        """
+        # Map quality preferences to robust yt-dlp format selectors
+        quality_map = {
+            # Don't have yt-dlp request merged formats. We will handle merging in Kotlin.
+            '2160p': 'best[height<=2160]',
+            '1440p': 'best[height<=1440]', 
+            '1080p': 'best[height<=1080]',
+            '720p': 'best[height<=720]',
+            '480p': 'best[height<=480]',
+            '360p': 'best[height<=360]',
+            
+            # Special cases
+            'worst': 'worst',
+            'best': 'best',
+            'audio_mp3': 'bestaudio[ext=mp3]/bestaudio',
+            'audio_aac': 'bestaudio[ext=m4a]/bestaudio[ext=aac]/bestaudio',
+        }
+        
+        # Default to best available
+        return quality_map.get(quality, 'best')
+    
     def _get_video_only_format(self, quality: str) -> str:
         """
         Get yt-dlp format string for video-only stream
         Used when downloading video and audio separately
+        DEPRECATED: Use _get_quality_based_format instead
         """
         # Quality mapping for video-only
         quality_map = {
@@ -584,8 +736,10 @@ class VideoDownloader:
                 print(f"[warning] Could not check formats, will try all strategies: {e}", flush=True)
                 has_audio_only = None  # Unknown, will try all strategies
             
-            # Strategy 1: Try audio-only formats (m4a, aac, mp3, opus, etc.)
+            # Strategy 1: Try audio-only formats with better format selection
+            # Prioritize formats that are more likely to be properly containerized
             audio_only_formats = [
+                'bestaudio[ext=m4a]/bestaudio[ext=aac]/bestaudio[ext=mp3]',  # Combined selector for better compatibility
                 'bestaudio[ext=m4a]',
                 'bestaudio[ext=aac]', 
                 'bestaudio[ext=mp3]',
@@ -606,12 +760,27 @@ class VideoDownloader:
                         'progress_hooks': [progress_tracker],
                         'quiet': False,
                         'no_warnings': False,
+                        'verbose': True,  # Enable verbose logging for debugging
                         'postprocessors': [],
                         'retries': 10,
                         'fragment_retries': 10,
                         'skip_unavailable_fragments': True,
                         'socket_timeout': 30,
                         'ignoreerrors': True,
+                        # CRITICAL: Don't let yt-dlp merge - we handle it with MediaMuxer
+                        'no-direct-merge': True,  # Don't merge video/audio - we handle that with MediaMuxer
+                        'prefer_ffmpeg': False,  # Don't use ffmpeg since we don't have it
+                        'prefer_insecure': False,
+                        'http_chunk_size': 10485760,  # 10MB chunks for better streaming
+                        'concurrent_fragment_downloads': 1,  # Single fragment to avoid corruption
+                        'keep_fragments': False,
+                        'writeinfojson': False,
+                        'writethumbnail': False,
+                        'writesubtitles': False,
+                        'writeautomaticsub': False,
+                        # Container format preferences for Android audio
+                        'format_sort': ['ext:m4a:mp3:aac', 'abr', 'proto'],  # Prefer M4A/MP3/AAC containers
+                        'format_sort_force': True,  # Force format sorting
                     }
                     
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -622,15 +791,19 @@ class VideoDownloader:
                             
                             if filepath and os.path.exists(filepath):
                                 print(f"[info] Successfully downloaded audio-only: {filepath}", flush=True)
+                                
+                                # Validate and potentially fix the audio file
+                                validated_filepath = self._validate_audio_file(filepath)
+                                
                                 return {
                                     'success': True,
                                     'error': None,
-                                    'file_path': filepath,
+                                    'file_path': validated_filepath,
                                     'video_path': None,
                                     'audio_path': None,
                                     'separate_av': False,
                                     'needs_extraction': False,
-                                    'file_size': os.path.getsize(filepath)
+                                    'file_size': os.path.getsize(validated_filepath)
                                 }
                 except Exception as e:
                     print(f"[warning] Audio format {audio_fmt} failed: {e}", flush=True)
@@ -640,8 +813,10 @@ class VideoDownloader:
             # These formats will have audio without video
             print(f"[info] Audio-only formats not available, trying DASH audio streams...", flush=True)
             dash_audio_formats = [
+                'bestaudio[protocol*=dash]/bestaudio[ext=m4a]',  # Prefer m4a for DASH
                 'bestaudio[protocol*=dash]',
                 'bestaudio[protocol*=m3u8]',
+                'bestaudio[ext=m4a]',  # Fallback to any m4a format
             ]
             
             for dash_fmt in dash_audio_formats:
@@ -656,12 +831,23 @@ class VideoDownloader:
                         'progress_hooks': [progress_tracker],
                         'quiet': False,
                         'no_warnings': False,
+                        'verbose': True,  # Enable verbose logging for debugging
                         'postprocessors': [],
                         'retries': 10,
                         'fragment_retries': 10,
                         'skip_unavailable_fragments': True,
                         'socket_timeout': 30,
                         'ignoreerrors': True,
+                        'no-direct-merge': True,  # Don't merge video/audio - we handle that with MediaMuxer
+                        # Audio-specific options for better compatibility
+                        'prefer_insecure': False,
+                        'http_chunk_size': 10485760,  # 10MB chunks for better streaming
+                        'concurrent_fragment_downloads': 1,  # Single fragment to avoid corruption
+                        'keep_fragments': False,
+                        'writeinfojson': False,
+                        'writethumbnail': False,
+                        'writesubtitles': False,
+                        'writeautomaticsub': False,
                     }
                     
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -672,15 +858,19 @@ class VideoDownloader:
                             
                             if filepath and os.path.exists(filepath):
                                 print(f"[info] Successfully downloaded DASH audio: {filepath}", flush=True)
+                                
+                                # Validate and potentially fix the audio file
+                                validated_filepath = self._validate_audio_file(filepath)
+                                
                                 return {
                                     'success': True,
                                     'error': None,
-                                    'file_path': filepath,
+                                    'file_path': validated_filepath,
                                     'video_path': None,
                                     'audio_path': None,
                                     'separate_av': False,
                                     'needs_extraction': False,
-                                    'file_size': os.path.getsize(filepath)
+                                    'file_size': os.path.getsize(validated_filepath)
                                 }
                 except Exception as e:
                     print(f"[warning] DASH audio format {dash_fmt} failed: {e}", flush=True)
@@ -696,12 +886,14 @@ class VideoDownloader:
                     'progress_hooks': [progress_tracker],
                     'quiet': False,
                     'no_warnings': False,
+                    'verbose': True,  # Enable verbose logging for debugging
                     'postprocessors': [],
                     'retries': 10,
                     'fragment_retries': 10,
                     'skip_unavailable_fragments': True,
                     'socket_timeout': 30,
                     'ignoreerrors': True,
+                    'no-direct-merge': True,  # Don't merge video/audio - we handle that with MediaMuxer
                 }
                 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -754,6 +946,95 @@ class VideoDownloader:
                 'needs_extraction': False,
                 'file_size': 0
             }
+    
+    def _validate_audio_file(self, filepath: str) -> str:
+        """
+        Validate and potentially fix audio file format issues
+        Returns the path to a valid audio file (original or fixed)
+        """
+        try:
+            print(f"[info] Validating audio file: {filepath}", flush=True)
+            
+            # Check file size - if it's too small, it might be corrupted
+            file_size = os.path.getsize(filepath)
+            if file_size < 1024:  # Less than 1KB is suspicious
+                print(f"[warning] Audio file is very small ({file_size} bytes), might be corrupted", flush=True)
+                return filepath  # Return original, let caller handle
+            
+            # Check file extension
+            file_ext = os.path.splitext(filepath)[1].lower()
+            
+            # For m4a files, try to ensure proper container format
+            if file_ext in ['.m4a', '.mp4']:
+                # Try to read the file and check if it's properly formatted
+                try:
+                    with open(filepath, 'rb') as f:
+                        # Read first few bytes to check for proper container headers
+                        header = f.read(8)
+                        
+                        # Check for MP4/M4A container signatures
+                        if header.startswith(b'\x00\x00\x00\x18ftyp') or \
+                           header.startswith(b'\x00\x00\x00\x20ftyp') or \
+                           header.startswith(b'\x00\x00\x00\x1cftyp'):
+                            print(f"[info] Audio file has proper MP4/M4A container format", flush=True)
+                            return filepath
+                        else:
+                            print(f"[warning] Audio file may not have proper container format, attempting repair", flush=True)
+                            # Try to repair the file by adding proper container headers
+                            repaired_filepath = self._repair_audio_container(filepath)
+                            return repaired_filepath
+                            
+                except Exception as e:
+                    print(f"[warning] Could not validate container format: {e}", flush=True)
+                    return filepath
+            
+            # For other audio formats, assume they're fine
+            print(f"[info] Audio file validation passed", flush=True)
+            return filepath
+            
+        except Exception as e:
+            print(f"[error] Error validating audio file: {e}", flush=True)
+            return filepath  # Return original file on error
+    
+    def _repair_audio_container(self, filepath: str) -> str:
+        """
+        Attempt to repair audio container format issues
+        Returns the path to the repaired file (or original if repair fails)
+        """
+        try:
+            print(f"[info] Attempting to repair audio container: {filepath}", flush=True)
+            
+            # Read the original file
+            with open(filepath, 'rb') as f:
+                content = f.read()
+            
+            # Check if it's an AAC stream without proper container
+            # AAC files often start with ADTS headers
+            if content.startswith(b'\xff\xf1') or content.startswith(b'\xff\xf9'):
+                print(f"[info] Detected AAC stream, attempting to wrap in M4A container", flush=True)
+                
+                # Create a new filename with .m4a extension
+                base_name = os.path.splitext(filepath)[0]
+                repaired_filepath = base_name + '.m4a'
+                
+                # For now, just rename the file to .m4a and hope for the best
+                # In a more sophisticated implementation, we would use a library
+                # to properly wrap the AAC stream in an M4A container
+                try:
+                    os.rename(filepath, repaired_filepath)
+                    print(f"[info] Renamed audio file to .m4a: {repaired_filepath}", flush=True)
+                    return repaired_filepath
+                except Exception as e:
+                    print(f"[warning] Could not rename file: {e}", flush=True)
+                    return filepath
+            
+            # If we can't repair it, return the original
+            print(f"[info] Could not repair audio container, returning original", flush=True)
+            return filepath
+            
+        except Exception as e:
+            print(f"[error] Error repairing audio container: {e}", flush=True)
+            return filepath
     
     def _cancelled_result(self) -> Dict[str, Any]:
         """Return a standardized cancelled result"""

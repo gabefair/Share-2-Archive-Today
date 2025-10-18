@@ -289,11 +289,20 @@ class DownloadHistoryActivity : Activity() {
                     return
                 }
                 
+                // Get the proper display name for the file
+                val displayName = getDisplayNameFromUri(uri) ?: item.title
+                
                 val shareIntent = Intent().apply {
                     action = Intent.ACTION_SEND
                     putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_TEXT, "Shared video: $displayName")
+                    putExtra(Intent.EXTRA_SUBJECT, displayName)
                     type = getMimeTypeFromUri(uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    
+                    // Use ClipData to provide better metadata for sharing
+                    val clipData = ClipData.newUri(contentResolver, displayName, uri)
+                    setClipData(clipData)
                 }
                 
                 if (shareIntent.resolveActivity(packageManager) != null) {
@@ -370,32 +379,77 @@ class DownloadHistoryActivity : Activity() {
     }
     
     private fun openDownloadsFolder() {
+        // Show explanation dialog first
+        AlertDialog.Builder(this)
+            .setTitle("Open Downloads Folder")
+            .setMessage(
+                "This will open your device's Downloads folder where your downloaded videos are stored.\n\n" +
+                "You may see an 'Open with' dialog asking you to choose which app to use. " +
+                "Select your preferred file manager (like Files, Downloads, or your default file browser) and choose 'Always' if you want to set it as default.\n\n" +
+                "This will help you easily access your downloaded videos."
+            )
+            .setPositiveButton("Open Downloads") { _, _ ->
+                openDownloadsFolderInternal()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun openDownloadsFolderInternal() {
         try {
-            // Use Android's Downloads app/UI to show downloads
-            val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                // Try to open Downloads app via system UI
-                data = Uri.parse("package:com.android.documentsui")
+            // Try multiple approaches to open Downloads folder
+            
+            // Approach 1: Try to open Downloads app directly
+            val downloadsAppIntent = Intent().apply {
+                action = Intent.ACTION_VIEW
+                setDataAndType(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, "*/*")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             
-            // Fallback to generic intent to view downloads
-            if (intent.resolveActivity(packageManager) == null) {
-                // Use the MediaStore to show downloads
-                val downloadsIntent = Intent(Intent.ACTION_VIEW).apply {
-                    type = "*/*"
-                    putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("video/*", "audio/*"))
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                
-                if (downloadsIntent.resolveActivity(packageManager) != null) {
-                    startActivity(Intent.createChooser(downloadsIntent, "Open Downloads"))
-                    return
-                }
+            if (downloadsAppIntent.resolveActivity(packageManager) != null) {
+                startActivity(downloadsAppIntent)
+                return
+            }
+            
+            // Approach 2: Try to open Files app with Downloads folder
+            val filesAppIntent = Intent().apply {
+                action = Intent.ACTION_VIEW
+                setDataAndType(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, "resource/folder")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            
+            if (filesAppIntent.resolveActivity(packageManager) != null) {
+                startActivity(filesAppIntent)
+                return
+            }
+            
+            // Approach 3: Try generic file manager
+            val fileManagerIntent = Intent(Intent.ACTION_VIEW).apply {
+                type = "*/*"
+                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("video/*", "audio/*", "image/*", "application/*"))
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            
+            if (fileManagerIntent.resolveActivity(packageManager) != null) {
+                startActivity(Intent.createChooser(fileManagerIntent, "Open Downloads"))
+                return
+            }
+            
+            // Approach 4: Try to open Downloads via Settings
+            val settingsIntent = Intent(android.provider.Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            
+            if (settingsIntent.resolveActivity(packageManager) != null) {
+                startActivity(settingsIntent)
+                Toast.makeText(this, "Please navigate to Downloads in Settings", Toast.LENGTH_LONG).show()
+                return
             }
             
             // Last resort: Show helpful message
             Toast.makeText(
                 this, 
-                "Please open your device's Downloads app to view downloaded files",
+                "Please open your device's Downloads app or Files app to view downloaded files",
                 Toast.LENGTH_LONG
             ).show()
         } catch (e: Exception) {
@@ -435,6 +489,47 @@ class DownloadHistoryActivity : Activity() {
         } catch (e: Exception) {
             Log.e(TAG, "Error opening file: $filePath", e)
             Toast.makeText(this, "Error opening file: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    /**
+     * Get display name from MediaStore URI
+     */
+    private fun getDisplayNameFromUri(uri: Uri): String? {
+        return try {
+            when (uri.scheme) {
+                "content" -> {
+                    val projection = arrayOf(
+                        android.provider.MediaStore.MediaColumns.DISPLAY_NAME,
+                        android.provider.MediaStore.MediaColumns.TITLE
+                    )
+                    contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val displayNameIndex = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.DISPLAY_NAME)
+                            val titleIndex = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.TITLE)
+                            
+                            // Try DISPLAY_NAME first, then TITLE
+                            val displayName = if (displayNameIndex >= 0) {
+                                cursor.getString(displayNameIndex)
+                            } else null
+                            
+                            val title = if (titleIndex >= 0) {
+                                cursor.getString(titleIndex)
+                            } else null
+                            
+                            displayName ?: title
+                        } else null
+                    }
+                }
+                "file" -> {
+                    // For file URIs, extract filename from path
+                    File(uri.path ?: "").name
+                }
+                else -> null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting display name from URI: $uri", e)
+            null
         }
     }
     
@@ -493,13 +588,102 @@ class DownloadHistoryActivity : Activity() {
             when (uri.scheme) {
                 "content" -> {
                     // Query ContentResolver for MIME type
-                    contentResolver.getType(uri) ?: guessMimeTypeFromUri(uri)
+                    val mimeType = contentResolver.getType(uri)
+                    if (!mimeType.isNullOrEmpty() && mimeType != "video/*") {
+                        mimeType
+                    } else {
+                        // If MediaStore returned generic video/*, try to get better info
+                        getMimeTypeFromMediaStore(uri) ?: guessMimeTypeFromUri(uri)
+                    }
                 }
                 else -> guessMimeTypeFromUri(uri)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error getting MIME type for URI: $uri", e)
-            "video/*"
+            "video/mp4" // Better fallback than video/*
+        }
+    }
+    
+    /**
+     * Get user-friendly location text from file path or URI
+     */
+    private fun getFriendlyLocationText(filePath: String): String {
+        return try {
+            when {
+                filePath.startsWith("content://media/external/downloads/") -> {
+                    "Downloads folder"
+                }
+                filePath.startsWith("content://") -> {
+                    "Downloads folder"
+                }
+                filePath.contains("/Download/") || filePath.contains("/Downloads/") -> {
+                    "Downloads folder"
+                }
+                else -> {
+                    // For legacy file paths, try to extract meaningful location
+                    val path = filePath.substringAfterLast("/", filePath)
+                    if (path.contains("Download")) {
+                        "Downloads folder"
+                    } else {
+                        "Device storage"
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting friendly location text for: $filePath", e)
+            "Downloads folder"
+        }
+    }
+    
+    /**
+     * Get MIME type from MediaStore metadata
+     */
+    private fun getMimeTypeFromMediaStore(uri: Uri): String? {
+        return try {
+            val projection = arrayOf(
+                android.provider.MediaStore.MediaColumns.MIME_TYPE,
+                android.provider.MediaStore.MediaColumns.DISPLAY_NAME
+            )
+            contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val mimeTypeIndex = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.MIME_TYPE)
+                    val displayNameIndex = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.DISPLAY_NAME)
+                    
+                    // Try MIME_TYPE first
+                    if (mimeTypeIndex >= 0) {
+                        val mimeType = cursor.getString(mimeTypeIndex)
+                        if (!mimeType.isNullOrEmpty() && mimeType != "video/*") {
+                            return mimeType
+                        }
+                    }
+                    
+                    // Fallback to guessing from display name
+                    if (displayNameIndex >= 0) {
+                        val displayName = cursor.getString(displayNameIndex)
+                        if (!displayName.isNullOrEmpty()) {
+                            val extension = displayName.substringAfterLast('.', "").lowercase()
+                            return when (extension) {
+                                "mp4" -> "video/mp4"
+                                "webm" -> "video/webm"
+                                "mkv" -> "video/x-matroska"
+                                "avi" -> "video/x-msvideo"
+                                "mov" -> "video/quicktime"
+                                "mp3" -> "audio/mpeg"
+                                "aac" -> "audio/aac"
+                                "m4a" -> "audio/mp4"
+                                "wav" -> "audio/wav"
+                                "ogg" -> "audio/ogg"
+                                "opus" -> "audio/opus"
+                                else -> null
+                            }
+                        }
+                    }
+                }
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting MIME type from MediaStore: $uri", e)
+            null
         }
     }
     
@@ -518,7 +702,7 @@ class DownloadHistoryActivity : Activity() {
             "m4a" -> "audio/mp4"
             "ogg" -> "audio/ogg"
             "opus" -> "audio/opus"
-            else -> "video/*"
+            else -> "video/mp4" // Better fallback than video/*
         }
     }
     
@@ -546,7 +730,8 @@ class DownloadHistoryActivity : Activity() {
             append("Downloaded: $dateStr\n\n")
             
             if (item.filePath != null) {
-                append("Location: ${item.filePath}\n\n")
+                val locationText = getFriendlyLocationText(item.filePath)
+                append("Location: $locationText\n\n")
             }
             
             append("URL: ${item.url}")

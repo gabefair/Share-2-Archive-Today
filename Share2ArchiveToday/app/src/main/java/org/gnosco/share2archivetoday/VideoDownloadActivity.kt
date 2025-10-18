@@ -229,6 +229,7 @@ class VideoDownloadActivity : Activity() {
                     // Build quality options from available formats
                     val qualityOptions = mutableListOf<String>()
                     val qualityValues = mutableListOf<String>()
+                    val qualityLabels = mutableListOf<String>()
                     
                     // Filter and sort formats based on quality rules
                     val filteredFormats = filterFormatsByQualityRules(videoInfo.formats)
@@ -239,6 +240,7 @@ class VideoDownloadActivity : Activity() {
                         // Fallback if no formats available
                         qualityOptions.add("Best Available Quality")
                         qualityValues.add("best")
+                        qualityLabels.add("Best Available")
                         Log.w(TAG, "No formats available, using fallback 'best' option")
                     } else {
                         // Sort video formats by quality (height desc, fps desc, tbr desc)
@@ -290,24 +292,29 @@ class VideoDownloadActivity : Activity() {
                                 }
                             }
                             qualityOptions.add(qualityLabel)
-                            qualityValues.add(format.formatId)
+                            // Use quality label instead of format ID for better compatibility
+                            qualityValues.add(format.qualityLabel)
+                            qualityLabels.add(format.qualityLabel)
                         }
                         
                         // Add audio-only option at the bottom
-                        qualityOptions.add("Audio Only")
-                        qualityValues.add("audio_mp3")
+                        // TODO: Re-enable audio-only downloads in future release
+                        // qualityOptions.add("Audio Only")
+                        // qualityValues.add("audio_mp3")
+                        // qualityLabels.add("Audio Only")
                     }
                     
                     AlertDialog.Builder(this@VideoDownloadActivity)
                         .setTitle(dialogTitle)
                         .setItems(qualityOptions.toTypedArray()) { _, which ->
                             val selectedQuality = qualityValues[which]
+                            val selectedQualityLabel = qualityLabels[which]
                             
                             // Show data usage warning if needed
                             if (networkMonitor.shouldWarnAboutDataUsage() && !selectedQuality.startsWith("audio_")) {
-                                showDataUsageWarning(url, selectedQuality, null)
+                                showDataUsageWarning(url, selectedQuality, selectedQualityLabel)
                             } else {
-                                startDownloadWithQuality(url, selectedQuality, null)
+                                startDownloadWithQuality(url, selectedQuality, selectedQualityLabel)
                             }
                         }
                         .setNegativeButton("Cancel") { _, _ ->
@@ -416,7 +423,7 @@ class VideoDownloadActivity : Activity() {
     /**
      * Show data usage warning for mobile users
      */
-    private fun showDataUsageWarning(url: String, quality: String, formatId: String?) {
+    private fun showDataUsageWarning(url: String, quality: String, qualityLabel: String?) {
         val estimatedSize = estimateDownloadSize(quality)
         
         AlertDialog.Builder(this)
@@ -428,7 +435,7 @@ class VideoDownloadActivity : Activity() {
                 "Do you want to continue?"
             )
             .setPositiveButton("Continue") { _, _ ->
-                startDownloadWithQuality(url, quality, formatId)
+                startDownloadWithQuality(url, quality, qualityLabel)
             }
             .setNegativeButton("Cancel") { _, _ ->
                 finish()
@@ -480,7 +487,7 @@ class VideoDownloadActivity : Activity() {
         }
     }
     
-    private fun startDownloadWithQuality(url: String, quality: String, formatId: String?) {
+    private fun startDownloadWithQuality(url: String, quality: String, qualityLabel: String?) {
         // Show initial toast
         Toast.makeText(this, "Starting video download...", Toast.LENGTH_SHORT).show()
         
@@ -512,9 +519,7 @@ class VideoDownloadActivity : Activity() {
                 
                 Log.d(TAG, "Video info: $title by $uploader")
                 Log.d(TAG, "Selected quality: $quality")
-                if (formatId != null) {
-                    Log.d(TAG, "Selected format ID: $formatId")
-                }
+                Log.d(TAG, "Selected quality label: $qualityLabel")
                 
                 // Show video info to user
                 withContext(Dispatchers.Main) {
@@ -525,14 +530,15 @@ class VideoDownloadActivity : Activity() {
                     ).show()
                 }
                 
-                // Start background download service with quality
+                // Start background download service with quality preference
                 BackgroundDownloadService.startDownload(
                     context = this@VideoDownloadActivity,
                     url = url,
                     title = title,
                     uploader = uploader,
-                    quality = quality,
-                    formatId = formatId
+                    quality = quality, // Pass quality preference (e.g., "720p", "1080p")
+                    formatId = null, // Deprecated - let Python side handle quality selection
+                    qualityLabel = qualityLabel
                 )
                 
                 withContext(Dispatchers.Main) {
