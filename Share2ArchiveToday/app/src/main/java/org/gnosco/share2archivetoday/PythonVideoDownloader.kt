@@ -44,6 +44,9 @@ class PythonVideoDownloader(private val context: Context) {
             val py = Python.getInstance()
             pythonModule = py.getModule(PYTHON_MODULE)
             
+            // Set debug flag in Python module
+            pythonModule?.put("DEBUG_MODE", BuildConfig.DEBUG)
+            
             // Disable Python stdout/stderr in release builds
             if (!BuildConfig.DEBUG) {
                 DebugLogger.python(TAG, "Disabling Python stdout/stderr for release build")
@@ -358,8 +361,8 @@ class PythonVideoDownloader(private val context: Context) {
             // Execute the callback function definition
             builtins.callAttr("exec", callbackCode, globalsDict, localsDict)
             
-            // Return the callback function
-            mainModule["kotlin_callback"]
+            // Return the callback function from the locals dictionary
+            localsDict.callAttr("get", "kotlin_callback")
         } catch (e: Exception) {
             Log.e(TAG, "Error creating Python callback", e)
             null
