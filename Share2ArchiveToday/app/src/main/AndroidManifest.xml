@@ -21,6 +21,11 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.NoDisplay">
 
+        <!-- Declare media capabilities for automatic transcoding -->
+        <property
+            android:name="android.media.PROPERTY_MEDIA_CAPABILITIES"
+            android:resource="@xml/media_capabilities" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
