@@ -10,7 +10,6 @@
 -dontskipnonpubliclibraryclassmembers
 -dontpreverify
 -verbose
--dump class_files.txt
 -printseeds seeds.txt
 -printusage unused.txt
 -printmapping mapping.txt
@@ -55,14 +54,48 @@
 -keep class org.gnosco.share2archivetoday.PythonVideoDownloader { *; }
 -keep class org.gnosco.share2archivetoday.PythonVideoDownloader$* { *; }
 
+# Keep MainActivity and its lifecycle methods (CRITICAL for app functionality)
+-keep class org.gnosco.share2archivetoday.MainActivity { *; }
+-keep class org.gnosco.share2archivetoday.MainActivity$* { *; }
+
+# Specifically keep MainActivity methods that are critical for functionality
+-keepclassmembers class org.gnosco.share2archivetoday.MainActivity {
+    public void onCreate(android.os.Bundle);
+    public void onNewIntent(android.content.Intent);
+    public void handleShareIntent(android.content.Intent);
+    public void threeSteps(java.lang.String);
+    public void openInBrowser(java.lang.String);
+    public void handleImageShare(android.net.Uri);
+    public void finish();
+    public java.lang.String extractUrl(java.lang.String);
+    public java.lang.String handleURL(java.lang.String);
+    public java.lang.String applyPlatformSpecificOptimizations(java.lang.String);
+    public java.lang.String cleanTrackingParamsFromUrl(java.lang.String);
+    public java.lang.String removeAnchorsAndTextFragments(java.lang.String);
+    public java.lang.String cleanUrl(java.lang.String);
+}
+
 # Keep video download activity and service
 -keep class org.gnosco.share2archivetoday.VideoDownloadActivity { *; }
 -keep class org.gnosco.share2archivetoday.BackgroundDownloadService { *; }
 
-# Remove debug activities from release builds
--assumenosideeffects class org.gnosco.share2archivetoday.FeatureFlagDebugActivity { *; }
--assumenosideeffects class org.gnosco.share2archivetoday.VideoDownloadTestActivity { *; }
--assumenosideeffects class org.gnosco.share2archivetoday.DebugFeatureTester { *; }
+# Remove debug activities from release builds (specific methods only)
+-assumenosideeffects class org.gnosco.share2archivetoday.FeatureFlagDebugActivity {
+    public void onCreate(android.os.Bundle);
+    public void onResume();
+    public void onPause();
+    public void onDestroy();
+}
+-assumenosideeffects class org.gnosco.share2archivetoday.VideoDownloadTestActivity {
+    public void onCreate(android.os.Bundle);
+    public void onResume();
+    public void onPause();
+    public void onDestroy();
+}
+-assumenosideeffects class org.gnosco.share2archivetoday.DebugFeatureTester {
+    public static void logTestResults(android.content.Context);
+    public static void testFeatureFlags(android.content.Context);
+}
 
 # Prevent obfuscation of data classes used by Python - VideoDownloader
 -keep class org.gnosco.share2archivetoday.VideoDownloader$VideoInfo { *; }
@@ -84,6 +117,24 @@
 -keep class org.gnosco.share2archivetoday.NetworkMonitor { *; }
 -keep class org.gnosco.share2archivetoday.PermissionManager { *; }
 
+# Keep audio processing classes
+-keep class org.gnosco.share2archivetoday.AudioRemuxer { *; }
+-keep class org.gnosco.share2archivetoday.AudioRemuxer$* { *; }
+
+# Keep QR code scanner
+-keep class org.gnosco.share2archivetoday.QRCodeScanner { *; }
+
+# Keep URL processing utilities used by MainActivity
+-keep class org.gnosco.share2archivetoday.WebURLMatcher { *; }
+-keep class org.gnosco.share2archivetoday.ClearUrlsRulesManager { *; }
+-keep class org.gnosco.share2archivetoday.DebugLogger { *; }
+-keep class org.gnosco.share2archivetoday.DebugFeatureTester { *; }
+-keep class org.gnosco.share2archivetoday.QRCodeScanner { *; }
+
+# Keep memory manager
+-keep class org.gnosco.share2archivetoday.MemoryManager { *; }
+-keep class org.gnosco.share2archivetoday.MemoryManager$* { *; }
+
 # Keep FFmpeg wrapper and media processing classes
 -keep class org.gnosco.share2archivetoday.FFmpegWrapper { *; }
 -keep class org.gnosco.share2archivetoday.FFmpegWrapper$* { *; }
@@ -97,10 +148,17 @@
 # Without this, Python callbacks to Kotlin will fail
 -keep class kotlin.jvm.functions.Function1 { *; }
 -keep class kotlin.jvm.functions.Function2 { *; }
+-keep class kotlin.jvm.functions.Function0 { *; }
 -keepclassmembers class * {
     public <methods>;
     kotlin.jvm.functions.Function1 *;
+    kotlin.jvm.functions.Function2 *;
+    kotlin.jvm.functions.Function0 *;
 }
+
+# Keep all Kotlin data classes that might be used by Python
+-keep class * implements java.io.Serializable { *; }
+-keep class * implements kotlin.jvm.internal.KObject { *; }
 
 # Keep coroutines for async operations
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
@@ -138,6 +196,35 @@
 -keepclassmembers class * {
     public <methods>;
     public <fields>;
+}
+
+# Additional safety rules for Python integration
+-dontwarn java.lang.Class
+-dontwarn java.lang.reflect.**
+-keepattributes RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations
+
+# Keep all classes in the main package (safer approach for Python integration)
+-keep class org.gnosco.share2archivetoday.** { *; }
+
+# CRITICAL: Keep Activity lifecycle methods to prevent crashes
+-keepclassmembers class * extends android.app.Activity {
+    public void onCreate(android.os.Bundle);
+    public void onResume();
+    public void onPause();
+    public void onDestroy();
+    public void onNewIntent(android.content.Intent);
+    public void finish();
+}
+
+# Keep Intent handling methods
+-keepclassmembers class * {
+    public void handleShareIntent(android.content.Intent);
+    public void openInBrowser(java.lang.String);
+}
+
+# CRITICAL: Never remove finish() method from Activities
+-keepclassmembers class * extends android.app.Activity {
+    public void finish();
 }
 
 ##---------------End: Chaquopy Rules ----------
