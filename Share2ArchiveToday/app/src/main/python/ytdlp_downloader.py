@@ -522,3 +522,265 @@ def reset_cancellation():
     downloader = get_downloader()
     downloader.reset_cancellation()
 
+
+def download_specific_formats(
+    self,
+    url: str,
+    output_dir: str,
+    video_format_id: Optional[str] = None,
+    audio_format_id: Optional[str] = None,
+    progress_callback: Optional[Callable] = None
+) -> Dict[str, Any]:
+    """
+    Download specific video and audio format combinations
+    This is called when SmartFormatSelector determines the optimal formats
+    """
+    try:
+        self.cancelled = False
+
+        debug_print(f"[info] Starting specific format download: {url}", flush=True)
+        debug_print(f"[info] Video format: {video_format_id}", flush=True)
+        debug_print(f"[info] Audio format: {audio_format_id}", flush=True)
+
+        # Create progress tracker
+        progress_tracker = ProgressTracker(progress_callback)
+
+        downloaded_files = []
+        total_size = 0
+
+        # Download video if specified
+        if video_format_id:
+            video_result = self._download_single_format(
+                url, output_dir, video_format_id, "video", progress_tracker
+            )
+            if not video_result['success']:
+                return video_result
+            downloaded_files.append(video_result)
+            total_size += video_result.get('file_size', 0)
+
+        # Download audio if specified
+        if audio_format_id:
+            audio_result = self._download_single_format(
+                url, output_dir, audio_format_id, "audio", progress_tracker
+            )
+            if not audio_result['success']:
+                # Clean up video file if audio download fails
+                if video_format_id and downloaded_files:
+                    try:
+                        os.remove(downloaded_files[0]['file_path'])
+                    except:
+                        pass
+                return audio_result
+            downloaded_files.append(audio_result)
+            total_size += audio_result.get('file_size', 0)
+
+        # Determine result based on what was downloaded
+        if len(downloaded_files) == 1:
+            # Single file downloaded
+            file_info = downloaded_files[0]
+            return {
+                'success': True,
+                'error': None,
+                'file_path': file_info['file_path'],
+                'video_path': None,
+                'audio_path': None,
+                'separate_av': False,
+                'file_size': file_info['file_size']
+            }
+
+        elif len(downloaded_files) == 2:
+            # Two files downloaded
+            video_file = next((f for f in downloaded_files if f['type'] == 'video'), None)
+            audio_file = next((f for f in downloaded_files if f['type'] == 'audio'), None)
+
+            return {
+                'success': True,
+                'error': None,
+                'file_path': None,
+                'video_path': video_file['file_path'] if video_file else None,
+                'audio_path': audio_file['file_path'] if audio_file else None,
+                'separate_av': True,
+                'file_size': total_size
+            }
+
+        else:
+            return {
+                'success': False,
+                'error': 'No files were downloaded',
+                'file_path': None,
+                'video_path': None,
+                'audio_path': None,
+                'separate_av': False,
+                'file_size': 0
+            }
+
+    except Exception as e:
+        error_msg = str(e)
+        debug_print_stderr(f"[error] Specific format download failed: {error_msg}", file=sys.stderr, flush=True)
+
+        return {
+            'success': False,
+            'error': error_msg,
+            'file_path': None,
+            'video_path': None,
+            'audio_path': None,
+            'separate_av': False,
+            'file_size': 0
+        }
+
+def _download_single_format(
+    self,
+    url: str,
+    output_dir: str,
+    format_id: str,
+    file_type: str,  # 'video' or 'audio'
+    progress_tracker
+) -> Dict[str, Any]:
+    """
+    Download a single specific format
+    """
+    try:
+        debug_print(f"[info] Downloading {file_type} format {format_id}", flush=True)
+
+        # Configure output template based on file type
+        if file_type == 'video':
+            outtmpl = os.path.join(output_dir, '%(title)s_video.%(ext)s')
+        else:
+            outtmpl = os.path.join(output_dir, '%(title)s_audio.%(ext)s')
+
+        ydl_opts = {
+            'format': format_id,
+            'outtmpl': outtmpl,
+            'progress_hooks': [progress_tracker] if progress_tracker else [],
+            'quiet': False,
+            'no_warnings': False,
+            'ignoreerrors': False,
+            'postprocessors': [],
+            'retries': 10,
+            'fragment_retries': 10,
+            'skip_unavailable_fragments': True,
+            'socket_timeout': 30,
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+
+            if info and 'requested_downloads' in info:
+                download_info = info['requested_downloads'][0]
+                filepath = download_info.get('filepath')
+
+                if filepath and os.path.exists(filepath):
+                    file_size = os.path.getsize(filepath)
+                    debug_print(f"[info] Downloaded {file_type}: {filepath} ({file_size} bytes)", flush=True)
+
+                    return {
+                        'success': True,
+                        'file_path': filepath,
+                        'file_size': file_size,
+                        'type': file_type
+                    }
+
+            return {
+                'success': False,
+                'error': f'Failed to download {file_type} format {format_id}',
+                'type': file_type
+            }
+
+    except Exception as e:
+        error_msg = f"Error downloading {file_type} format {format_id}: {str(e)}"
+        debug_print_stderr(f"[error] {error_msg}", file=sys.stderr, flush=True)
+
+        return {
+            'success': False,
+            'error': error_msg,
+            'type': file_type
+        }
+
+def download_combined_format(
+    self,
+    url: str,
+    output_dir: str,
+    format_id: str,
+    progress_callback: Optional[Callable] = None
+) -> Dict[str, Any]:
+    """
+    Download a specific combined format (video + audio in one file)
+    """
+    try:
+        self.cancelled = False
+
+        debug_print(f"[info] Starting combined format download: {url}", flush=True)
+        debug_print(f"[info] Format ID: {format_id}", flush=True)
+
+        # Create progress tracker
+        progress_tracker = ProgressTracker(progress_callback)
+
+        ydl_opts = {
+            'format': format_id,
+            'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
+            'progress_hooks': [progress_tracker] if progress_tracker else [],
+            'quiet': False,
+            'no_warnings': False,
+            'ignoreerrors': False,
+            'postprocessors': [],
+            'retries': 10,
+            'fragment_retries': 10,
+            'skip_unavailable_fragments': True,
+            'socket_timeout': 30,
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+
+            if info and 'requested_downloads' in info:
+                download_info = info['requested_downloads'][0]
+                filepath = download_info.get('filepath')
+
+                if filepath and os.path.exists(filepath):
+                    file_size = os.path.getsize(filepath)
+                    debug_print(f"[info] Downloaded combined format: {filepath} ({file_size} bytes)", flush=True)
+
+                    return {
+                        'success': True,
+                        'error': None,
+                        'file_path': filepath,
+                        'video_path': None,
+                        'audio_path': None,
+                        'separate_av': False,
+                        'file_size': file_size
+                    }
+
+            return {
+                'success': False,
+                'error': f'Failed to download combined format {format_id}',
+                'file_path': None,
+                'video_path': None,
+                'audio_path': None,
+                'separate_av': False,
+                'file_size': 0
+            }
+
+    except Exception as e:
+        error_msg = str(e)
+        debug_print_stderr(f"[error] Combined format download failed: {error_msg}", file=sys.stderr, flush=True)
+
+        return {
+            'success': False,
+            'error': error_msg,
+            'file_path': None,
+            'video_path': None,
+            'audio_path': None,
+            'separate_av': False,
+            'file_size': 0
+        }
+
+# Public API functions for Kotlin to call
+def download_specific_combination(url: str, output_dir: str, video_format_id=None, audio_format_id=None, progress_callback=None):
+    """Public API for downloading specific format combinations"""
+    downloader = get_downloader()
+    return downloader.download_specific_formats(url, output_dir, video_format_id, audio_format_id, progress_callback)
+
+def download_combined(url: str, output_dir: str, format_id: str, progress_callback=None):
+    """Public API for downloading combined formats"""
+    downloader = get_downloader()
+    return downloader.download_combined_format(url, output_dir, format_id, progress_callback)
