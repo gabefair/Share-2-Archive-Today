@@ -10,10 +10,23 @@ import traceback
 from typing import Dict, Any, Optional, Callable
 import time
 
+# Debug flag - set by Kotlin side
+DEBUG_MODE = False
+
+def debug_print(*args, **kwargs):
+    """Print only in debug mode"""
+    if DEBUG_MODE:
+        print(*args, **kwargs)
+
+def debug_print_stderr(*args, **kwargs):
+  """Print to stderr only in debug mode"""
+  if DEBUG_MODE:
+      print(*args, file=sys.stderr, **kwargs)
+
 try:
     import yt_dlp
 except ImportError as e:
-    print(f"Failed to import yt_dlp: {e}", file=sys.stderr)
+    debug_print_stderr(f"Failed to import yt_dlp: {e}", file=sys.stderr)
     raise
 
 
@@ -49,19 +62,19 @@ class ProgressTracker:
                 
                 if total > 0:
                     percent = (downloaded / total) * 100
-                    print(f"[progress] {percent:.1f}% - {downloaded}/{total} bytes - Speed: {speed} - ETA: {eta}s", flush=True)
+                    debug_print(f"[progress] {percent:.1f}% - {downloaded}/{total} bytes - Speed: {speed} - ETA: {eta}s", flush=True)
                 else:
-                    print(f"[progress] {downloaded} bytes downloaded", flush=True)
+                    debug_print(f"[progress] {downloaded} bytes downloaded", flush=True)
                     
             elif status == 'finished':
                 filename = d.get('filename', 'unknown')
-                print(f"[finished] Downloaded: {filename}", flush=True)
+                debug_print(f"[finished] Downloaded: {filename}", flush=True)
                 
             elif status == 'error':
-                print(f"[error] Download error occurred", file=sys.stderr, flush=True)
+                debug_print_stderr(f"[error] Download error occurred", file=sys.stderr, flush=True)
                 
         except Exception as e:
-            print(f"Error in progress callback: {e}", file=sys.stderr, flush=True)
+            debug_print_stderr(f"Error in progress callback: {e}", file=sys.stderr, flush=True)
 
 
 class VideoDownloader:
@@ -192,12 +205,12 @@ class VideoDownloader:
         try:
             self.cancelled = False
             
-            print(f"[info] Starting download: {url}", flush=True)
-            print(f"[info] Output directory: {output_dir}", flush=True)
+            debug_print(f"[info] Starting download: {url}", flush=True)
+            debug_print(f"[info] Output directory: {output_dir}", flush=True)
             if format_id:
-                print(f"[info] Format ID: {format_id}", flush=True)
+                debug_print(f"[info] Format ID: {format_id}", flush=True)
             else:
-                print(f"[info] Quality: {quality}", flush=True)
+                debug_print(f"[info] Quality: {quality}", flush=True)
             
             # Create progress tracker
             progress_tracker = ProgressTracker(progress_callback)
@@ -206,14 +219,14 @@ class VideoDownloader:
             if format_id:
                 # Use specific format ID provided by user
                 video_format = format_id
-                print(f"[info] Using specific format ID: {format_id}", flush=True)
+                debug_print(f"[info] Using specific format ID: {format_id}", flush=True)
             else:
                 # Use quality-based selection (fallback for backward compatibility)
                 video_format = self._get_video_only_format(quality)
-                print(f"[info] Using quality-based format: {video_format}", flush=True)
+                debug_print(f"[info] Using quality-based format: {video_format}", flush=True)
             
             # Download video stream
-            print(f"[info] Downloading video stream...", flush=True)
+            debug_print(f"[info] Downloading video stream...", flush=True)
             video_opts = {
                 'outtmpl': os.path.join(output_dir, '%(title)s_video.%(ext)s'),
                 'progress_hooks': [progress_tracker],
@@ -238,11 +251,11 @@ class VideoDownloader:
                         # Check if video has audio
                         acodec = info.get('acodec', 'none')
                         video_has_audio = acodec not in ('none', None)
-                        print(f"[info] Downloaded video: {video_path}", flush=True)
-                        print(f"[info] Video has audio: {video_has_audio}", flush=True)
+                        debug_print(f"[info] Downloaded video: {video_path}", flush=True)
+                        debug_print(f"[info] Video has audio: {video_has_audio}", flush=True)
             except Exception as e:
                 error_msg = f"Failed to download video: {str(e)}"
-                print(f"[error] {error_msg}", file=sys.stderr, flush=True)
+                debug_print_stderr(f"[error] {error_msg}", file=sys.stderr, flush=True)
                 traceback.print_exc(file=sys.stderr)
                 return {
                     'success': False,
@@ -256,7 +269,7 @@ class VideoDownloader:
             
             # If video already has audio, we're done
             if video_has_audio and video_path and os.path.exists(video_path):
-                print(f"[info] Video has audio, no separate audio needed", flush=True)
+                debug_print(f"[info] Video has audio, no separate audio needed", flush=True)
                 return {
                     'success': True,
                     'error': None,
@@ -268,7 +281,7 @@ class VideoDownloader:
                 }
             
             # Download audio stream separately
-            print(f"[info] Downloading audio stream...", flush=True)
+            debug_print(f"[info] Downloading audio stream...", flush=True)
             audio_opts = {
                 'outtmpl': os.path.join(output_dir, '%(title)s_audio.%(ext)s'),
                 'progress_hooks': [progress_tracker],
@@ -289,10 +302,10 @@ class VideoDownloader:
                     info = ydl.extract_info(url, download=True)
                     if info and 'requested_downloads' in info:
                         audio_path = info['requested_downloads'][0].get('filepath')
-                        print(f"[info] Downloaded audio: {audio_path}", flush=True)
+                        debug_print(f"[info] Downloaded audio: {audio_path}", flush=True)
             except Exception as e:
                 error_msg = f"Failed to download audio: {str(e)}"
-                print(f"[error] {error_msg}", file=sys.stderr, flush=True)
+                debug_print_stderr(f"[error] {error_msg}", file=sys.stderr, flush=True)
                 traceback.print_exc(file=sys.stderr)
                 return {
                     'success': False,
@@ -306,9 +319,9 @@ class VideoDownloader:
             
             # Verify both files exist
             if video_path and audio_path and os.path.exists(video_path) and os.path.exists(audio_path):
-                print(f"[info] Successfully downloaded video and audio separately", flush=True)
-                print(f"[info] Video: {video_path} ({os.path.getsize(video_path)} bytes)", flush=True)
-                print(f"[info] Audio: {audio_path} ({os.path.getsize(audio_path)} bytes)", flush=True)
+                debug_print(f"[info] Successfully downloaded video and audio separately", flush=True)
+                debug_print(f"[info] Video: {video_path} ({os.path.getsize(video_path)} bytes)", flush=True)
+                debug_print(f"[info] Audio: {audio_path} ({os.path.getsize(audio_path)} bytes)", flush=True)
                 # Return separate streams for MediaMuxer to merge
                 result = {
                     'success': True,
@@ -319,7 +332,7 @@ class VideoDownloader:
                     'separate_av': True,
                     'file_size': os.path.getsize(video_path) + os.path.getsize(audio_path)
                 }
-                print(f"[info] Returning result: {result}", flush=True)
+                debug_print(f"[info] Returning result: {result}", flush=True)
                 return result
             else:
                 return {
@@ -334,7 +347,7 @@ class VideoDownloader:
                 
         except Exception as e:
             error_msg = str(e)
-            print(f"[error] Download failed: {error_msg}", file=sys.stderr, flush=True)
+            debug_print_stderr(f"[error] Download failed: {error_msg}", file=sys.stderr, flush=True)
             traceback.print_exc(file=sys.stderr)
             
             return {
@@ -389,9 +402,9 @@ class VideoDownloader:
         try:
             self.cancelled = False
             
-            print(f"[info] Starting audio download: {url}", flush=True)
-            print(f"[info] Output directory: {output_dir}", flush=True)
-            print(f"[info] Format: {audio_format}", flush=True)
+            debug_print(f"[info] Starting audio download: {url}", flush=True)
+            debug_print(f"[info] Output directory: {output_dir}", flush=True)
+            debug_print(f"[info] Format: {audio_format}", flush=True)
             
             # Create progress tracker
             progress_tracker = ProgressTracker(progress_callback)
@@ -447,7 +460,7 @@ class VideoDownloader:
             
         except Exception as e:
             error_msg = str(e)
-            print(f"[error] Audio download failed: {error_msg}", file=sys.stderr, flush=True)
+            debug_print_stderr(f"[error] Audio download failed: {error_msg}", file=sys.stderr, flush=True)
             traceback.print_exc(file=sys.stderr)
             
             return {
