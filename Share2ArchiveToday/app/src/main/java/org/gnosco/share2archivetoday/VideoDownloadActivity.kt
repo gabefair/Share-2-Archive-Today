@@ -35,6 +35,20 @@ class VideoDownloadActivity : Activity() {
     private lateinit var downloadHistoryManager: DownloadHistoryManager
     private val downloadScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    // Data classes for unified quality selection
+    data class QualityOption(
+        val displayName: String,
+        val height: Int,
+        val estimatedSize: Long,
+        val downloadStrategy: DownloadStrategy
+    )
+
+    sealed class DownloadStrategy {
+        data class Combined(val formatId: String, val quality: String) : DownloadStrategy()
+        data class Separate(val videoFormatId: String, val audioFormatId: String?, val quality: String) : DownloadStrategy()
+        data class QualityBased(val quality: String) : DownloadStrategy() // Fallback to quality string
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -185,6 +199,132 @@ class VideoDownloadActivity : Activity() {
         }
     }
 
+    private fun buildUnifiedQualityOptions(videoInfo: PythonVideoDownloader.VideoInfo): List<QualityOption> {
+        val formats = filterFormatsByQualityRules(videoInfo.formats)
+
+        // Group formats by height and pick the best one for each height
+        val formatsByHeight = formats.groupBy { it.height }
+        val uniqueHeightOptions = mutableListOf<QualityOption>()
+
+        // Get all unique heights, filter out 0 and 9999, and sort descending
+        val sortedHeights = formatsByHeight.keys
+            .filter { it > 0 && it < 9999 }
+            .sortedDescending()
+
+        // Check if we have any video-only formats (indicates DASH)
+        val hasVideoOnlyFormats = formats.any { !it.hasAudio && it.height > 0 }
+
+        // Create options for each height
+        for ((index, height) in sortedHeights.withIndex()) {
+            val heightFormats = formatsByHeight[height] ?: continue
+
+            // Pick the best format for this height (prefer ones with audio)
+            val bestFormat = heightFormats
+                .sortedWith(compareByDescending<PythonVideoDownloader.FormatInfo> { it.hasAudio }
+                    .thenByDescending { it.tbr })
+                .firstOrNull() ?: continue
+
+            val displayName = createSimpleDisplayName(
+                height = height,
+                format = bestFormat,
+                duration = videoInfo.duration,
+                isHighest = index == 0  // Only first one gets star and "Highest Quality"
+            )
+
+            uniqueHeightOptions.add(
+                QualityOption(
+                    displayName = displayName,
+                    height = height,
+                    estimatedSize = estimateFormatSize(bestFormat, videoInfo.duration),
+                    downloadStrategy = DownloadStrategy.QualityBased("${height}p")
+                )
+            )
+        }
+
+        // Add audio-only option if there are video-only formats (DASH indicator)
+        if (hasVideoOnlyFormats) {
+            val audioOnlyFormats = formats.filter { it.hasAudio && it.height <= 0 }
+            val bestAudioFormat = audioOnlyFormats.maxByOrNull { it.tbr }
+
+            if (bestAudioFormat != null) {
+                uniqueHeightOptions.add(
+                    QualityOption(
+                        displayName = "Audio Only - ${formatFileSize(estimateFormatSize(bestAudioFormat, videoInfo.duration))}",
+                        height = 0,
+                        estimatedSize = estimateFormatSize(bestAudioFormat, videoInfo.duration),
+                        downloadStrategy = DownloadStrategy.QualityBased("audio_mp3")
+                    )
+                )
+            }
+        }
+
+        // Fallback if no options found
+        if (uniqueHeightOptions.isEmpty()) {
+            uniqueHeightOptions.add(
+                QualityOption(
+                    displayName = "Best Available Quality",
+                    height = 9999,
+                    estimatedSize = estimateSize(9999, videoInfo.duration),
+                    downloadStrategy = DownloadStrategy.QualityBased("best")
+                )
+            )
+        }
+
+        return uniqueHeightOptions
+    }
+
+    private fun createSimpleDisplayName(
+        height: Int,
+        format: PythonVideoDownloader.FormatInfo,
+        duration: Int,
+        isHighest: Boolean
+    ): String {
+        return buildString {
+            // Add star only for highest quality
+            if (isHighest) append("★ ")
+
+            append("${height}p")
+
+            // Show FPS if available
+            val fps = if (format.fps > 0) format.fps else 30
+            append(" ${fps}fps")
+
+            // Estimate size
+            val size = estimateFormatSize(format, duration)
+            if (size > 0) {
+                append(" - ${formatFileSize(size)}")
+            }
+
+            // Mark highest quality only for the first option
+            if (isHighest) {
+                append(" (Highest Quality)")
+            }
+        }
+    }
+
+    private fun estimateFormatSize(format: PythonVideoDownloader.FormatInfo, duration: Int): Long {
+        return when {
+            format.filesize > 0 -> format.filesize
+            format.tbr > 0 && duration > 0 -> {
+                // Calculate: bitrate (kbps) * duration (sec) * 125 (bytes per kbps-second)
+                (format.tbr * duration * 125).toLong()
+            }
+            else -> estimateSize(format.height, duration)
+        }
+    }
+
+    private fun estimateSize(height: Int, duration: Int): Long {
+        // Rough estimates based on typical bitrates
+        val estimatedBitrate = when {
+            height >= 1440 -> 8000 // 8 Mbps for 1440p+
+            height >= 1080 -> 5000 // 5 Mbps for 1080p
+            height >= 720 -> 2500  // 2.5 Mbps for 720p
+            height >= 480 -> 1200  // 1.2 Mbps for 480p
+            else -> 800            // 800 kbps for lower
+        }
+        return (estimatedBitrate * duration * 125).toLong()
+    }
+
     private fun showQualitySelectionDialog(url: String) {
         // Show loading dialog while getting video info
         val loadingDialog = AlertDialog.Builder(this)
@@ -223,6 +363,19 @@ class VideoDownloadActivity : Activity() {
                         return@withContext
                     }
 
+                    // Build unified quality options
+                    val qualityOptions = buildUnifiedQualityOptions(videoInfo)
+
+                    if (qualityOptions.isEmpty()) {
+                        Toast.makeText(
+                            this@VideoDownloadActivity,
+                            "No suitable formats found",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        finish()
+                        return@withContext
+                    }
+
                     // Get network recommendation
                     val networkRecommendation = getNetworkBasedRecommendation()
 
@@ -236,106 +389,19 @@ class VideoDownloadActivity : Activity() {
                         }
                     }
 
-                    // Build quality options from available formats
-                    val qualityOptions = mutableListOf<String>()
-                    val qualityValues = mutableListOf<String>()
-                    val qualityLabels = mutableListOf<String>()
-
-                    // Filter and sort formats based on quality rules
-                    val filteredFormats = filterFormatsByQualityRules(videoInfo.formats)
-
-                    Log.d(TAG, "Available formats: ${videoInfo.formats.size}, Filtered formats: ${filteredFormats.size}")
-
-                    if (filteredFormats.isEmpty()) {
-                        // Fallback if no formats available
-                        qualityOptions.add("Best Available Quality")
-                        qualityValues.add("best")
-                        qualityLabels.add("Best Available")
-                        Log.w(TAG, "No formats available, using fallback 'best' option")
-                    } else {
-                        // Sort video formats by quality (height desc, fps desc, tbr desc)
-                        // Don't filter by hasVideo again since our filtering function already handled video detection
-                        val sortedVideoFormats = filteredFormats
-                            .filter { format ->
-                                // Use the same video detection logic as in filterFormatsByQualityRules
-                                val hasValidHeight = format.height > 0
-                                val hasVideoCodec = !format.vcodec.isNullOrEmpty() && format.vcodec != "none"
-                                val hasVideoFlag = format.hasVideo
-                                hasValidHeight || hasVideoCodec || hasVideoFlag
-                            }
-                            .sortedWith(
-                                compareByDescending<PythonVideoDownloader.FormatInfo> { it.height }
-                                    .thenByDescending { it.fps }
-                                    .thenByDescending { it.tbr }
-                            )
-
-                        Log.d(TAG, "Sorted video formats: ${sortedVideoFormats.size}")
-
-                        // Add video formats
-                        sortedVideoFormats.forEachIndexed { index, format ->
-                            val qualityLabel = buildString {
-                                // Add star for the highest quality option
-                                if (index == 0) {
-                                    append("★ ")
-                                }
-
-                                append(format.qualityLabel)
-
-                                // Always show FPS (assume 30fps if not specified)
-                                val displayFps = if (format.fps > 0) format.fps else 30
-                                append(" ${displayFps}fps")
-
-                                if (format.hasAudio) {
-                                    append(" (Video+Audio)")
-                                } else {
-                                    append(" (Video Only)")
-                                }
-
-                                // Calculate and show estimated file size
-                                val estimatedSize = when {
-                                    format.filesize > 0 -> format.filesize
-                                    format.tbr > 0 && videoInfo.duration > 0 -> {
-                                        // Calculate: bitrate (kbps) * duration (sec) * 125 (to convert kbps to bytes/sec)
-                                        (format.tbr * videoInfo.duration * 125).toLong()
-                                    }
-                                    else -> 0L
-                                }
-
-                                if (estimatedSize > 0) {
-                                    append(" - ${formatFileSize(estimatedSize)}")
-                                }
-
-                                // Mark the first option as highest quality
-                                if (index == 0) {
-                                    append(" (Highest Quality)")
-                                }
-                            }
-                            qualityOptions.add(qualityLabel)
-                            // Use quality label instead of format ID for better compatibility
-                            qualityValues.add(format.qualityLabel)
-                            qualityLabels.add(format.qualityLabel)
-
-                            Log.d(TAG, "Added quality option: $qualityLabel")
-                        }
-
-                        // Add audio-only option at the bottom
-                        // TODO: Re-enable audio-only downloads in future release
-                        // qualityOptions.add("Audio Only")
-                        // qualityValues.add("audio_mp3")
-                        // qualityLabels.add("Audio Only")
-                    }
+                    // Create display options for dialog
+                    val displayOptions = qualityOptions.map { it.displayName }.toTypedArray()
 
                     AlertDialog.Builder(this@VideoDownloadActivity)
                         .setTitle(dialogTitle)
-                        .setItems(qualityOptions.toTypedArray()) { _, which ->
-                            val selectedQuality = qualityValues[which]
-                            val selectedQualityLabel = qualityLabels[which]
+                        .setItems(displayOptions) { _, which ->
+                            val selectedOption = qualityOptions[which]
 
                             // Show data usage warning if needed
-                            if (networkMonitor.shouldWarnAboutDataUsage() && !selectedQuality.startsWith("audio_")) {
-                                showDataUsageWarning(url, selectedQuality, selectedQualityLabel)
+                            if (networkMonitor.shouldWarnAboutDataUsage()) {
+                                showDataUsageWarning(url, selectedOption)
                             } else {
-                                startDownloadWithQuality(url, selectedQuality, selectedQualityLabel)
+                                startDownloadWithQualityOption(url, selectedOption)
                             }
                         }
                         .setNegativeButton("Cancel") { _, _ ->
@@ -442,10 +508,10 @@ class VideoDownloadActivity : Activity() {
     }
 
     /**
-     * Show data usage warning for mobile users
+     * Show data usage warning for mobile users - updated to use QualityOption
      */
-    private fun showDataUsageWarning(url: String, quality: String, qualityLabel: String?) {
-        val estimatedSize = estimateDownloadSize(quality)
+    private fun showDataUsageWarning(url: String, qualityOption: QualityOption) {
+        val estimatedSize = formatFileSize(qualityOption.estimatedSize)
 
         AlertDialog.Builder(this)
             .setTitle("Mobile Data Usage Warning")
@@ -456,7 +522,7 @@ class VideoDownloadActivity : Activity() {
                         "Do you want to continue?"
             )
             .setPositiveButton("Continue") { _, _ ->
-                startDownloadWithQuality(url, quality, qualityLabel)
+                startDownloadWithQualityOption(url, qualityOption)
             }
             .setNegativeButton("Cancel") { _, _ ->
                 finish()
@@ -466,7 +532,7 @@ class VideoDownloadActivity : Activity() {
     }
 
     /**
-     * Estimate download size based on quality
+     * Estimate download size based on quality - deprecated, but kept for compatibility
      */
     private fun estimateDownloadSize(quality: String): String {
         return when (quality) {
@@ -508,13 +574,13 @@ class VideoDownloadActivity : Activity() {
         }
     }
 
-    private fun startDownloadWithQuality(url: String, quality: String, qualityLabel: String?) {
+    private fun startDownloadWithQualityOption(url: String, qualityOption: QualityOption) {
         // Show initial toast
         Toast.makeText(this, "Starting video download...", Toast.LENGTH_SHORT).show()
 
         downloadScope.launch {
             try {
-                // Get video info first (this will log all available formats)
+                // Get video info first
                 Log.d(TAG, "Getting video info and logging available formats for: $url")
                 val videoInfo = pythonDownloader.getVideoInfo(url)
 
@@ -539,8 +605,7 @@ class VideoDownloadActivity : Activity() {
                 val uploader = videoInfo?.uploader ?: "Unknown"
 
                 Log.d(TAG, "Video info: $title by $uploader")
-                Log.d(TAG, "Selected quality: $quality")
-                Log.d(TAG, "Selected quality label: $qualityLabel")
+                Log.d(TAG, "Selected quality option: ${qualityOption.displayName}")
 
                 // Show video info to user
                 withContext(Dispatchers.Main) {
@@ -551,15 +616,26 @@ class VideoDownloadActivity : Activity() {
                     ).show()
                 }
 
+                // Map quality option to download parameters
+                val (quality, formatId) = when (val strategy = qualityOption.downloadStrategy) {
+                    is DownloadStrategy.Combined -> strategy.quality to strategy.formatId
+                    is DownloadStrategy.Separate -> {
+                        // For separate streams, use quality and let the Python side handle format selection
+                        // You could extend this to pass both format IDs if needed
+                        strategy.quality to null
+                    }
+                    is DownloadStrategy.QualityBased -> strategy.quality to null
+                }
+
                 // Start background download service with quality preference
                 BackgroundDownloadService.startDownload(
                     context = this@VideoDownloadActivity,
                     url = url,
                     title = title,
                     uploader = uploader,
-                    quality = quality, // Pass quality preference (e.g., "720p", "1080p")
-                    formatId = null, // Deprecated - let Python side handle quality selection
-                    qualityLabel = qualityLabel
+                    quality = quality,
+                    formatId = formatId,
+                    qualityLabel = qualityOption.displayName
                 )
 
                 withContext(Dispatchers.Main) {
@@ -767,7 +843,7 @@ class VideoDownloadActivity : Activity() {
             if (!host.contains(".")) return false
 
             // Host shouldn't have weird characters that suggest parsing error
-            if (host.contains("'") || host.contains('"') || host.contains("â€")) return false
+            if (host.contains("'") || host.contains('"') || host.contains("Â")) return false
             return true
         } catch (e: Exception) {
             return false
