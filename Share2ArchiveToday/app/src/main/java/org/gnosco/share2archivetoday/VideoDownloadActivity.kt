@@ -206,8 +206,18 @@ class VideoDownloadActivity : Activity() {
                     if (videoInfo == null) {
                         Toast.makeText(
                             this@VideoDownloadActivity,
-                            "Failed to get video information",
+                            "Unable to get video information",
                             Toast.LENGTH_SHORT
+                        ).show()
+                        finish()
+                        return@withContext
+                    }
+
+                    if (videoInfo.formats.isEmpty()) {
+                        Toast.makeText(
+                            this@VideoDownloadActivity,
+                            "This site is not supported or blocks downloads. Please email support@gnosco.org if you want us to look at it",
+                            Toast.LENGTH_LONG
                         ).show()
                         finish()
                         return@withContext
