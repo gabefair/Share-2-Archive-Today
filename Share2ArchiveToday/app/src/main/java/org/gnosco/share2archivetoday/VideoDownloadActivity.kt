@@ -57,6 +57,7 @@ class VideoDownloadActivity : Activity() {
         permissionManager = PermissionManager(applicationContext)
         networkMonitor = NetworkMonitor(applicationContext)
         downloadHistoryManager = DownloadHistoryManager(applicationContext)
+        smartFormatSelector = SmartFormatSelector(applicationContext)
 
         // Test Python functionality
         if (!pythonDownloader.testPythonFunctionality()) {
@@ -328,8 +329,8 @@ class VideoDownloadActivity : Activity() {
     private fun showQualitySelectionDialog(url: String) {
         // Show loading dialog while getting video info
         val loadingDialog = AlertDialog.Builder(this)
-            .setTitle("Loading")
-            .setMessage("Getting available formats...")
+            .setTitle("Analyzing Video")
+            .setMessage("Getting available formats and device compatibility...")
             .setCancelable(false)
             .create()
         loadingDialog.show()
@@ -1104,4 +1105,5 @@ class VideoDownloadActivity : Activity() {
             .setCancelable(false)
             .show()
     }
+
 }
