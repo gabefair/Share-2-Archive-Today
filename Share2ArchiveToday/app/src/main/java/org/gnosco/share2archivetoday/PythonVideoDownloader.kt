@@ -8,6 +8,7 @@ import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import kotlinx.coroutines.Job
 import java.io.File
+import org.gnosco.share2archivetoday.BuildConfig
 
 /**
  * Kotlin wrapper for Python yt-dlp video downloader
@@ -42,6 +43,9 @@ class PythonVideoDownloader(private val context: Context) {
             
             val py = Python.getInstance()
             pythonModule = py.getModule(PYTHON_MODULE)
+            
+            // Set debug flag in Python module
+            pythonModule?.put("DEBUG_MODE", BuildConfig.DEBUG)
             
             // Disable Python stdout/stderr in release builds
             if (!BuildConfig.DEBUG) {
@@ -89,12 +93,29 @@ class PythonVideoDownloader(private val context: Context) {
             val result = pythonModule?.callAttr("get_video_info", url)
             
             return result?.let {
+                // Check if there's an error in the response
+                val error = it.callAttr("get", "error")?.toString()
+                if (!error.isNullOrBlank()) {
+                    Log.e(TAG, "Python returned error: $error")
+                    return null
+                }
+                
+                // Use .get() method instead of bracket notation for Chaquopy compatibility
+                val formatsObj = it.callAttr("get", "formats")
+                Log.d(TAG, "Formats object from Python: $formatsObj")
+                
+                val formats = parseFormats(formatsObj)
+                
                 VideoInfo(
-                    title = it["title"]?.toString() ?: "Unknown",
-                    uploader = it["uploader"]?.toString() ?: "Unknown",
-                    duration = it["duration"]?.toInt() ?: 0,
-                    thumbnail = it["thumbnail"]?.toString() ?: "",
-                    description = it["description"]?.toString() ?: ""
+                    title = it.callAttr("get", "title")?.toString() ?: "Unknown",
+                    uploader = it.callAttr("get", "uploader")?.toString() ?: "Unknown",
+                    duration = it.callAttr("get", "duration")?.toDouble()?.toInt() ?: 0,
+                    thumbnail = it.callAttr("get", "thumbnail")?.toString() ?: "",
+                    description = it.callAttr("get", "description")?.toString() ?: "",
+                    formats = formats,
+                    extractor = it.callAttr("get", "extractor")?.toString(),
+                    extractorKey = it.callAttr("get", "extractor_key")?.toString(),
+                    webpageUrl = it.callAttr("get", "webpage_url")?.toString()
                 )
             }
         } catch (e: PyException) {
@@ -108,6 +129,59 @@ class PythonVideoDownloader(private val context: Context) {
     }
     
     /**
+     * Parse formats from Python result
+     */
+    private fun parseFormats(formatsPyObject: PyObject?): List<FormatInfo> {
+        if (formatsPyObject == null) {
+            Log.w(TAG, "formatsPyObject is null")
+            return emptyList()
+        }
+        
+        return try {
+            Log.d(TAG, "Parsing formats from Python, type: ${formatsPyObject.javaClass.name}")
+            
+            val formatsList = formatsPyObject.asList()
+            Log.d(TAG, "Formats list size: ${formatsList.size}")
+            
+            val parsedFormats = formatsList.mapIndexed { index, formatObj ->
+                try {
+                    Log.d(TAG, "Parsing format $index")
+                    // Use .callAttr("get", key) for Chaquopy compatibility
+                    // Convert floats to ints by going through Double first
+                    val formatInfo = FormatInfo(
+                        formatId = formatObj.callAttr("get", "format_id")?.toString() ?: "",
+                        ext = formatObj.callAttr("get", "ext")?.toString() ?: "",
+                        resolution = formatObj.callAttr("get", "resolution")?.toString() ?: "",
+                        height = formatObj.callAttr("get", "height")?.toInt() ?: 0,
+                        qualityLabel = formatObj.callAttr("get", "quality_label")?.toString() ?: "",
+                        filesize = formatObj.callAttr("get", "filesize")?.toLong() ?: 0L,
+                        vcodec = formatObj.callAttr("get", "vcodec")?.toString() ?: "",
+                        acodec = formatObj.callAttr("get", "acodec")?.toString() ?: "",
+                        hasAudio = formatObj.callAttr("get", "has_audio")?.toBoolean() ?: false,
+                        hasVideo = formatObj.callAttr("get", "has_video")?.toBoolean() ?: false,
+                        fps = formatObj.callAttr("get", "fps")?.toDouble()?.toInt() ?: 0,  // Handle Python floats
+                        formatNote = formatObj.callAttr("get", "format_note")?.toString() ?: "",
+                        tbr = formatObj.callAttr("get", "tbr")?.toDouble()?.toInt() ?: 0,  // Handle Python floats
+                        url = formatObj.callAttr("get", "url")?.toString() ?: ""
+                    )
+                    Log.d(TAG, "Successfully parsed format: ${formatInfo.formatId} - ${formatInfo.qualityLabel}")
+                    formatInfo
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing format $index: ${e.message}", e)
+                    null
+                }
+            }.filterNotNull()
+            
+            Log.d(TAG, "Successfully parsed ${parsedFormats.size} formats")
+            parsedFormats
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing formats list: ${e.message}", e)
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+    
+    /**
      * Download video with progress tracking
      */
     fun downloadVideo(
@@ -115,7 +189,7 @@ class PythonVideoDownloader(private val context: Context) {
         outputDir: String,
         quality: String = "best",
         progressCallback: ((ProgressInfo) -> Unit)? = null,
-        estimatedSizeMB: Long = 100,
+        @Suppress("UNUSED_PARAMETER") estimatedSizeMB: Long = 100,
         formatId: String? = null
     ): DownloadResult {
         try {
@@ -264,17 +338,31 @@ class PythonVideoDownloader(private val context: Context) {
         
         return try {
             val py = Python.getInstance()
-            val builtins = py.getBuiltins()
             
-            // Create a Python-compatible callback function
-            py.getModule("__main__").put("kotlin_callback", object : Any() {
-                fun __call__(progress: PyObject) {
-                    val progressInfo = parsePythonProgress(progress)
-                    kotlinCallback(progressInfo)
-                }
-            })
+            // Create a Python-compatible callback function using exec in builtins
+            val callbackCode = """
+                def kotlin_callback(progress):
+                    try:
+                        # This will be handled by the Python side
+                        pass
+                    except Exception as e:
+                        print(f"Error in progress callback: {e}", file=sys.stderr, flush=True)
+            """.trimIndent()
+            // globals must be a dict, not module
+            // Use builtins.exec with proper globals and locals dictionaries
+            val builtins = py.getModule("builtins")
+            val mainModule = py.getModule("__main__")
             
-            py.getModule("__main__")["kotlin_callback"]
+            // Create globals and locals dictionaries from the main module
+            // builtins.exec() expects dictionary objects for the globals and locals parameters
+            val globalsDict = mainModule.callAttr("__dict__")
+            val localsDict = mainModule.callAttr("__dict__")
+            
+            // Execute the callback function definition
+            builtins.callAttr("exec", callbackCode, globalsDict, localsDict)
+            
+            // Return the callback function from the locals dictionary
+            localsDict.callAttr("get", "kotlin_callback")
         } catch (e: Exception) {
             Log.e(TAG, "Error creating Python callback", e)
             null
@@ -286,17 +374,17 @@ class PythonVideoDownloader(private val context: Context) {
      */
     private fun parsePythonProgress(progress: PyObject): ProgressInfo {
         return try {
-            val status = progress["status"]?.toString() ?: "unknown"
+            val status = progress.callAttr("get", "status")?.toString() ?: "unknown"
             
             when (status) {
                 "downloading" -> {
-                    val downloaded = progress["downloaded_bytes"]?.toLong() ?: 0L
-                    val total = progress["total_bytes"]?.toLong() 
-                        ?: progress["total_bytes_estimate"]?.toLong() 
+                    val downloaded = progress.callAttr("get", "downloaded_bytes")?.toLong() ?: 0L
+                    val total = progress.callAttr("get", "total_bytes")?.toLong() 
+                        ?: progress.callAttr("get", "total_bytes_estimate")?.toLong() 
                         ?: 0L
-                    val speed = progress["speed"]?.toDouble() ?: 0.0
-                    val eta = progress["eta"]?.toInt() ?: 0
-                    val filename = progress["filename"]?.toString() ?: ""
+                    val speed = progress.callAttr("get", "speed")?.toDouble() ?: 0.0
+                    val eta = progress.callAttr("get", "eta")?.toInt() ?: 0
+                    val filename = progress.callAttr("get", "filename")?.toString() ?: ""
                     
                     val percentage = if (total > 0) {
                         ((downloaded.toDouble() / total.toDouble()) * 100).toInt()
@@ -314,7 +402,7 @@ class PythonVideoDownloader(private val context: Context) {
                     )
                 }
                 "finished" -> {
-                    val filename = progress["filename"]?.toString() ?: ""
+                    val filename = progress.callAttr("get", "filename")?.toString() ?: ""
                     ProgressInfo.Finished(filename)
                 }
                 "error" -> {
@@ -426,7 +514,15 @@ class PythonVideoDownloader(private val context: Context) {
                 0L
             }
             
-            Log.d(TAG, "Parsed result - success: $success, error: $error, filePath: $filePath, videoPath: $videoPath, audioPath: $audioPath, separateAv: $separateAv, fileSize: $fileSize")
+            val needsExtraction = try {
+                val needsExtractionObj = result.callAttr("get", "needs_extraction")
+                needsExtractionObj?.toBoolean() ?: false
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting needs_extraction: ${e.message}", e)
+                false
+            }
+            
+            Log.d(TAG, "Parsed result - success: $success, error: $error, filePath: $filePath, videoPath: $videoPath, audioPath: $audioPath, separateAv: $separateAv, fileSize: $fileSize, needsExtraction: $needsExtraction")
             
             DownloadResult(
                 success = success,
@@ -435,7 +531,8 @@ class PythonVideoDownloader(private val context: Context) {
                 videoPath = videoPath,
                 audioPath = audioPath,
                 separateAv = separateAv,
-                fileSize = fileSize
+                fileSize = fileSize,
+                needsExtraction = needsExtraction
             )
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing download result", e)
@@ -525,7 +622,31 @@ class PythonVideoDownloader(private val context: Context) {
         val uploader: String,
         val duration: Int,
         val thumbnail: String,
-        val description: String
+        val description: String,
+        val formats: List<FormatInfo> = emptyList(),
+        val extractor: String? = null,
+        val extractorKey: String? = null,
+        val webpageUrl: String? = null
+    )
+    
+    /**
+     * Format information data class
+     */
+    data class FormatInfo(
+        val formatId: String,
+        val ext: String,
+        val resolution: String,
+        val height: Int,
+        val qualityLabel: String,
+        val filesize: Long,
+        val vcodec: String,
+        val acodec: String,
+        val hasAudio: Boolean,
+        val hasVideo: Boolean,
+        val fps: Int,
+        val formatNote: String,
+        val tbr: Int,
+        val url: String
     )
     
     /**
@@ -538,7 +659,8 @@ class PythonVideoDownloader(private val context: Context) {
         val videoPath: String?,
         val audioPath: String?,
         val separateAv: Boolean,
-        val fileSize: Long
+        val fileSize: Long,
+        val needsExtraction: Boolean = false  // True if audio needs to be extracted from video
     )
     
     /**
