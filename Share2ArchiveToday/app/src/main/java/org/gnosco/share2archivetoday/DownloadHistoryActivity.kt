@@ -1,6 +1,7 @@
 package org.gnosco.share2archivetoday
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -9,13 +10,13 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.util.Log
+import android.util.TypedValue
 import android.widget.Toast
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
 import java.io.File
 
 /**
@@ -52,54 +53,93 @@ class DownloadHistoryActivity : Activity() {
     }
     
     private fun createLayout() {
+        // Convert dp to pixels for consistent sizing across devices
+        val dp16 = dpToPx(16f)
+        val dp12 = dpToPx(12f)
+        val dp8 = dpToPx(8f)
+        val dp48 = dpToPx(48f)  // Standard Android button height
+        
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(32, 32, 32, 32)
+            setPadding(dp16, dp16, dp16, dp16)
         }
         
         // Title
         val titleText = TextView(this).apply {
             text = "Download History"
-            textSize = 24f
-            setPadding(0, 0, 0, 32)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+            setPadding(0, 0, 0, dp16)
         }
         layout.addView(titleText)
         
-        // Action buttons
-        val buttonLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-        
+        // Clear History button
         clearHistoryButton = Button(this).apply {
-            text = "Clear History"
+            text = "CLEAR HISTORY"
+            isAllCaps = true
+            minHeight = dp48
+            setPadding(dp16, dp12, dp16, dp12)
             setOnClickListener { showClearHistoryDialog() }
         }
         
+        val clearButtonParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            setMargins(0, 0, 0, dp8)
+        }
+        layout.addView(clearHistoryButton, clearButtonParams)
+        
+        // Open Downloads Folder button
         openFolderButton = Button(this).apply {
-            text = "Open Downloads Folder"
+            text = "OPEN DOWNLOADS FOLDER"
+            isAllCaps = true
+            minHeight = dp48
+            setPadding(dp16, dp12, dp16, dp12)
             setOnClickListener { openDownloadsFolder() }
         }
         
-        buttonLayout.addView(clearHistoryButton)
-        buttonLayout.addView(openFolderButton)
-        layout.addView(buttonLayout)
+        val openButtonParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            setMargins(0, 0, 0, dp16)
+        }
+        layout.addView(openFolderButton, openButtonParams)
         
         // Empty state text
         emptyStateText = TextView(this).apply {
             text = "No downloads yet"
-            textSize = 16f
-            setPadding(0, 32, 0, 0)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setPadding(0, dp8, 0, 0)
             visibility = android.view.View.GONE
         }
         layout.addView(emptyStateText)
         
         // List view
         listView = ListView(this).apply {
-            setPadding(0, 32, 0, 0)
+            setPadding(0, 0, 0, 0)
         }
-        layout.addView(listView)
+        
+        val listParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
+            1f  // Take remaining space with weight
+        )
+        layout.addView(listView, listParams)
         
         setContentView(layout)
+    }
+    
+    /**
+     * Convert density-independent pixels (dp) to actual pixels based on screen density
+     * This ensures consistent sizing across different screen sizes and densities
+     */
+    private fun dpToPx(dp: Float): Int {
+        return TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            dp,
+            resources.displayMetrics
+        ).toInt()
     }
     
     private fun loadDownloadHistory() {
@@ -109,46 +149,48 @@ class DownloadHistoryActivity : Activity() {
             
             allDownloads.clear()
             
-            // Only add completed downloads to history (not active/in-progress ones)
+            // Create a map to deduplicate downloads by URL
+            val downloadMap = mutableMapOf<String, DownloadHistoryItem>()
+            
+            // Add completed downloads from history manager
             completedDownloads.forEach { download: DownloadHistoryManager.DownloadHistoryEntry ->
-                allDownloads.add(
-                    DownloadHistoryItem(
+                if (download.success) {  // Only show successful downloads
+                    downloadMap[download.url] = DownloadHistoryItem(
                         title = download.title,
                         url = download.url,
                         uploader = download.uploader,
                         quality = download.quality,
                         filePath = download.filePath,
                         fileSize = download.fileSize,
-                        success = download.success,
-                        error = download.error,
+                        success = true,
+                        error = null,
                         timestamp = download.timestamp,
-                        status = if (download.success) "COMPLETED" else "FAILED"
-                    )
-                )
-            }
-            
-            // Add active downloads only if they are truly completed (not in progress)
-            activeDownloads.forEach { download ->
-                if (download.status == DownloadResumptionManager.DownloadStatus.COMPLETED) {
-                    allDownloads.add(
-                        DownloadHistoryItem(
-                            title = download.title,
-                            url = download.url,
-                            uploader = "Unknown",
-                            quality = download.quality,
-                            filePath = download.partialFilePath,
-                            fileSize = download.totalBytes,
-                            success = true,
-                            error = null,
-                            timestamp = download.startTime,
-                            status = "COMPLETED"
-                        )
+                        status = "COMPLETED"
                     )
                 }
             }
             
-            // Sort by timestamp (newest first)
-            allDownloads.sortByDescending { it.timestamp }
+            // Add completed downloads from resumption manager (only if not already in history)
+            activeDownloads.forEach { download ->
+                if (download.status == DownloadResumptionManager.DownloadStatus.COMPLETED && 
+                    !downloadMap.containsKey(download.url)) {
+                    downloadMap[download.url] = DownloadHistoryItem(
+                        title = download.title,
+                        url = download.url,
+                        uploader = "Unknown",
+                        quality = download.quality,
+                        filePath = download.partialFilePath,
+                        fileSize = download.totalBytes,
+                        success = true,
+                        error = null,
+                        timestamp = download.startTime,
+                        status = "COMPLETED"
+                    )
+                }
+            }
+            
+            // Convert map to list and sort by timestamp (newest first)
+            allDownloads.addAll(downloadMap.values.sortedByDescending { it.timestamp })
             
             // Show/hide empty state
             if (allDownloads.isEmpty()) {
@@ -216,6 +258,10 @@ class DownloadHistoryActivity : Activity() {
         actions.add("View Details")
         actionCallbacks.add { showDownloadDetails(item) }
         
+        // Delete this download from history
+        actions.add("Delete from History")
+        actionCallbacks.add { showDeleteItemDialog(item) }
+        
         AlertDialog.Builder(this)
             .setTitle(item.title)
             .setItems(actions.toTypedArray()) { _, which ->
@@ -235,29 +281,38 @@ class DownloadHistoryActivity : Activity() {
     private fun shareVideo(item: DownloadHistoryItem) {
         if (item.filePath != null) {
             try {
-                val file = File(item.filePath)
-                if (file.exists()) {
-                    val uri = androidx.core.content.FileProvider.getUriForFile(
-                        this, packageName + ".fileprovider", file
-                    )
-                    val shareIntent = Intent().apply {
-                        action = Intent.ACTION_SEND
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        type = getMimeType(item.filePath)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    
-                    if (shareIntent.resolveActivity(packageManager) != null) {
-                        startActivity(Intent.createChooser(shareIntent, "Share Video"))
-                    } else {
-                        Toast.makeText(this, "No app found to share this file", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
+                val uri = parseFilePathOrUri(item.filePath)
+                
+                // Check if the file exists
+                if (!checkUriExists(uri)) {
                     Toast.makeText(this, "Video file no longer exists", Toast.LENGTH_SHORT).show()
+                    return
+                }
+                
+                // Get the proper display name for the file
+                val displayName = getDisplayNameFromUri(uri) ?: item.title
+                
+                val shareIntent = Intent().apply {
+                    action = Intent.ACTION_SEND
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_TEXT, "Shared video: $displayName")
+                    putExtra(Intent.EXTRA_SUBJECT, displayName)
+                    type = getMimeTypeFromUri(uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    
+                    // Use ClipData to provide better metadata for sharing
+                    val clipData = ClipData.newUri(contentResolver, displayName, uri)
+                    setClipData(clipData)
+                }
+                
+                if (shareIntent.resolveActivity(packageManager) != null) {
+                    startActivity(Intent.createChooser(shareIntent, "Share Video"))
+                } else {
+                    Toast.makeText(this, "No app found to share this file", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error sharing video", e)
-                Toast.makeText(this, "Error sharing video", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Error sharing video: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         } else {
             Toast.makeText(this, "No file path available", Toast.LENGTH_SHORT).show()
@@ -267,8 +322,8 @@ class DownloadHistoryActivity : Activity() {
     private fun showClearHistoryDialog() {
         AlertDialog.Builder(this)
             .setTitle("Clear Download History")
-            .setMessage("Are you sure you want to clear all download history? This action cannot be undone.")
-            .setPositiveButton("Clear") { _, _ ->
+            .setMessage("Are you sure you want to clear all download history? This will remove all entries from the list.\n\nNote: Downloaded files will NOT be deleted.")
+            .setPositiveButton("Clear All") { _, _ ->
                 downloadHistoryManager.clearHistory()
                 downloadResumptionManager.cleanupOldDownloads(0) // Clear all
                 loadDownloadHistory() // Refresh the list
@@ -278,76 +333,417 @@ class DownloadHistoryActivity : Activity() {
             .show()
     }
     
-    private fun openDownloadsFolder() {
-        try {
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val appDownloadsDir = File(downloadsDir, "Share2ArchiveToday")
-            
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(Uri.fromFile(appDownloadsDir), "resource/folder")
+    private fun showDeleteItemDialog(item: DownloadHistoryItem) {
+        AlertDialog.Builder(this)
+            .setTitle("Delete from History")
+            .setMessage("Remove \"${item.title}\" from download history?\n\nNote: The downloaded file will NOT be deleted.")
+            .setPositiveButton("Delete") { _, _ ->
+                deleteHistoryItem(item)
             }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun deleteHistoryItem(item: DownloadHistoryItem) {
+        try {
+            // Remove from history manager by URL
+            val history = downloadHistoryManager.getDownloadHistory().toMutableList()
+            val removed = history.removeAll { it.url == item.url && it.timestamp == item.timestamp }
             
-            if (intent.resolveActivity(packageManager) != null) {
-                startActivity(intent)
-            } else {
-                // Fallback: try to open general downloads folder
-                val fallbackIntent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(Uri.fromFile(downloadsDir), "resource/folder")
+            if (removed) {
+                // Save updated history
+                downloadHistoryManager.clearHistory()
+                history.forEach { entry ->
+                    downloadHistoryManager.addDownload(
+                        url = entry.url,
+                        title = entry.title,
+                        uploader = entry.uploader,
+                        quality = entry.quality,
+                        filePath = entry.filePath,
+                        fileSize = entry.fileSize,
+                        success = entry.success,
+                        error = entry.error
+                    )
                 }
                 
-                if (fallbackIntent.resolveActivity(packageManager) != null) {
-                    startActivity(fallbackIntent)
-                } else {
-                    Toast.makeText(this, "No file manager found to open downloads folder", Toast.LENGTH_SHORT).show()
-                }
+                // Refresh the list
+                loadDownloadHistory()
+                Toast.makeText(this, "Removed from history", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Item not found in history", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
+            Log.e(TAG, "Error deleting history item", e)
+            Toast.makeText(this, "Error removing item from history", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    private fun openDownloadsFolder() {
+        // Show explanation dialog first
+        AlertDialog.Builder(this)
+            .setTitle("Open Downloads Folder")
+            .setMessage(
+                "This will open your device's Downloads folder where your downloaded videos are stored.\n\n" +
+                "You may see an 'Open with' dialog asking you to choose which app to use. " +
+                "Select your preferred file manager (like Files, Downloads, or your default file browser) and choose 'Always' if you want to set it as default.\n\n" +
+                "This will help you easily access your downloaded videos."
+            )
+            .setPositiveButton("Open Downloads") { _, _ ->
+                openDownloadsFolderInternal()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun openDownloadsFolderInternal() {
+        try {
+            // Try multiple approaches to open Downloads folder
+            
+            // Approach 1: Try to open Downloads app directly
+            val downloadsAppIntent = Intent().apply {
+                action = Intent.ACTION_VIEW
+                setDataAndType(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, "*/*")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            
+            if (downloadsAppIntent.resolveActivity(packageManager) != null) {
+                startActivity(downloadsAppIntent)
+                return
+            }
+            
+            // Approach 2: Try to open Files app with Downloads folder
+            val filesAppIntent = Intent().apply {
+                action = Intent.ACTION_VIEW
+                setDataAndType(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, "resource/folder")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            
+            if (filesAppIntent.resolveActivity(packageManager) != null) {
+                startActivity(filesAppIntent)
+                return
+            }
+            
+            // Approach 3: Try generic file manager
+            val fileManagerIntent = Intent(Intent.ACTION_VIEW).apply {
+                type = "*/*"
+                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("video/*", "audio/*", "image/*", "application/*"))
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            
+            if (fileManagerIntent.resolveActivity(packageManager) != null) {
+                startActivity(Intent.createChooser(fileManagerIntent, "Open Downloads"))
+                return
+            }
+            
+            // Approach 4: Try to open Downloads via Settings
+            val settingsIntent = Intent(android.provider.Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            
+            if (settingsIntent.resolveActivity(packageManager) != null) {
+                startActivity(settingsIntent)
+                Toast.makeText(this, "Please navigate to Downloads in Settings", Toast.LENGTH_LONG).show()
+                return
+            }
+            
+            // Last resort: Show helpful message
+            Toast.makeText(
+                this, 
+                "Please open your device's Downloads app or Files app to view downloaded files",
+                Toast.LENGTH_LONG
+            ).show()
+        } catch (e: Exception) {
             Log.e(TAG, "Error opening downloads folder", e)
-            Toast.makeText(this, "Error opening downloads folder", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "Please open your device's Downloads app to view files",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
     
     private fun openFile(filePath: String) {
         try {
-            val file = File(filePath)
-            if (file.exists()) {
-                val uri = androidx.core.content.FileProvider.getUriForFile(
-                    this, packageName + ".fileprovider", file
-                )
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(uri, getMimeType(filePath))
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-                
-                if (intent.resolveActivity(packageManager) != null) {
-                    startActivity(intent)
-                } else {
-                    Toast.makeText(this, "No app found to open this file", Toast.LENGTH_SHORT).show()
-                }
+            val uri = parseFilePathOrUri(filePath)
+            
+            // Check if the file exists
+            if (!checkUriExists(uri)) {
+                Toast.makeText(this, "File not found at: $filePath", Toast.LENGTH_LONG).show()
+                Log.e(TAG, "File not found: $filePath")
+                return
+            }
+            
+            val mimeType = getMimeTypeFromUri(uri)
+            Log.d(TAG, "Opening file: $uri with mime type: $mimeType")
+            
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            
+            if (intent.resolveActivity(packageManager) != null) {
+                startActivity(intent)
             } else {
-                Toast.makeText(this, "File not found", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "No app found to open this file", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error opening file", e)
-            Toast.makeText(this, "Error opening file", Toast.LENGTH_SHORT).show()
+            Log.e(TAG, "Error opening file: $filePath", e)
+            Toast.makeText(this, "Error opening file: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    /**
+     * Get display name from MediaStore URI
+     */
+    private fun getDisplayNameFromUri(uri: Uri): String? {
+        return try {
+            when (uri.scheme) {
+                "content" -> {
+                    val projection = arrayOf(
+                        android.provider.MediaStore.MediaColumns.DISPLAY_NAME,
+                        android.provider.MediaStore.MediaColumns.TITLE
+                    )
+                    contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val displayNameIndex = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.DISPLAY_NAME)
+                            val titleIndex = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.TITLE)
+                            
+                            // Try DISPLAY_NAME first, then TITLE
+                            val displayName = if (displayNameIndex >= 0) {
+                                cursor.getString(displayNameIndex)
+                            } else null
+                            
+                            val title = if (titleIndex >= 0) {
+                                cursor.getString(titleIndex)
+                            } else null
+                            
+                            displayName ?: title
+                        } else null
+                    }
+                }
+                "file" -> {
+                    // For file URIs, extract filename from path
+                    File(uri.path ?: "").name
+                }
+                else -> null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting display name from URI: $uri", e)
+            null
+        }
+    }
+    
+    /**
+     * Parse a file path or URI string into a proper Uri object
+     * Handles both content:// URIs and legacy file paths
+     */
+    private fun parseFilePathOrUri(pathOrUri: String): Uri {
+        return when {
+            pathOrUri.startsWith("content://") -> Uri.parse(pathOrUri)
+            pathOrUri.startsWith("file://") -> Uri.parse(pathOrUri)
+            else -> {
+                // Legacy file path - convert to FileProvider URI
+                val file = File(pathOrUri)
+                if (file.exists()) {
+                    androidx.core.content.FileProvider.getUriForFile(
+                        this, 
+                        "$packageName.fileprovider", 
+                        file
+                    )
+                } else {
+                    // If file doesn't exist, still try to parse as URI
+                    Uri.parse(pathOrUri)
+                }
+            }
+        }
+    }
+    
+    /**
+     * Check if a URI points to an existing file
+     */
+    private fun checkUriExists(uri: Uri): Boolean {
+        return try {
+            when (uri.scheme) {
+                "content" -> {
+                    // For content URIs, try to open an input stream
+                    contentResolver.openInputStream(uri)?.use { true } ?: false
+                }
+                "file" -> {
+                    // For file URIs, check if file exists
+                    File(uri.path ?: "").exists()
+                }
+                else -> false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking if URI exists: $uri", e)
+            false
+        }
+    }
+    
+    /**
+     * Get MIME type from a URI
+     */
+    private fun getMimeTypeFromUri(uri: Uri): String {
+        return try {
+            when (uri.scheme) {
+                "content" -> {
+                    // Query ContentResolver for MIME type
+                    val mimeType = contentResolver.getType(uri)
+                    if (!mimeType.isNullOrEmpty() && mimeType != "video/*") {
+                        mimeType
+                    } else {
+                        // If MediaStore returned generic video/*, try to get better info
+                        getMimeTypeFromMediaStore(uri) ?: guessMimeTypeFromUri(uri)
+                    }
+                }
+                else -> guessMimeTypeFromUri(uri)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting MIME type for URI: $uri", e)
+            "video/mp4" // Better fallback than video/*
+        }
+    }
+    
+    /**
+     * Get user-friendly location text from file path or URI
+     */
+    private fun getFriendlyLocationText(filePath: String): String {
+        return try {
+            when {
+                filePath.startsWith("content://media/external/downloads/") -> {
+                    "Downloads folder"
+                }
+                filePath.startsWith("content://") -> {
+                    "Downloads folder"
+                }
+                filePath.contains("/Download/") || filePath.contains("/Downloads/") -> {
+                    "Downloads folder"
+                }
+                else -> {
+                    // For legacy file paths, try to extract meaningful location
+                    val path = filePath.substringAfterLast("/", filePath)
+                    if (path.contains("Download")) {
+                        "Downloads folder"
+                    } else {
+                        "Device storage"
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting friendly location text for: $filePath", e)
+            "Downloads folder"
+        }
+    }
+    
+    /**
+     * Get MIME type from MediaStore metadata
+     */
+    private fun getMimeTypeFromMediaStore(uri: Uri): String? {
+        return try {
+            val projection = arrayOf(
+                android.provider.MediaStore.MediaColumns.MIME_TYPE,
+                android.provider.MediaStore.MediaColumns.DISPLAY_NAME
+            )
+            contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val mimeTypeIndex = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.MIME_TYPE)
+                    val displayNameIndex = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.DISPLAY_NAME)
+                    
+                    // Try MIME_TYPE first
+                    if (mimeTypeIndex >= 0) {
+                        val mimeType = cursor.getString(mimeTypeIndex)
+                        if (!mimeType.isNullOrEmpty() && mimeType != "video/*") {
+                            return mimeType
+                        }
+                    }
+                    
+                    // Fallback to guessing from display name
+                    if (displayNameIndex >= 0) {
+                        val displayName = cursor.getString(displayNameIndex)
+                        if (!displayName.isNullOrEmpty()) {
+                            val extension = displayName.substringAfterLast('.', "").lowercase()
+                            return when (extension) {
+                                "mp4" -> "video/mp4"
+                                "webm" -> "video/webm"
+                                "mkv" -> "video/x-matroska"
+                                "avi" -> "video/x-msvideo"
+                                "mov" -> "video/quicktime"
+                                "mp3" -> "audio/mpeg"
+                                "aac" -> "audio/aac"
+                                "m4a" -> "audio/mp4"
+                                "wav" -> "audio/wav"
+                                "ogg" -> "audio/ogg"
+                                "opus" -> "audio/opus"
+                                else -> null
+                            }
+                        }
+                    }
+                }
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting MIME type from MediaStore: $uri", e)
+            null
+        }
+    }
+    
+    /**
+     * Guess MIME type from URI string
+     */
+    private fun guessMimeTypeFromUri(uri: Uri): String {
+        val uriString = uri.toString()
+        val extension = uriString.substringAfterLast('.', "").lowercase()
+        return when (extension) {
+            "mp4" -> "video/mp4"
+            "webm" -> "video/webm"
+            "mkv" -> "video/x-matroska"
+            "mp3" -> "audio/mpeg"
+            "aac" -> "audio/aac"
+            "m4a" -> "audio/mp4"
+            "ogg" -> "audio/ogg"
+            "opus" -> "audio/opus"
+            else -> "video/mp4" // Better fallback than video/*
         }
     }
     
     private fun showDownloadDetails(item: DownloadHistoryItem) {
         val message = buildString {
-            append("Title: ${item.title}\n")
-            append("Status: ${item.status}\n")
-            append("Quality: ${item.quality}\n")
+            append("Title: ${item.title}\n\n")
+            append("Status: ${item.status}\n\n")
+            append("Quality: ${item.quality}\n\n")
+            
             if (item.fileSize > 0) {
-                append("Size: ${formatFileSize(item.fileSize)}\n")
+                append("Size: ${formatFileSize(item.fileSize)}\n\n")
             }
+            
+            if (item.uploader.isNotEmpty() && item.uploader != "Unknown") {
+                append("Uploader: ${item.uploader}\n\n")
+            }
+            
+            // Format the download date
+            val dateStr = try {
+                java.text.SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", java.util.Locale.getDefault())
+                    .format(java.util.Date(item.timestamp))
+            } catch (e: Exception) {
+                "Unknown"
+            }
+            append("Downloaded: $dateStr\n\n")
+            
+            if (item.filePath != null) {
+                val locationText = getFriendlyLocationText(item.filePath)
+                append("Location: $locationText\n\n")
+            }
+            
             append("URL: ${item.url}")
         }
         
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        AlertDialog.Builder(this)
             .setTitle("Download Details")
             .setMessage(message)
             .setPositiveButton("OK", null)
+            .setNeutralButton("Copy URL") { _, _ ->
+                copyUrlToClipboard(item.url)
+            }
             .show()
     }
     
@@ -358,24 +754,11 @@ class DownloadHistoryActivity : Activity() {
             append("URL: ${item.url}")
         }
         
-        androidx.appcompat.app.AlertDialog.Builder(this)
+        AlertDialog.Builder(this)
             .setTitle("Download Failed")
             .setMessage(message)
             .setPositiveButton("OK", null)
             .show()
-    }
-    
-    private fun getMimeType(filePath: String): String {
-        val extension = filePath.substringAfterLast('.', "").lowercase()
-        return when (extension) {
-            "mp4" -> "video/mp4"
-            "webm" -> "video/webm"
-            "mkv" -> "video/x-matroska"
-            "mp3" -> "audio/mpeg"
-            "aac" -> "audio/aac"
-            "m4a" -> "audio/mp4"
-            else -> "video/*"
-        }
     }
     
     private fun formatFileSize(bytes: Long): String {
