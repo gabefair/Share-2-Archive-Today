@@ -12,11 +12,9 @@ class UrlExtractor {
      * Extract URL from text using multiple strategies
      */
     fun extractUrl(text: String): String? {
-        Log.d("UrlExtractor", "Extracting URL from text: $text")
         // First, try simple protocol-based extraction for better reliability
         val simpleUrl = extractUrlSimple(text)
         if (simpleUrl != null) {
-            Log.d("UrlExtractor", "Extracted URL (simple): $simpleUrl")
             return simpleUrl
         }
 
@@ -58,10 +56,8 @@ class UrlExtractor {
         val archivePattern = Regex("https?://(?:archive\\.(?:today|ph|is|fo|li|md|vn))[^\\s]*")
         val archiveMatch = archivePattern.find(text)
         if (archiveMatch != null) {
-            Log.d("UrlExtractor", "Found archive URL: ${archiveMatch.value}")
             val url = cleanArchiveUrl(archiveMatch.value)
             if (isValidExtractedUrl(url)) {
-                Log.d("UrlExtractor", "Archive URL is valid: $url")
                 return url
             }
         }

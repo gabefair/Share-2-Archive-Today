@@ -12,8 +12,6 @@ class ArchiveUrlProcessor {
      * Uses regex to strip the archive.ph/o/{hash}/ prefix and extract the base URL
      */
     fun processArchiveUrl(url: String): String {
-        Log.d("ArchiveUrlProcessor", "Input URL: $url")
-        
         // Match archive.today/ph/is URLs with the /o/{hash}/ pattern
         // Example: https://archive.ph/o/vtomj/https://twitter.com/user/status/123?params...
         val archivePattern = Regex("^https?://(?:archive\\.(?:today|ph|is|fo|li|md|vn)/o/[a-zA-Z0-9]+/)(.+)$")
@@ -22,8 +20,7 @@ class ArchiveUrlProcessor {
         if (match != null) {
             // Extract everything after the archive prefix
             val embeddedUrl = match.groupValues[1]
-            Log.d("ArchiveUrlProcessor", "Extracted embedded URL: $embeddedUrl")
-            
+
             try {
                 // Now we need to extract just the base URL (before any ? or # characters)
                 // This removes tracking parameters that might contain nested URLs
@@ -32,20 +29,16 @@ class ArchiveUrlProcessor {
                 
                 if (baseMatch != null) {
                     val baseUrl = baseMatch.groupValues[1]
-                    Log.d("ArchiveUrlProcessor", "Extracted base URL: $baseUrl")
                     return baseUrl
                 }
                 
                 // Fallback: return the embedded URL as-is if we can't extract base
-                Log.d("ArchiveUrlProcessor", "Could not extract base URL, returning embedded URL")
                 return embeddedUrl
             } catch (e: Exception) {
-                Log.e("ArchiveUrlProcessor", "Error extracting base URL: $embeddedUrl", e)
                 return embeddedUrl
             }
         }
         
-        Log.d("ArchiveUrlProcessor", "Not an archive URL, returning as-is: $url")
         return url
     }
 }

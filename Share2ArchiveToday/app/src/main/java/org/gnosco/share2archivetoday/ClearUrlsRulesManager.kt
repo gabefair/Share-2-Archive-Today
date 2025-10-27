@@ -57,7 +57,6 @@ class ClearUrlsRulesManager(private val context: Context) {
             urlProcessor.referralMarketingEnabled = referralMarketingEnabled
             urlProcessor.localHostsSkipping = localHostsSkipping
 
-            Log.d(TAG, "ClearUrlsRulesManager initialized with ${providers.size} providers")
         } catch (e: Exception) {
             Log.e(TAG, "Error initializing ClearURLs rules manager", e)
         }

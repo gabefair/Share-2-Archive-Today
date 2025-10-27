@@ -59,7 +59,6 @@ open class MainActivity : Activity() {
             when (intent.type) {
                 "text/plain" -> {
                     intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText ->
-                        Log.d("MainActivity", "Shared text: $sharedText")
                         val url = extractUrl(sharedText)
 
                         if (url != null) {
@@ -97,11 +96,8 @@ open class MainActivity : Activity() {
     }
 
     open fun threeSteps(url: String) {
-        Log.d("MainActivity", "threeSteps - Input URL: $url")
         val processedUrl = processArchiveUrl(url)
-        Log.d("MainActivity", "threeSteps - After processArchiveUrl: $processedUrl")
         val cleanedUrl = handleURL(processedUrl)
-        Log.d("MainActivity", "threeSteps - After handleURL: $cleanedUrl")
         openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
     }
 
@@ -114,7 +110,6 @@ open class MainActivity : Activity() {
                 threeSteps(qrUrl)
                 Toast.makeText(this, "URL found in QR code", Toast.LENGTH_SHORT).show()
             } else {
-                Log.d("MainActivity", "No QR code found in image")
                 Toast.makeText(this, "No URL found in QR code image", Toast.LENGTH_SHORT).show()
                 finish()
             }
@@ -129,23 +124,19 @@ open class MainActivity : Activity() {
      * Main URL handling method that combines ClearURLs rules with platform-specific optimizations
      */
     internal fun handleURL(url: String): String {
-        Log.d("MainActivity", "handleURL - Input: $url")
+
         // First clean with ClearURLs rules
         var rulesCleanedUrl = url
         if (clearUrlsRulesManager?.areRulesLoaded() == true) {
             rulesCleanedUrl = clearUrlsRulesManager!!.clearUrl(url)
-            Log.d("MainActivity", "handleURL - After ClearURLs: $rulesCleanedUrl")
         }
         rulesCleanedUrl = cleanTrackingParamsFromUrl(rulesCleanedUrl)
-        Log.d("MainActivity", "handleURL - After cleanTrackingParams: $rulesCleanedUrl")
 
         // Remove anchors and text fragments
         rulesCleanedUrl = removeAnchorsAndTextFragments(rulesCleanedUrl)
-        Log.d("MainActivity", "handleURL - After removeAnchors: $rulesCleanedUrl")
 
         // Then apply additional platform-specific optimizations that might not are in the rules
         val result = applyPlatformSpecificOptimizations(rulesCleanedUrl)
-        Log.d("MainActivity", "handleURL - Final output: $result")
         return result
     }
 
@@ -154,15 +145,11 @@ open class MainActivity : Activity() {
     }
 
     internal fun extractUrl(text: String): String? {
-        Log.d("MainActivity", "extractUrl - Input text: $text")
         val extractedUrl = urlExtractor.extractUrl(text)
-        Log.d("MainActivity", "extractUrl - Extracted: $extractedUrl")
         return if (extractedUrl != null) {
             val cleaned = cleanUrl(extractedUrl)
-            Log.d("MainActivity", "extractUrl - After cleaning: $cleaned")
             cleaned
         } else {
-            Log.d("MainActivity", "extractUrl - No URL found")
             null
         }
     }
@@ -185,7 +172,6 @@ open class MainActivity : Activity() {
     }
 
     open fun openInBrowser(url: String) {
-        Log.d("MainActivity", "Opening URL: $url")
         val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
         startActivity(browserIntent)
         finish()
