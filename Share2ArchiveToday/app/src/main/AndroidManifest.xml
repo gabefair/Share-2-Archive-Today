@@ -79,7 +79,7 @@
 
         <!-- Test activity for debugging video download functionality (debug builds only) -->
         <activity
-            android:name=".VideoDownloadTestActivity"
+            android:name=".debug.VideoDownloadTestActivity"
             android:exported="false"
             android:label="Test Video Download"
             android:icon="@drawable/ic_video_download"
@@ -108,7 +108,7 @@
 
         <!-- Background service for video downloads -->
         <service
-            android:name=".BackgroundDownloadService"
+            android:name=".download.BackgroundDownloadService"
             android:exported="false"
             android:foregroundServiceType="mediaProcessing" />
 

@@ -14,6 +14,11 @@ import android.widget.TextView
 import android.view.View
 import android.widget.ProgressBar
 import kotlinx.coroutines.*
+import org.gnosco.share2archivetoday.download.DownloadResumptionManager
+import org.gnosco.share2archivetoday.download.DownloadDialogHelper
+import org.gnosco.share2archivetoday.download.BackgroundDownloadService
+import org.gnosco.share2archivetoday.utils.FileOpener
+import org.gnosco.share2archivetoday.utils.FileUtils
 
 /**
  * Activity to manage download resumption
@@ -26,6 +31,8 @@ class DownloadResumptionActivity : Activity() {
     }
     
     private lateinit var downloadResumptionManager: DownloadResumptionManager
+    private lateinit var dialogHelper: DownloadDialogHelper
+    private lateinit var fileOpener: FileOpener
     private lateinit var listView: ListView
     private lateinit var adapter: ArrayAdapter<String>
     private lateinit var emptyTextView: TextView
@@ -39,6 +46,8 @@ class DownloadResumptionActivity : Activity() {
         
         // Initialize components
         downloadResumptionManager = DownloadResumptionManager(applicationContext)
+        dialogHelper = DownloadDialogHelper(this)
+        fileOpener = FileOpener(this)
         
         setupUI()
         loadResumableDownloads()
@@ -125,9 +134,9 @@ class DownloadResumptionActivity : Activity() {
                 
                 val progressText = if (download.totalBytes > 0) {
                     val percentage = download.getProgressPercentage()
-                    val downloadedMB = download.downloadedBytes / (1024.0 * 1024.0)
-                    val totalMB = download.totalBytes / (1024.0 * 1024.0)
-                    "$percentage% (${String.format("%.1f", downloadedMB)}MB / ${String.format("%.1f", totalMB)}MB)"
+                    val downloaded = FileUtils.formatFileSize(download.downloadedBytes)
+                    val total = FileUtils.formatFileSize(download.totalBytes)
+                    "$percentage% ($downloaded / $total)"
                 } else {
                     "Starting..."
                 }
@@ -163,110 +172,57 @@ class DownloadResumptionActivity : Activity() {
     private fun handleDownloadItemClick(download: DownloadResumptionManager.DownloadState) {
         when (download.status) {
             DownloadResumptionManager.DownloadStatus.DOWNLOADING -> {
-                showDownloadOptionsDialog(download, "Download in Progress")
+                dialogHelper.showDownloadOptionsDialog(
+                    download = download,
+                    title = "Download in Progress",
+                    onPause = { pauseDownload(download.id) },
+                    onResume = { resumeDownload(download.id) },
+                    onCancel = { cancelDownload(download.id) }
+                )
             }
             DownloadResumptionManager.DownloadStatus.PAUSED -> {
-                showDownloadOptionsDialog(download, "Paused Download")
+                dialogHelper.showDownloadOptionsDialog(
+                    download = download,
+                    title = "Paused Download",
+                    onPause = { pauseDownload(download.id) },
+                    onResume = { resumeDownload(download.id) },
+                    onCancel = { cancelDownload(download.id) }
+                )
             }
             DownloadResumptionManager.DownloadStatus.PROCESSING -> {
-                showDownloadOptionsDialog(download, "Processing Download")
+                dialogHelper.showDownloadOptionsDialog(
+                    download = download,
+                    title = "Processing Download",
+                    onPause = { pauseDownload(download.id) },
+                    onResume = { resumeDownload(download.id) },
+                    onCancel = { cancelDownload(download.id) }
+                )
             }
             DownloadResumptionManager.DownloadStatus.COMPLETED -> {
-                showCompletedDownloadDialog(download)
+                dialogHelper.showCompletedDownloadDialog(
+                    download = download,
+                    onOpenFile = { 
+                        download.partialFilePath?.let { fileOpener.openFile(it) }
+                    },
+                    onRemove = {
+                        downloadResumptionManager.cancelDownload(download.id)
+                        loadResumableDownloads()
+                    }
+                )
             }
             DownloadResumptionManager.DownloadStatus.FAILED -> {
-                showFailedDownloadDialog(download)
+                dialogHelper.showFailedDownloadDialog(
+                    download = download,
+                    onRetry = { retryDownload(download) },
+                    onRemove = {
+                        downloadResumptionManager.cancelDownload(download.id)
+                        loadResumableDownloads()
+                    }
+                )
             }
         }
     }
-    
-    private fun showDownloadOptionsDialog(download: DownloadResumptionManager.DownloadState, title: String) {
-        val message = buildString {
-            append("Title: ${download.title}\n")
-            append("Quality: ${download.quality}\n")
-            append("Progress: ${download.getFormattedProgress()}\n")
-            append("Status: ${download.status.name.lowercase().replaceFirstChar { it.uppercase() }}")
-            if (download.error != null) {
-                append("\nError: ${download.error}")
-            }
-        }
-        
-        val builder = AlertDialog.Builder(this)
-            .setTitle(title)
-            .setMessage(message)
-        
-        when (download.status) {
-            DownloadResumptionManager.DownloadStatus.DOWNLOADING -> {
-                builder.setPositiveButton("Pause") { _, _ ->
-                    pauseDownload(download.id)
-                }
-                builder.setNegativeButton("Cancel") { _, _ ->
-                    cancelDownload(download.id)
-                }
-            }
-            DownloadResumptionManager.DownloadStatus.PAUSED -> {
-                builder.setPositiveButton("Resume") { _, _ ->
-                    resumeDownload(download.id)
-                }
-                builder.setNegativeButton("Cancel") { _, _ ->
-                    cancelDownload(download.id)
-                }
-            }
-            DownloadResumptionManager.DownloadStatus.PROCESSING -> {
-                builder.setPositiveButton("OK", null)
-            }
-            else -> {
-                builder.setPositiveButton("OK", null)
-            }
-        }
-        
-        builder.show()
-    }
-    
-    private fun showCompletedDownloadDialog(download: DownloadResumptionManager.DownloadState) {
-        val message = buildString {
-            append("Title: ${download.title}\n")
-            append("Quality: ${download.quality}\n")
-            append("File: ${download.partialFilePath ?: "Unknown"}\n")
-            append("Size: ${formatFileSize(download.downloadedBytes)}")
-        }
-        
-        AlertDialog.Builder(this)
-            .setTitle("Download Completed")
-            .setMessage(message)
-            .setPositiveButton("Open File") { _, _ ->
-                download.partialFilePath?.let { filePath ->
-                    openFile(filePath)
-                }
-            }
-            .setNegativeButton("Remove") { _, _ ->
-                downloadResumptionManager.cancelDownload(download.id)
-                loadResumableDownloads()
-            }
-            .setNeutralButton("OK", null)
-            .show()
-    }
-    
-    private fun showFailedDownloadDialog(download: DownloadResumptionManager.DownloadState) {
-        val message = buildString {
-            append("Title: ${download.title}\n")
-            append("Quality: ${download.quality}\n")
-            append("Error: ${download.error ?: "Unknown error"}")
-        }
-        
-        AlertDialog.Builder(this)
-            .setTitle("Download Failed")
-            .setMessage(message)
-            .setPositiveButton("Retry") { _, _ ->
-                retryDownload(download)
-            }
-            .setNegativeButton("Remove") { _, _ ->
-                downloadResumptionManager.cancelDownload(download.id)
-                loadResumableDownloads()
-            }
-            .setNeutralButton("OK", null)
-            .show()
-    }
+
     
     private fun pauseDownload(downloadId: String) {
         try {
@@ -332,14 +288,9 @@ class DownloadResumptionActivity : Activity() {
     }
     
     private fun showClearAllDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("Clear All Downloads")
-            .setMessage("Are you sure you want to cancel all active downloads? This cannot be undone.")
-            .setPositiveButton("Clear All") { _, _ ->
-                clearAllDownloads()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        dialogHelper.showClearAllDialog {
+            clearAllDownloads()
+        }
     }
     
     private fun clearAllDownloads() {
@@ -354,58 +305,6 @@ class DownloadResumptionActivity : Activity() {
         } catch (e: Exception) {
             Log.e(TAG, "Error clearing downloads", e)
             Toast.makeText(this, "Error clearing downloads", Toast.LENGTH_SHORT).show()
-        }
-    }
-    
-    private fun openFile(filePath: String) {
-        try {
-            val file = java.io.File(filePath)
-            if (file.exists()) {
-                val uri = androidx.core.content.FileProvider.getUriForFile(
-                    this, packageName + ".fileprovider", file
-                )
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(uri, getMimeType(filePath))
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-                
-                if (intent.resolveActivity(packageManager) != null) {
-                    startActivity(intent)
-                } else {
-                    Toast.makeText(this, "No app found to open this file", Toast.LENGTH_SHORT).show()
-                }
-            } else {
-                Toast.makeText(this, "File not found", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error opening file", e)
-            Toast.makeText(this, "Error opening file", Toast.LENGTH_SHORT).show()
-        }
-    }
-    
-    private fun getMimeType(filePath: String): String {
-        val extension = filePath.substringAfterLast('.', "").lowercase()
-        return when (extension) {
-            "mp4" -> "video/mp4"
-            "webm" -> "video/webm"
-            "mkv" -> "video/x-matroska"
-            "mp3" -> "audio/mpeg"
-            "aac" -> "audio/aac"
-            "m4a" -> "audio/mp4"
-            else -> "video/*"
-        }
-    }
-    
-    private fun formatFileSize(bytes: Long): String {
-        val kb = bytes / 1024.0
-        val mb = kb / 1024.0
-        val gb = mb / 1024.0
-        
-        return when {
-            gb >= 1 -> "%.1f GB".format(gb)
-            mb >= 1 -> "%.1f MB".format(mb)
-            kb >= 1 -> "%.1f KB".format(kb)
-            else -> "$bytes B"
         }
     }
 }

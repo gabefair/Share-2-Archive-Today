@@ -94,9 +94,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_21
     }
 
-    kotlinOptions {
-        jvmTarget = "21"
-    }
 
     packaging {
         resources {
@@ -126,19 +123,19 @@ chaquopy {
 
 dependencies {
     // AndroidX Core (required for FileProvider and other core functionality)
-    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.core:core-ktx:1.17.0")
     
     implementation("com.google.zxing:core:3.5.3")
     
     // Coroutines for async operations
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     // ML Kit for barcode scanning (optional dependency)
     compileOnly("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1")
-    compileOnly("com.google.android.gms:play-services-tasks:18.2.0")
+    compileOnly("com.google.android.gms:play-services-tasks:18.4.0")
     
     // WebSocket support (OkHttp includes WebSocket support)
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:5.2.1")
     
     // Google's official Brotli library
     implementation("org.brotli:dec:0.1.2")

@@ -51,8 +51,8 @@
 # Keep ALL classes that interact with Python (VideoDownloader and PythonVideoDownloader)
 -keep class org.gnosco.share2archivetoday.VideoDownloader { *; }
 -keep class org.gnosco.share2archivetoday.VideoDownloader$* { *; }
--keep class org.gnosco.share2archivetoday.PythonVideoDownloader { *; }
--keep class org.gnosco.share2archivetoday.PythonVideoDownloader$* { *; }
+-keep class org.gnosco.share2archivetoday.download.PythonVideoDownloader { *; }
+-keep class org.gnosco.share2archivetoday.download.PythonVideoDownloader$* { *; }
 
 # Keep MainActivity and its lifecycle methods (CRITICAL for app functionality)
 -keep class org.gnosco.share2archivetoday.MainActivity { *; }
@@ -78,9 +78,22 @@
 # Keep video download activity and service
 -keep class org.gnosco.share2archivetoday.VideoDownloadActivity { *; }
 -keep class org.gnosco.share2archivetoday.BackgroundDownloadService { *; }
+-keep class org.gnosco.share2archivetoday.download.VideoDownloadActivity { *; }
+-keep class org.gnosco.share2archivetoday.download.BackgroundDownloadService { *; }
+-keep class org.gnosco.share2archivetoday.download.BackgroundDownloadService$* { *; }
+
+# Keep download history and resumption activities
+-keep class org.gnosco.share2archivetoday.DownloadHistoryActivity { *; }
+-keep class org.gnosco.share2archivetoday.DownloadResumptionActivity { *; }
 
 # Remove debug activities from release builds (specific methods only)
 -assumenosideeffects class org.gnosco.share2archivetoday.FeatureFlagDebugActivity {
+    public void onCreate(android.os.Bundle);
+    public void onResume();
+    public void onPause();
+    public void onDestroy();
+}
+-assumenosideeffects class org.gnosco.share2archivetoday.debug.FeatureFlagDebugActivity {
     public void onCreate(android.os.Bundle);
     public void onResume();
     public void onPause();
@@ -92,7 +105,17 @@
     public void onPause();
     public void onDestroy();
 }
+-assumenosideeffects class org.gnosco.share2archivetoday.debug.VideoDownloadTestActivity {
+    public void onCreate(android.os.Bundle);
+    public void onResume();
+    public void onPause();
+    public void onDestroy();
+}
 -assumenosideeffects class org.gnosco.share2archivetoday.DebugFeatureTester {
+    public static void logTestResults(android.content.Context);
+    public static void testFeatureFlags(android.content.Context);
+}
+-assumenosideeffects class org.gnosco.share2archivetoday.debug.DebugFeatureTester {
     public static void logTestResults(android.content.Context);
     public static void testFeatureFlags(android.content.Context);
 }
@@ -110,19 +133,38 @@
 -keep class org.gnosco.share2archivetoday.PythonVideoDownloader$ProgressInfo$* { *; }
 -keep class org.gnosco.share2archivetoday.PythonVideoDownloader$DownloadResult { *; }
 -keep class org.gnosco.share2archivetoday.PythonVideoDownloader$VideoInfo { *; }
+-keep class org.gnosco.share2archivetoday.download.PythonVideoDownloader$ProgressInfo { *; }
+-keep class org.gnosco.share2archivetoday.download.PythonVideoDownloader$ProgressInfo$* { *; }
+-keep class org.gnosco.share2archivetoday.download.PythonVideoDownloader$DownloadResult { *; }
+-keep class org.gnosco.share2archivetoday.download.PythonVideoDownloader$VideoInfo { *; }
 
 # Keep download managers and utilities
 -keep class org.gnosco.share2archivetoday.DownloadHistoryManager { *; }
 -keep class org.gnosco.share2archivetoday.DownloadResumptionManager { *; }
 -keep class org.gnosco.share2archivetoday.NetworkMonitor { *; }
 -keep class org.gnosco.share2archivetoday.PermissionManager { *; }
+-keep class org.gnosco.share2archivetoday.download.DownloadHistoryManager { *; }
+-keep class org.gnosco.share2archivetoday.download.DownloadHistoryManager$* { *; }
+-keep class org.gnosco.share2archivetoday.download.DownloadResumptionManager { *; }
+-keep class org.gnosco.share2archivetoday.download.DownloadResumptionManager$* { *; }
+-keep class org.gnosco.share2archivetoday.download.VideoDownloadCoordinator { *; }
+-keep class org.gnosco.share2archivetoday.download.VideoDownloadDialogManager { *; }
+-keep class org.gnosco.share2archivetoday.download.DownloadOrchestrator { *; }
+-keep class org.gnosco.share2archivetoday.download.DownloadPrerequisitesChecker { *; }
+-keep class org.gnosco.share2archivetoday.download.DownloadResultHandler { *; }
+-keep class org.gnosco.share2archivetoday.download.ProgressHandler { *; }
+-keep class org.gnosco.share2archivetoday.network.NetworkMonitor { *; }
+-keep class org.gnosco.share2archivetoday.utils.PermissionManager { *; }
 
 # Keep audio processing classes
 -keep class org.gnosco.share2archivetoday.AudioRemuxer { *; }
 -keep class org.gnosco.share2archivetoday.AudioRemuxer$* { *; }
+-keep class org.gnosco.share2archivetoday.media.AudioRemuxer { *; }
+-keep class org.gnosco.share2archivetoday.media.AudioRemuxer$* { *; }
 
 # Keep QR code scanner
 -keep class org.gnosco.share2archivetoday.QRCodeScanner { *; }
+-keep class org.gnosco.share2archivetoday.utils.QRCodeScanner { *; }
 
 # Keep URL processing utilities used by MainActivity
 -keep class org.gnosco.share2archivetoday.WebURLMatcher { *; }
@@ -130,6 +172,10 @@
 -keep class org.gnosco.share2archivetoday.DebugLogger { *; }
 -keep class org.gnosco.share2archivetoday.DebugFeatureTester { *; }
 -keep class org.gnosco.share2archivetoday.QRCodeScanner { *; }
+-keep class org.gnosco.share2archivetoday.network.WebURLMatcher { *; }
+-keep class org.gnosco.share2archivetoday.network.ClearUrlsRulesManager { *; }
+-keep class org.gnosco.share2archivetoday.debug.DebugLogger { *; }
+-keep class org.gnosco.share2archivetoday.debug.DebugFeatureTester { *; }
 
 # Keep memory manager
 -keep class org.gnosco.share2archivetoday.MemoryManager { *; }
@@ -138,11 +184,21 @@
 # Keep FFmpeg wrapper and media processing classes
 -keep class org.gnosco.share2archivetoday.FFmpegWrapper { *; }
 -keep class org.gnosco.share2archivetoday.FFmpegWrapper$* { *; }
+-keep class org.gnosco.share2archivetoday.media.FFmpegWrapper { *; }
+-keep class org.gnosco.share2archivetoday.media.FFmpegWrapper$* { *; }
 
 # Keep advanced feature classes
 -keep class org.gnosco.share2archivetoday.BrotliDecoder { *; }
 -keep class org.gnosco.share2archivetoday.WebSocketClient { *; }
 -keep class org.gnosco.share2archivetoday.AESHLSDecryptor { *; }
+-keep class org.gnosco.share2archivetoday.network.BrotliDecoder { *; }
+-keep class org.gnosco.share2archivetoday.network.WebSocketClient { *; }
+-keep class org.gnosco.share2archivetoday.network.WebSocketClient$* { *; }
+-keep class org.gnosco.share2archivetoday.crypto.AESHLSDecryptor { *; }
+-keep class org.gnosco.share2archivetoday.crypto.AESHLSDecryptor$* { *; }
+-keep class org.gnosco.share2archivetoday.crypto.AESCipherManager { *; }
+-keep class org.gnosco.share2archivetoday.crypto.HLSKeyManager { *; }
+-keep class org.gnosco.share2archivetoday.crypto.HLSManifestParser { *; }
 
 # CRITICAL: Keep Python callback lambda interfaces
 # Without this, Python callbacks to Kotlin will fail
@@ -202,6 +258,35 @@
 -dontwarn java.lang.Class
 -dontwarn java.lang.reflect.**
 -keepattributes RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations
+
+# Keep all utility classes (refactored into subpackages)
+-keep class org.gnosco.share2archivetoday.utils.** { *; }
+-keep class org.gnosco.share2archivetoday.media.** { *; }
+-keep class org.gnosco.share2archivetoday.network.** { *; }
+-keep class org.gnosco.share2archivetoday.crypto.** { *; }
+-keep class org.gnosco.share2archivetoday.download.** { *; }
+-keep class org.gnosco.share2archivetoday.debug.** { *; }
+
+# Keep specific utility classes
+-keep class org.gnosco.share2archivetoday.utils.FileProcessor { *; }
+-keep class org.gnosco.share2archivetoday.utils.FileUtils { *; }
+-keep class org.gnosco.share2archivetoday.utils.StorageHelper { *; }
+-keep class org.gnosco.share2archivetoday.utils.NotificationHelper { *; }
+-keep class org.gnosco.share2archivetoday.utils.ErrorMessageParser { *; }
+-keep class org.gnosco.share2archivetoday.utils.UrlExtractor { *; }
+
+# Keep media processing classes
+-keep class org.gnosco.share2archivetoday.media.MediaStoreHelper { *; }
+-keep class org.gnosco.share2archivetoday.media.VideoFormatSelector { *; }
+-keep class org.gnosco.share2archivetoday.media.VideoFormatSelector$* { *; }
+
+# Keep download history UI classes
+-keep class org.gnosco.share2archivetoday.download.DownloadHistoryUIManager { *; }
+-keep class org.gnosco.share2archivetoday.download.DownloadHistoryFileManager { *; }
+-keep class org.gnosco.share2archivetoday.download.DownloadHistoryDialogManager { *; }
+-keep class org.gnosco.share2archivetoday.download.DownloadHistoryDataManager { *; }
+-keep class org.gnosco.share2archivetoday.download.DownloadsFolderOpener { *; }
+-keep class org.gnosco.share2archivetoday.download.DownloadHistoryItem { *; }
 
 # Keep all classes in the main package (safer approach for Python integration)
 -keep class org.gnosco.share2archivetoday.** { *; }
