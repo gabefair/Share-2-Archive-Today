@@ -143,6 +143,7 @@ class UrlOptimizer {
         val newUriBuilder = uri.buildUpon().legacyClearQuery()
         var removeYouTubeParams = false
         var removeSubstackParams = false
+        var removeFacebookParams = false
 
         // Additional handling for YouTube URLs
         if (uri.host?.contains("youtube.com") == true || uri.host?.contains("youtu.be") == true) {
@@ -165,9 +166,18 @@ class UrlOptimizer {
             removeSubstackParams = true
         }
 
+        else if(uri.host?.endsWith(".facebook.com") == true) {
+            removeFacebookParams = true
+        }
+
         uri.legacyGetQueryParameterNames().forEach { param ->
-            // Add only non-tracking parameters to the new URL
-            if (!isTrackingParam(param) && !(removeYouTubeParams && isUnwantedYoutubeParam(param)) && !(removeSubstackParams && isUnwantedSubstackParam(param))) {
+            // Add only non-tracking parameters to the new URL aka anything that is false on this return
+            if (!isTrackingParam(param) &&
+                !(removeYouTubeParams && isUnwantedYoutubeParam(param)) &&
+                !(removeSubstackParams && isUnwantedSubstackParam(param)) &&
+                !(removeFacebookParams && isUnwantedFacebookParam(param))
+                )
+            {
                 newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
             }
         }
@@ -205,9 +215,16 @@ class UrlOptimizer {
         return param in trackingParams
     }
 
-    /**
-     * Check if a parameter is an unwanted YouTube parameter
-     */
+    fun isUnwantedFacebookParam(param: String): Boolean {
+        val facebookParams = setOf(
+            "sh",
+            "mibextid",
+            "s",
+            "fs"
+        )
+        return param in facebookParams
+    }
+
     fun isUnwantedYoutubeParam(param: String): Boolean {
         val youtubeParams = setOf(
             "feature",
@@ -218,9 +235,6 @@ class UrlOptimizer {
         return param in youtubeParams
     }
 
-    /**
-     * Check if a parameter is an unwanted Substack parameter
-     */
     fun isUnwantedSubstackParam(param: String): Boolean {
         val substackParams = setOf(
             "r",
