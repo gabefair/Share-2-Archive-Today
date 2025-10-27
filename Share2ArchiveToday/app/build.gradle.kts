@@ -11,8 +11,8 @@ android {
         applicationId = "org.gnosco.share2archivetoday"
         minSdk = 21
         targetSdk = 36
-        versionCode = 57
-        versionName = "5.7"
+        versionCode = 58
+        versionName = "5.8"
     }
 
     buildFeatures { // ask what this is
@@ -35,12 +35,12 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "21"
     }
 
     packaging {
@@ -53,6 +53,13 @@ android {
         includeInApk = false
         includeInBundle = false
     }
+
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 dependencies {
@@ -61,4 +68,9 @@ dependencies {
     // ML Kit for barcode scanning (optional dependency)
     compileOnly("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1")
     compileOnly("com.google.android.gms:play-services-tasks:18.2.0")
+
+    // Testing dependencies
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.8.1")
+    testImplementation("org.robolectric:robolectric:4.13")
 }
