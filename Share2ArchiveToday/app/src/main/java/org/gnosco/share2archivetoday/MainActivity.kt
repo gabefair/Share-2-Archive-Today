@@ -1,7 +1,6 @@
 package org.gnosco.share2archivetoday
 // This file is: MainActivity.kt
 
-import WebURLMatcher
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -11,16 +10,20 @@ import android.util.Log
 import android.widget.Toast
 
 open class MainActivity : Activity() {
-    private lateinit var clearUrlsRulesManager: ClearUrlsRulesManager
-    private lateinit var qrCodeScanner: QRCodeScanner
+    private var clearUrlsRulesManager: ClearUrlsRulesManager? = null
+    private var qrCodeScanner: QRCodeScanner? = null
+    
+    // Lazy initialization for components that don't need context
+    private val urlExtractor: UrlExtractor by lazy { UrlExtractor() }
+    private val urlCleaner: UrlCleaner by lazy { UrlCleaner() }
+    private val urlOptimizer: UrlOptimizer by lazy { UrlOptimizer() }
+    private val archiveUrlProcessor: ArchiveUrlProcessor by lazy { ArchiveUrlProcessor() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize ClearURLs rules manager
+        // Initialize components that need context
         clearUrlsRulesManager = ClearUrlsRulesManager(applicationContext)
-
-        // Initialize QR code scanner
         qrCodeScanner = QRCodeScanner(applicationContext)
 
         handleShareIntent(intent)
@@ -94,14 +97,17 @@ open class MainActivity : Activity() {
     }
 
     open fun threeSteps(url: String) {
+        Log.d("MainActivity", "threeSteps - Input URL: $url")
         val processedUrl = processArchiveUrl(url)
+        Log.d("MainActivity", "threeSteps - After processArchiveUrl: $processedUrl")
         val cleanedUrl = handleURL(processedUrl)
+        Log.d("MainActivity", "threeSteps - After handleURL: $cleanedUrl")
         openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
     }
 
     internal fun handleImageShare(imageUri: Uri) {
         try {
-            val qrCodeText = qrCodeScanner.extractQRCodeFromImage(imageUri)
+            val qrCodeText = qrCodeScanner?.extractQRCodeFromImage(imageUri) ?: return
             val qrUrl = extractUrl(qrCodeText)
 
             if (qrUrl != null) {
@@ -123,485 +129,59 @@ open class MainActivity : Activity() {
      * Main URL handling method that combines ClearURLs rules with platform-specific optimizations
      */
     internal fun handleURL(url: String): String {
+        Log.d("MainActivity", "handleURL - Input: $url")
         // First clean with ClearURLs rules
         var rulesCleanedUrl = url
-        if (clearUrlsRulesManager.areRulesLoaded()) {
-            rulesCleanedUrl = clearUrlsRulesManager.clearUrl(url)
+        if (clearUrlsRulesManager?.areRulesLoaded() == true) {
+            rulesCleanedUrl = clearUrlsRulesManager!!.clearUrl(url)
+            Log.d("MainActivity", "handleURL - After ClearURLs: $rulesCleanedUrl")
         }
         rulesCleanedUrl = cleanTrackingParamsFromUrl(rulesCleanedUrl)
+        Log.d("MainActivity", "handleURL - After cleanTrackingParams: $rulesCleanedUrl")
 
         // Remove anchors and text fragments
         rulesCleanedUrl = removeAnchorsAndTextFragments(rulesCleanedUrl)
+        Log.d("MainActivity", "handleURL - After removeAnchors: $rulesCleanedUrl")
 
-        // Then apply additional platform-specific optimizations that might not be in the rules
-        return applyPlatformSpecificOptimizations(rulesCleanedUrl)
-    }
-
-    /**
-     * Apply platform-specific optimizations that may not be covered by ClearURLs rules
-     */
-    internal fun applyPlatformSpecificOptimizations(url: String): String {
-        val uri = Uri.parse(url)
-        val newUriBuilder = uri.buildUpon()
-        var changed = false
-
-        // YouTube-specific handling
-        if (uri.host?.contains("youtube.com") == true || uri.host?.contains("youtu.be") == true) {
-            // Convert shorts to regular videos
-            if (uri.path?.contains("/shorts/") == true) {
-                newUriBuilder.path(uri.path?.replace("/shorts/", "/v/"))
-                changed = true
-            }
-
-            // Remove music. prefix
-            val modifiedHost = uri.host?.removePrefix("music.")
-            if (modifiedHost != uri.host) {
-                newUriBuilder.authority(modifiedHost)
-                changed = true
-            }
-
-            // Handle nested query parameters in YouTube search links
-            val nestedQueryParams = uri.getQueryParameter("q")
-            if (nestedQueryParams != null && nestedQueryParams.contains("?")) {
-                try {
-                    val nestedUri = Uri.parse(nestedQueryParams)
-                    val newNestedUriBuilder = nestedUri.buildUpon().legacyClearQuery()
-
-                    nestedUri.legacyGetQueryParameterNames().forEach { nestedParam ->
-                        if (!isTrackingParam(nestedParam)) {
-                            newNestedUriBuilder.appendQueryParameter(nestedParam, nestedUri.getQueryParameter(nestedParam))
-                        }
-                    }
-
-                    newUriBuilder.appendQueryParameter("q", newNestedUriBuilder.build().toString())
-                    changed = true
-                } catch (e: Exception) {
-                    Log.e("MainActivity", "Error handling nested query params", e)
-                }
-            }
-        }
-
-        // Substack-specific handling
-        else if(uri.host?.endsWith(".substack.com") == true) {
-            // Add "no_cover=true" parameter for better archive quality
-            if (uri.getQueryParameter("no_cover") == null) {
-                newUriBuilder.appendQueryParameter("no_cover", "true")
-                changed = true
-            }
-        }
-
-        // Amazon-specific handling for path-based tracking
-        else if (uri.host?.contains("amazon.com") == true || uri.host?.contains("amazon.") == true) {
-            val path = uri.path ?: ""
-            // Remove /ref=... tracking from Amazon URLs
-            val refPattern = Regex("/ref=[^/]*")
-            val cleanedPath = path.replace(refPattern, "")
-            if (cleanedPath != path) {
-                newUriBuilder.path(cleanedPath)
-                changed = true
-            }
-        }
-
-        //mailchimp-specific handling
-        else if (uri.host?.contains("list-manage.com") == true) {
-            if (uri.getQueryParameter("e") != null) {
-                // Rebuild query parameters without the "e" parameter
-                newUriBuilder.legacyClearQuery()
-                uri.legacyGetQueryParameterNames().forEach { param ->
-                    if (param != "e") {
-                        newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
-                    }
-                }
-                changed = true
-            }
-        }
-
-        // Google search result URL handling
-        else if (uri.host?.equals("www.google.com", ignoreCase = true) == true && uri.path?.equals("/url") == true) {
-            val targetUrl = uri.getQueryParameter("url")
-            if (targetUrl != null) {
-                try {
-                    // Parse the nested target URL
-                    val targetUri = Uri.parse(targetUrl)
-
-                    val cleanedTargetUrl = cleanTrackingParamsFromUrl(targetUri.toString())
-                    val cleanedTargetUri = Uri.parse(cleanedTargetUrl)
-                    
-                    // Create a new URI builder with the target URL
-                    val newTargetUriBuilder = cleanedTargetUri.buildUpon().legacyClearQuery()
-                    
-                    // Add an empty parameter first to match expected format (?&ved=...)
-                    newTargetUriBuilder.appendQueryParameter("", "")
-                    
-                    // Add Google tracking parameters (ved, usg) to the cleaned target URL
-                    uri.getQueryParameter("ved")?.let { newTargetUriBuilder.appendQueryParameter("ved", it) }
-                    uri.getQueryParameter("usg")?.let { newTargetUriBuilder.appendQueryParameter("usg", it) }
-                    
-                    // Build the final URL
-                    val finalUrl = newTargetUriBuilder.build().toString()
-                    
-                    // Return the target URL with Google tracking parameters
-                    return finalUrl
-                } catch (e: Exception) {
-                    Log.e("MainActivity", "Error processing Google URL: $url", e)
-                    // If parsing fails, return the original URL
-                    return url
-                }
-            }
-        }
-
-        else if (uri.host?.equals("t.me", ignoreCase = true) == true) {
-            val path = uri.path?.trimStart('/') ?: ""
-            if (!path.startsWith("s/") && path.isNotEmpty()) {
-                newUriBuilder.path("/s/$path") //This is to archive some parts of the group chat if the web preview feature is enabled, otherwise the about page will be shown by telegram.
-                changed = true
-            }
-        }
-
-        return if (changed) newUriBuilder.build().toString() else url
+        // Then apply additional platform-specific optimizations that might not are in the rules
+        val result = applyPlatformSpecificOptimizations(rulesCleanedUrl)
+        Log.d("MainActivity", "handleURL - Final output: $result")
+        return result
     }
 
     internal fun processArchiveUrl(url: String): String {
-        val uri = Uri.parse(url)
-        val pathSegments = uri.pathSegments
-
-        if (pathSegments.size >= 3 && pathSegments[0] == "o") {
-            // Rebuild and decode the embedded URL
-            val embeddedUrl = pathSegments.subList(2, pathSegments.size).joinToString("/")
-            return try {
-                val decoded = Uri.decode(embeddedUrl)
-                
-                // Parse the decoded URL to extract the actual target URL
-                val decodedUri = Uri.parse(decoded)
-                
-                // Extract the target URL preserving query parameters but removing fragments
-                // The main URL is the scheme + authority + path + query, without fragment
-                val targetUrlBuilder = decodedUri.buildUpon()
-                    .fragment(null)
-                
-                return targetUrlBuilder.build().toString()
-            } catch (e: Exception) {
-                // Fallback: try to extract URL from the decoded string more carefully
-                val decoded = Uri.decode(embeddedUrl)
-                // Look for the first complete URL in the decoded string
-                val urlPattern = Regex("https?://[^\\s&]+")
-                val match = urlPattern.find(decoded)
-                return match?.value ?: decoded
-            }
-        }
-
-        return url
-    }
-
-    // Keep for fallback purposes
-    private fun isTrackingParam(param: String): Boolean {
-        val trackingParams = setOf(
-            "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
-            "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "tclid",
-            "aff_id", "affiliate_id", "ref", "referer", "campaign_id", "ad_id",
-            "adgroup_id", "adset_id", "creativetype", "placement", "network",
-            "mc_eid", "mc_cid", "si", "icid", "_ga", "_gid", "scid", "click_id",
-            "trk", "track", "trk_sid", "sid", "mibextid", "fb_action_ids",
-            "fb_action_types", "fb_medium", "fb_campaign", "fb_source",
-            "m_entstream_source", "twclid", "igshid", "s_kwcid", "sxsrf", "sca_esv",
-            "source", "tbo", "sa", "ved", "usg", "pi", "fbs", "fbc", "fb_ref", "client", "ei",
-            "gs_lp", "sclient", "oq", "uact", "bih", "biw", // sxsrf might be needed on some sites, but google uses it for tracking
-            "ref_source", "ref_medium", "ref_campaign", "ref_content", "ref_term", "ref_keyword",
-            "ref_type", "ref_campaign_id", "ref_ad_id", "ref_adgroup_id", "entstream_source",
-            "ref_creativetype", "ref_placement", "ref_network", "ref_sid", "ref_mc_eid",
-            "ref_mc_cid", "ref_scid", "ref_click_id", "ref_trk", "ref_track", "ref_trk_sid",
-            "ref_sid", "ref", "ref_url", "ref_campaign_id", "ref_adgroup_id", "ref_adset_id",
-            "wprov", //wikipedia's mostly harmless tracker
-            "rcm", //Linkedin's new tracker
-            "xmt", //threads new tracker
-            "gc_id","h_ga_id","h_ad_id","h_keyword_id","gad_source", "impressionid", //reddit ad tracker
-            "ga_source", "ga_medium", "ga_campaign", "ga_content", "ga_term", "int_source",
-            "chainedPosts", // Reddits new tracker
-            "mibextid" //facebooks new tracker
-        )
-        return param in trackingParams
-    }
-
-    internal fun isUnwantedYoutubeParam(param: String): Boolean {
-        val youtubeParams = setOf(
-            "feature",
-            "ab_channel",
-            "t",
-            "si"
-        )
-        return param in youtubeParams
-    }
-    internal fun isUnwantedSubstackParam(param: String): Boolean {
-        val substackParams = setOf(
-            "r",
-            "showWelcomeOnShare"
-        )
-        return param in substackParams
-    }
-
-    // Keep for fallback and special handling
-    internal fun cleanTrackingParamsFromUrl(url: String): String {
-        val uri = Uri.parse(url)
-        if (uri.legacyGetQueryParameterNames().isEmpty()) {
-            return url
-        }
-
-        val newUriBuilder = uri.buildUpon().legacyClearQuery()
-        var removeYouTubeParams = false
-        var removeSubstackParams = false
-
-        // Additional handling for YouTube URLs
-        if (uri.host?.contains("youtube.com") == true || uri.host?.contains("youtu.be") == true) {
-            removeYouTubeParams = true
-            val nestedQueryParams = uri.getQueryParameter("q")
-            if (nestedQueryParams != null) {
-                val nestedUri = Uri.parse(nestedQueryParams)
-                val newNestedUriBuilder = nestedUri.buildUpon().legacyClearQuery()
-
-                nestedUri.legacyGetQueryParameterNames().forEach { nestedParam ->
-                    if (!isTrackingParam(nestedParam)) {
-                        newNestedUriBuilder.appendQueryParameter(nestedParam, nestedUri.getQueryParameter(nestedParam))
-                    }
-                }
-                newUriBuilder.appendQueryParameter("q", newNestedUriBuilder.build().toString())
-            }
-        }
-
-        else if(uri.host?.endsWith(".substack.com") == true) {
-            removeSubstackParams = true
-        }
-
-        uri.legacyGetQueryParameterNames().forEach { param ->
-            // Add only non-tracking parameters to the new URL
-            if (!isTrackingParam(param) && !(removeYouTubeParams && isUnwantedYoutubeParam(param)) && !(removeSubstackParams && isUnwantedSubstackParam(param))) {
-                newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
-            }
-        }
-        return newUriBuilder.build().toString()
-    }
-
-    /**
-     * Ensures a URL is properly formatted, particularly fixing missing ? before query parameters
-     */
-    private fun ensureProperUrlFormat(url: String): String {
-        try {
-            val uri = Uri.parse(url)
-            val query = uri.query
-            // If the URI has query parameters but the original string doesn't have a ?, fix it
-            if (query != null && query.isNotEmpty() && !url.contains("?")) {
-                // Find where the query parameters start in the original URL
-                val queryStart = url.indexOf("&")
-                if (queryStart != -1) {
-                    // Replace the first & with ?&
-                    return url.substring(0, queryStart) + "?" + url.substring(queryStart + 1)
-                }
-            }
-            return url
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Error formatting URL: $url", e)
-            return url
-        }
+        return archiveUrlProcessor.processArchiveUrl(url)
     }
 
     internal fun extractUrl(text: String): String? {
-        // First, try simple protocol-based extraction for better reliability
-        val simpleUrl = extractUrlSimple(text)
-        if (simpleUrl != null) {
-            return cleanUrl(simpleUrl)
-        }
-
-        // Fallback to the existing WebURLMatcher approach
-        val protocolMatcher = WebURLMatcher.matcher(text)
-        if (protocolMatcher.find()) {
-            val foundUrl = protocolMatcher.group(0)
-            // Validate that the found URL looks reasonable
-            if (foundUrl != null && isValidExtractedUrl(foundUrl)) {
-                return cleanUrl(foundUrl)
-            }
-        }
-
-        // If no URL with protocol is found, look for potential bare domains
-        val domainPattern = Regex(
-            "(?:^|\\s+)(" +  // Start of string or whitespace
-                    "(?:[a-zA-Z0-9][a-zA-Z0-9-]*\\.)+?" + // Subdomains and domain name
-                    "[a-zA-Z]{2,}" +  // TLD
-                    "(?:/[^\\s]*)?" + // Optional path
-                    ")(?:\\s+|\$)"    // End of string or whitespace
-        )
-
-        val domainMatch = domainPattern.find(text)
-        if (domainMatch != null) {
-            val bareUrl = domainMatch.groupValues[1].trim()
-            // Add https:// prefix and clean the URL
-            return cleanUrl("https://$bareUrl")
-        }
-
-        return null
-    }
-
-    /**
-     * Simple URL extraction that looks for http:// or https:// and extracts to the next boundary
-     */
-    private fun extractUrlSimple(text: String): String? {
-        val httpIndex = text.lastIndexOf("http://")
-        val httpsIndex = text.lastIndexOf("https://")
-
-        val startIndex = maxOf(httpIndex, httpsIndex)
-        if (startIndex == -1) return null
-
-        // Find the end of the URL - look for whitespace, newline, or certain punctuation
-        var endIndex = text.length
-        for (i in startIndex until text.length) {
-            val char = text[i]
-            if (char.isWhitespace() || char == '\n' || char == '\r') {
-                endIndex = i
-                break
-            }
-            // Stop at certain punctuation that's likely not part of the URL
-            if (i > startIndex + 10) { // Only check after we have a reasonable URL length
-                if (char in setOf(',', ';', ')', '"', '\'') &&
-                    (i == text.length - 1 || text[i + 1].isWhitespace())) {
-                    endIndex = i
-                    break
-                }
-            }
-        }
-
-        val extractedUrl = text.substring(startIndex, endIndex)
-        return if (isValidExtractedUrl(extractedUrl)) extractedUrl else null
-    }
-
-    /**
-     * Validate that an extracted URL looks reasonable
-     */
-    private fun isValidExtractedUrl(url: String): Boolean {
-        if (url.length < 10) return false // Too short to be a real URL
-        if (!url.startsWith("http://") && !url.startsWith("https://")) return false
-
-        try {
-            val uri = Uri.parse(url)
-            val host = uri.host
-
-            // Must have a valid host
-            if (host.isNullOrEmpty()) return false
-
-            // Host should contain at least one dot (domain.tld)
-            if (!host.contains(".")) return false
-
-            // Host shouldn't have weird characters that suggest parsing error
-            if (host.contains("'") || host.contains('"') || host.contains("â€")) return false
-            return true
-        } catch (e: Exception) {
-            return false
+        Log.d("MainActivity", "extractUrl - Input text: $text")
+        val extractedUrl = urlExtractor.extractUrl(text)
+        Log.d("MainActivity", "extractUrl - Extracted: $extractedUrl")
+        return if (extractedUrl != null) {
+            val cleaned = cleanUrl(extractedUrl)
+            Log.d("MainActivity", "extractUrl - After cleaning: $cleaned")
+            cleaned
+        } else {
+            Log.d("MainActivity", "extractUrl - No URL found")
+            null
         }
     }
 
-    //Remove anchors and text fragments
-    internal fun removeAnchorsAndTextFragments(url: String): String {
-        try {
-            val uri = Uri.parse(url)
-            val fragment = uri.fragment
-            
-            // If no fragment, return URL as-is
-            if (fragment.isNullOrEmpty()) {
-                return url
-            }
-            
-            // Check if this is a Chrome text fragment (#:~:text=...)
-            if (fragment.startsWith(":~:text=") || fragment.contains(":~:text=")) {
-                // Remove the entire fragment for text fragments
-                val builder = uri.buildUpon()
-                builder.fragment(null)
-                return builder.build().toString()
-            }
-            
-            val builder = uri.buildUpon()
-            builder.fragment(null)
-            return builder.build().toString()
-            
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Error removing anchors and text fragments from URL: $url", e)
-            // If parsing fails, try simple string manipulation as fallback
-            return removeAnchorsAndTextFragmentsSimple(url)
-        }
+    // Delegating methods for backward compatibility with tests
+    internal fun applyPlatformSpecificOptimizations(url: String): String {
+        return urlOptimizer.applyPlatformSpecificOptimizations(url)
     }
-    
-    //Fallback method
-    private fun removeAnchorsAndTextFragmentsSimple(url: String): String {
-        // This pattern matches #:~:text= followed by any characters until end of string
-        val textFragmentPattern = Regex("#:~:text=.*$")
-        var cleanedUrl = url.replace(textFragmentPattern, "")
-        
-        // Remove regular anchors (#fragment) but preserve query parameters
-        // This pattern matches # followed by any characters that are not ? until end of string
-        val anchorPattern = Regex("#[^?]*$")
-        cleanedUrl = cleanedUrl.replace(anchorPattern, "")
-        
-        return cleanedUrl
+
+    internal fun cleanTrackingParamsFromUrl(url: String): String {
+        return urlOptimizer.cleanTrackingParamsFromUrl(url)
     }
 
     internal fun cleanUrl(url: String): String {
-        val cleanedUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            val lastHttpsIndex = url.lastIndexOf("https://")
-            val lastHttpIndex = url.lastIndexOf("http://")
-            val lastValidUrlIndex = maxOf(lastHttpsIndex, lastHttpIndex)
+        return urlCleaner.cleanUrl(url)
+    }
 
-            if (lastValidUrlIndex != -1) {
-                // Extract the portion from the last valid protocol and clean any remaining %09 sequences
-                url.substring(lastValidUrlIndex).replace(Regex("%09+"), "")
-            } else {
-                // If no valid protocol is found, add https:// and clean %09 sequences
-                "https://${url.replace(Regex("%09+"), "")}"
-            }
-        } else {
-            // URL already starts with a protocol, just clean %09 sequences
-            url.replace(Regex("%09+"), "")
-        }
-
-        // Parse the URL to check if it has query parameters
-        val uri = try {
-            Uri.parse(cleanedUrl)
-        } catch (e: Exception) {
-            // If parsing fails, fall back to simple suffix removal
-            return cleanedUrl
-                .removeSuffix("?")
-                .removeSuffix("&")
-                .removeSuffix("#")
-                .removeSuffix(".")
-                .removeSuffix(",")
-                .removeSuffix(";")
-                .removeSuffix(")")
-                .removeSuffix("'")
-                .removeSuffix("\"")
-        }
-
-        // If the URL has query parameters, don't remove the '?' character
-        val hasQueryParams = uri.query != null //&& uri.query.isNotEmpty()
-        
-        return if (hasQueryParams) {
-            // Only remove trailing characters that don't affect query parameters
-            cleanedUrl
-                .removeSuffix("&")
-                .removeSuffix("#")
-                .removeSuffix(".")
-                .removeSuffix(",")
-                .removeSuffix(";")
-                .removeSuffix(")")
-                .removeSuffix("'")
-                .removeSuffix("\"")
-        } else {
-            // No query parameters, safe to remove '?' and other trailing characters
-            cleanedUrl
-                .removeSuffix("?")
-                .removeSuffix("&")
-                .removeSuffix("#")
-                .removeSuffix(".")
-                .removeSuffix(",")
-                .removeSuffix(";")
-                .removeSuffix(")")
-                .removeSuffix("'")
-                .removeSuffix("\"")
-        }
+    internal fun removeAnchorsAndTextFragments(url: String): String {
+        return urlCleaner.removeAnchorsAndTextFragments(url)
     }
 
     open fun openInBrowser(url: String) {
