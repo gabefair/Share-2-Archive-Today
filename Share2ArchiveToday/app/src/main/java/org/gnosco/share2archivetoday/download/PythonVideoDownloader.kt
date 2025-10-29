@@ -334,6 +334,10 @@ class PythonVideoDownloader(private val context: Context) {
 
     /**
      * Create Python progress callback that bridges to Kotlin callback
+     * 
+     * ⚠️ CRITICAL: Do NOT modify this method without reading CHAQUOPY_REFERENCE.md
+     * Must use bracket notation [] for attribute access, not .callAttr("get", ...)
+     * See: CHAQUOPY_REFERENCE.md - "Python Callback Creation Pattern"
      */
     private fun createPythonProgressCallback(kotlinCallback: ((ProgressInfo) -> Unit)?): PyObject? {
         if (kotlinCallback == null) return null
@@ -343,28 +347,28 @@ class PythonVideoDownloader(private val context: Context) {
 
             // Create a Python-compatible callback function using exec in builtins
             val callbackCode = """
-                def kotlin_callback(progress):
-                    try:
-                        # This will be handled by the Python side
-                        pass
-                    except Exception as e:
-                        print(f"Error in progress callback: {e}", file=sys.stderr, flush=True)
+def kotlin_callback(progress):
+    try:
+        # This will be handled by the Python side
+        pass
+    except Exception as e:
+        import sys
+        print(f"Error in progress callback: {e}", file=sys.stderr, flush=True)
             """.trimIndent()
-            // globals must be a dict, not module
-            // Use builtins.exec with proper globals and locals dictionaries
+            
+            // Use builtins.exec with proper globals dictionary
             val builtins = py.getModule("builtins")
             val mainModule = py.getModule("__main__")
-
-            // Create globals and locals dictionaries from the main module
-            // builtins.exec() expects dictionary objects for the globals and locals parameters
-            val globalsDict = mainModule.callAttr("__dict__")
-            val localsDict = mainModule.callAttr("__dict__")
+            
+            // ⚠️ CRITICAL: Use bracket notation [], NOT .callAttr("get", "__dict__")
+            val globalsDict = mainModule["__dict__"]
 
             // Execute the callback function definition
-            builtins.callAttr("exec", callbackCode, globalsDict, localsDict)
+            builtins.callAttr("exec", callbackCode, globalsDict)
 
-            // Return the callback function from the locals dictionary
-            localsDict.callAttr("get", "kotlin_callback")
+            // ⚠️ CRITICAL: Use bracket notation [], NOT .callAttr("get", "kotlin_callback")
+            // Using .callAttr("get", ...) returns dict object, causing "TypeError: 'dict' object is not callable"
+            mainModule["kotlin_callback"]
         } catch (e: Exception) {
             Log.e(TAG, "Error creating Python callback", e)
             null
