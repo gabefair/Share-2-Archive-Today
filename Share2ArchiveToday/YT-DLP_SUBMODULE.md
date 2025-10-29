@@ -17,11 +17,8 @@ app/src/main/python/yt-dlp/
 
 ## Configuration
 
-### Gradle Configuration
 
-The Chaquopy configuration in `app/build.gradle.kts` has been modified to:
-1. Remove the `pip install("yt-dlp")` command
-2. Add the submodule directory to the Python source sets
+**Important**: Adding `src/main/python/yt-dlp` as a source directory allows Chaquopy to include the `yt_dlp` package at the root level, making `import yt_dlp` work correctly.
 
 ### Dependencies
 
@@ -34,9 +31,12 @@ Only yt-dlp's runtime dependencies are installed via pip:
 ## Build Process
 
 The yt-dlp source is automatically included during the build process:
-1. Chaquopy picks up the `yt-dlp/` directory from `src/main/python/`
-2. The entire yt_dlp package is packaged into the `app.imy` file
-3. The Python code can import yt_dlp normally: `import yt_dlp`
+1. Chaquopy processes both source directories:
+   - `src/main/python/` (your app code)
+   - `src/main/python/yt-dlp/` (yt-dlp source)
+2. The `yt_dlp` package is packaged at the root level in the `app.imy` file
+3. Your Python code can import yt_dlp normally: `import yt_dlp`
+4. No build or compilation step is needed - Python source is used directly
 
 ## Updating yt-dlp
 

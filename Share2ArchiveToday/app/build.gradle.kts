@@ -124,8 +124,7 @@ chaquopy {
     sourceSets {
         getByName("main") {
             srcDir("src/main/python")
-            // The yt-dlp submodule is at src/main/python/yt-dlp
-            // This directory contains the yt_dlp package which will be importable
+            srcDir("src/main/python/yt-dlp")
         }
     }
 }
