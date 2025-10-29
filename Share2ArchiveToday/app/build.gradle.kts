@@ -112,11 +112,20 @@ chaquopy {
         version = "3.11"
 
         pip {
-            install("yt-dlp")
+            // yt-dlp dependencies (yt-dlp itself is now included from source)
             install("mutagen")
             install("websockets")
             install("brotli")
             install("pycryptodomex")
+        }
+    }
+
+    // Include local yt-dlp source from git submodule
+    sourceSets {
+        getByName("main") {
+            srcDir("src/main/python")
+            // The yt-dlp submodule is at src/main/python/yt-dlp
+            // This directory contains the yt_dlp package which will be importable
         }
     }
 }

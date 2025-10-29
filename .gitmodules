@@ -1,0 +1,3 @@
+[submodule "Share2ArchiveToday/app/src/main/python/yt-dlp"]
+	path = Share2ArchiveToday/app/src/main/python/yt-dlp
+	url = https://github.com/yt-dlp/yt-dlp.git

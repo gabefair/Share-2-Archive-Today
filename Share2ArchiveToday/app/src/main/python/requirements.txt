@@ -1,1 +1,6 @@
-yt-dlp[default]
+# yt-dlp is now included from source (git submodule at yt-dlp/)
+# Only its dependencies are needed via pip:
+mutagen
+websockets
+brotli
+pycryptodomex
