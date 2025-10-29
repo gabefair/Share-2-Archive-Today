@@ -1,9 +1,6 @@
 package org.gnosco.share2archivetoday.utils
 
-import org.gnosco.share2archivetoday.network.*
-
-import org.gnosco.share2archivetoday.utils.*
-
+import org.gnosco.share2archivetoday.network.WebURLMatcher
 import android.net.Uri
 import android.util.Log
 

@@ -1,8 +1,10 @@
 package org.gnosco.share2archivetoday
 
 import org.gnosco.share2archivetoday.media.*
-
-import org.gnosco.share2archivetoday.utils.*
+import org.gnosco.share2archivetoday.utils.UrlExtractor
+import org.gnosco.share2archivetoday.utils.NotificationHelper
+import org.gnosco.share2archivetoday.utils.FileUtils
+import org.gnosco.share2archivetoday.utils.ErrorMessageParser
 import org.gnosco.share2archivetoday.network.NetworkMonitor
 import org.gnosco.share2archivetoday.download.DownloadHistoryManager
 import android.app.Activity

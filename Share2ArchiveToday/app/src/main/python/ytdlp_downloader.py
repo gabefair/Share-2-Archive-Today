@@ -95,12 +95,12 @@ class VideoDownloader:
                 
                 # Log full JSON for debugging
                 if DEBUG_MODE:
-                try:
-                    json_output = json.dumps(info, indent=2, default=str)
+                    try:
+                        json_output = json.dumps(info, indent=2, default=str)
                         debug_print(f"[DEBUG] Full yt-dlp JSON output:", flush=True)
-                    debug_print(json_output, flush=True)
-                except Exception as json_e:
-                    debug_print(f"[DEBUG] Could not serialize JSON: {json_e}", flush=True)
+                        debug_print(json_output, flush=True)
+                    except Exception as json_e:
+                        debug_print(f"[DEBUG] Could not serialize JSON: {json_e}", flush=True)
                 
                 # Extract format information
                 formats = info.get('formats', [])
@@ -228,7 +228,7 @@ class VideoDownloader:
         Returns:
             Dictionary with download result
         """
-            progress_tracker = ProgressTracker(progress_callback)
+        progress_tracker = ProgressTracker(progress_callback)
         return self.audio_handler.download_audio(
             url, output_dir, audio_format, progress_tracker,
             debug_available_formats_func=self.video_handler.debug_available_formats

@@ -1,6 +1,18 @@
 package org.gnosco.share2archivetoday.media
 
-import org.gnosco.share2archivetoday.media.*
+
+import android.content.Context
+import android.util.Log
+import android.media.MediaMetadataRetriever
+import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import androidx.media3.transformer.Transformer
+import androidx.media3.transformer.TransformationRequest
+import androidx.media3.common.MediaItem as CommonMediaItem
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.transformer.TransformationResult
+import androidx.media3.transformer.TransformationException
 
 /**
  * Media3 Transformer implementation for merging video and audio
@@ -8,17 +20,6 @@ import org.gnosco.share2archivetoday.media.*
  * implementation "androidx.media3:media3-transformer:1.1.1"
  * implementation "androidx.media3:media3-effect:1.1.1"
  */
-
-import androidx.media3.transformer.Transformer
-import androidx.media3.transformer.TransformationRequest
-import androidx.media3.transformer.MediaItem
-import androidx.media3.common.MediaItem as CommonMediaItem
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.transformer.TransformationResult
-import androidx.media3.transformer.TransformationException
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-
 class Media3VideoMerger(private val context: Context) {
 
     companion object {

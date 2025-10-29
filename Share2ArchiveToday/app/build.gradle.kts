@@ -12,8 +12,8 @@ android {
         applicationId = "org.gnosco.share2archivetoday"
         minSdk = 28
         targetSdk = 36
-        versionCode = 70
-        versionName = "7.0"
+        versionCode = 71
+        versionName = "7.1"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
@@ -123,26 +123,37 @@ chaquopy {
 
 dependencies {
     // AndroidX Core (required for FileProvider and other core functionality)
-    implementation("androidx.core:core-ktx:1.17.0")
+    implementation(libs.androidx.core.ktx)
 
-    implementation("com.google.zxing:core:3.5.3")
+    implementation(libs.core)
 
     // Coroutines for async operations
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation(libs.kotlinx.coroutines.android)
 
     // ML Kit for barcode scanning (optional dependency)
-    compileOnly("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1")
-    compileOnly("com.google.android.gms:play-services-tasks:18.4.0")
+    compileOnly(libs.play.services.mlkit.barcode.scanning)
+    compileOnly(libs.play.services.tasks)
 
     // WebSocket support (OkHttp includes WebSocket support)
-    implementation("com.squareup.okhttp3:okhttp:5.2.1")
+    implementation(libs.okhttp)
 
     // Google's official Brotli library
-    implementation("org.brotli:dec:0.1.2")
+    implementation(libs.dec)
 
     // Additional crypto support for AES-128 HLS
     implementation("org.bouncycastle:bcprov-jdk15on:1.70")
     implementation("org.bouncycastle:bcpkix-jdk15on:1.70")
+
+    // Media3 for video processing (Transformer API)
+    implementation("androidx.media3:media3-transformer:1.5.0")
+    implementation("androidx.media3:media3-common:1.5.0")
+    implementation("androidx.media3:media3-effect:1.5.0")
+
+    // Testing dependencies
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }
 java {
     toolchain {

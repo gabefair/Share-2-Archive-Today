@@ -1,13 +1,9 @@
 package org.gnosco.share2archivetoday.download
 
 import org.gnosco.share2archivetoday.PythonVideoDownloader
-
-import org.gnosco.share2archivetoday.network.*
-
-import org.gnosco.share2archivetoday.utils.*
-
-import org.gnosco.share2archivetoday.download.*
-
+import org.gnosco.share2archivetoday.MemoryManager
+import org.gnosco.share2archivetoday.network.NetworkMonitor
+import org.gnosco.share2archivetoday.utils.NotificationHelper
 import android.content.Context
 import android.util.Log
 

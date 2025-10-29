@@ -1,9 +1,7 @@
 package org.gnosco.share2archivetoday.utils
 
-import org.gnosco.share2archivetoday.utils.*
-
-import org.gnosco.share2archivetoday.download.*
-
+import org.gnosco.share2archivetoday.download.DownloadHistoryActivity
+import org.gnosco.share2archivetoday.download.BackgroundDownloadService
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager

@@ -1,9 +1,8 @@
 package org.gnosco.share2archivetoday.media
 
-import org.gnosco.share2archivetoday.media.*
-
 import android.content.Context
 import android.util.Log
+import org.gnosco.share2archivetoday.PythonVideoDownloader
 
 class SmartFormatSelector(private val context: Context) {
 

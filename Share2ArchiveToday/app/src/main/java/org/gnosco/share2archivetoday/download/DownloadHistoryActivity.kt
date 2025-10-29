@@ -1,4 +1,4 @@
-package org.gnosco.share2archivetoday
+package org.gnosco.share2archivetoday.download
 
 import android.app.Activity
 import android.os.Bundle
