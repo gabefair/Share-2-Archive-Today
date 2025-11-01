@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<media-capabilities xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Video codecs - declare support for modern formats -->
+    <format android:name="HEVC" supported="true"/>
+    <format android:name="AV1" supported="true"/>
+    <format android:name="VP9" supported="true"/>
+    <format android:name="AVC" supported="true"/>
+    
+    <!-- Audio codecs - declare support for modern formats -->
+    <format android:name="AAC" supported="true"/>
+    <format android:name="MP3" supported="true"/>
+    <format android:name="Opus" supported="true"/>
+    <format android:name="Vorbis" supported="true"/>
+    <format android:name="FLAC" supported="true"/>
+    
+    <!-- HDR formats - let Android handle transcoding to SDR if needed -->
+    <format android:name="HDR10" supported="true"/>
+    <format android:name="HDR10Plus" supported="true"/>
+    <format android:name="Dolby Vision" supported="true"/>
+    
+    <!-- Container formats - support modern containers -->
+    <format android:name="MP4" supported="true"/>
+    <format android:name="WebM" supported="true"/>
+    <format android:name="MKV" supported="true"/>
+    <format android:name="M4A" supported="true"/>
+    <format android:name="OGG" supported="true"/>
+</media-capabilities>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    
+    <!-- Video camera icon -->
+    <path
+        android:fillColor="#808080"
+        android:pathData="M17,10.5V7c0,-0.55 -0.45,-1 -1,-1H4c-0.55,0 -1,0.45 -1,1v10c0,0.55 0.45,1 1,1h12c0.55,0 1,-0.45 1,-1v-3.5l4,4v-11l-4,4z"/>
+    
+    <!-- Download arrow overlay -->
+    <path
+        android:fillColor="#4CAF50"
+        android:pathData="M12,16l-4,-4h3V8h2v4h3l-4,4z"/>
+    
+    <!-- Download indicator dot (using path instead of circle) -->
+    <path
+        android:fillColor="@android:color/holo_blue_bright"
+        android:pathData="M18,3C16.34,3 15,4.34 15,6s1.34,3 3,3s3,-1.34 3,-3S19.66,3 18,3z"/>
+</vector>

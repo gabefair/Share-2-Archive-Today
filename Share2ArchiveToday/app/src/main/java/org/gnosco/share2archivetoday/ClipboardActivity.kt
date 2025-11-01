@@ -8,18 +8,9 @@ import android.widget.Toast
  * Activity that cleans URLs and copies them to clipboard instead of opening archive.today
  */
 class ClipboardActivity : MainActivity() {
-    override fun fourSteps(url: String) {
+    override fun threeSteps(url: String) {
         val processedUrl = processArchiveUrl(url)
         val cleanedUrl = handleURL(processedUrl)
-        
-        // Check if the cleaned URL can be archived (single check - getNonArchivableReason returns null if archivable)
-        val nonArchivableReason = archiveUrlProcessor.getNonArchivableReason(cleanedUrl)
-        if (nonArchivableReason != null) {
-            Toast.makeText(this, nonArchivableReason, Toast.LENGTH_LONG).show()
-            finish()
-            return
-        }
-        
         copyToClipboard(cleanedUrl)
     }
 

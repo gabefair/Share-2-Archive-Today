@@ -1,4 +1,8 @@
 package org.gnosco.share2archivetoday
+
+import org.gnosco.share2archivetoday.debug.*
+import org.gnosco.share2archivetoday.network.ClearUrlsRulesManager
+import org.gnosco.share2archivetoday.network.WebURLMatcher
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -10,19 +14,27 @@ import android.widget.Toast
 open class MainActivity : Activity() {
     private var clearUrlsRulesManager: ClearUrlsRulesManager? = null
     private var qrCodeScanner: QRCodeScanner? = null
-    
+
     // Lazy initialization for components that don't need context
     private val urlExtractor: UrlExtractor by lazy { UrlExtractor() }
     private val urlCleaner: UrlCleaner by lazy { UrlCleaner() }
     private val urlOptimizer: UrlOptimizer by lazy { UrlOptimizer() }
-    internal val archiveUrlProcessor: ArchiveUrlProcessor by lazy { ArchiveUrlProcessor() }
+    private val archiveUrlProcessor: ArchiveUrlProcessor by lazy { ArchiveUrlProcessor() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize components that need context
+        // Initialize debug logging
+        DebugLogger.init(applicationContext)
+
+        // Initialize ClearURLs rules manager
         clearUrlsRulesManager = ClearUrlsRulesManager(applicationContext)
         qrCodeScanner = QRCodeScanner(applicationContext)
+
+        // Test debug features (only in debug builds)
+        if (BuildConfig.ENABLE_DEBUG_TESTING) {
+            DebugFeatureTester.logTestResults(this)
+        }
 
         handleShareIntent(intent)
     }
@@ -60,7 +72,7 @@ open class MainActivity : Activity() {
                         val url = extractUrl(sharedText)
 
                         if (url != null) {
-                            fourSteps(url)
+                            threeSteps(url)
                         } else {
                             Toast.makeText(this, "No URL found in shared text", Toast.LENGTH_SHORT).show()
                             finish()
@@ -93,23 +105,10 @@ open class MainActivity : Activity() {
         finish()
     }
 
-    open fun fourSteps(url: String) {
+    open fun threeSteps(url: String) {
         val processedUrl = processArchiveUrl(url)
         val cleanedUrl = handleURL(processedUrl)
-        
-        // Check if the cleaned URL can be archived (single check - getNonArchivableReason returns null if archivable)
-        val nonArchivableReason = archiveUrlProcessor.getNonArchivableReason(cleanedUrl)
-        if (nonArchivableReason != null) {
-            Toast.makeText(this, nonArchivableReason, Toast.LENGTH_LONG).show()
-            finish()
-            return
-        }
-        nowOpenInBrowser(cleanedUrl)
-    }
-
-    open fun nowOpenInBrowser(cleanedUrl: String): Boolean {
         openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
-        return true
     }
 
     internal fun handleImageShare(imageUri: Uri) {
@@ -118,7 +117,7 @@ open class MainActivity : Activity() {
             val qrUrl = extractUrl(qrCodeText)
 
             if (qrUrl != null) {
-                fourSteps(qrUrl)
+                threeSteps(qrUrl)
                 Toast.makeText(this, "URL found in QR code", Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(this, "No URL found in QR code image", Toast.LENGTH_SHORT).show()
@@ -135,7 +134,6 @@ open class MainActivity : Activity() {
      * Main URL handling method that combines ClearURLs rules with platform-specific optimizations
      */
     internal fun handleURL(url: String): String {
-
         // First clean with ClearURLs rules
         var rulesCleanedUrl = url
         if (clearUrlsRulesManager?.areRulesLoaded() == true) {
