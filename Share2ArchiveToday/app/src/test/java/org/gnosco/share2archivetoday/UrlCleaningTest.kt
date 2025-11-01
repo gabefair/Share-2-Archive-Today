@@ -181,10 +181,10 @@ class UrlCleaningTest {
 
     /**
      * Test cases for the complete URL handling flow
-     * Tests the threeSteps method which combines processArchiveUrl and handleURL
+     * Tests the fourSteps method which combines processArchiveUrl and handleURL
      */
     @Test
-    fun testThreeSteps_ArchiveUrl() {
+    fun testFourSteps_ArchiveUrl() {
         val mainActivity = MainActivity()
 
         // Test the complete flow with an archive.ph URL
@@ -194,12 +194,12 @@ class UrlCleaningTest {
 
         assertEquals("processArchiveUrl should extract target URL correctly", expectedProcessed, processedUrl)
 
-        // Note: We can't test the full threeSteps method without mocking the browser opening
+        // Note: We can't test the full fourSteps method without mocking the browser opening
         // But we can verify the URL processing steps work correctly
     }
 
     @Test
-    fun testThreeSteps_GoogleUrl() {
+    fun testFourSteps_GoogleUrl() {
         val mainActivity = MainActivity()
 
         // Test the complete flow with a Google URL

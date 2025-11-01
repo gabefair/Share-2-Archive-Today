@@ -102,7 +102,7 @@
     *** cleanTrackingParamsFromUrl(java.lang.String);
     *** cleanUrl(java.lang.String);
     *** removeAnchorsAndTextFragments(java.lang.String);
-    *** threeSteps(java.lang.String);
+    *** fourSteps(java.lang.String);
     *** openInBrowser(java.lang.String);
     *** handleImageShare(android.net.Uri);
 }
