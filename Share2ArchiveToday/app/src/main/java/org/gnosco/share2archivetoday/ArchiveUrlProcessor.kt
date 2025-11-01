@@ -7,14 +7,9 @@ import android.util.Log
  * Handles processing of archive.today URLs to extract the embedded target URL
  */
 class ArchiveUrlProcessor {
-    
-    /**
-     * List of URL patterns that cannot be archived, paired with their reason messages
-     */
+
     private val nonArchivablePatterns = listOf(
-        // Google News read URLs cannot be archived
         Pair(Regex("^https?://news\\.google\\.com/read/.*", RegexOption.IGNORE_CASE), "news.google.com/read URLs cannot be archived yet"),
-        // Add more patterns here as needed
     )
     
     // Cache for the last checked URL to avoid duplicate searches

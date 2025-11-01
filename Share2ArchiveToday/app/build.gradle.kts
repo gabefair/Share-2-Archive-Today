@@ -15,7 +15,7 @@ android {
         versionName = "5.9"
     }
 
-    buildFeatures { // ask what this is
+    buildFeatures {
         viewBinding = true
     }
 

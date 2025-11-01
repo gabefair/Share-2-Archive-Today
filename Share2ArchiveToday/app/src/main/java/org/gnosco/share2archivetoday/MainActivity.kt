@@ -1,6 +1,4 @@
 package org.gnosco.share2archivetoday
-// This file is: MainActivity.kt
-
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
