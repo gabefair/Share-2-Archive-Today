@@ -1,9 +1,10 @@
 package org.gnosco.share2archivetoday.download
 
-import org.gnosco.share2archivetoday.PythonVideoDownloader
+import org.gnosco.share2archivetoday.download.PythonVideoDownloader
 import org.gnosco.share2archivetoday.MemoryManager
 import org.gnosco.share2archivetoday.network.NetworkMonitor
 import org.gnosco.share2archivetoday.utils.NotificationHelper
+import org.gnosco.share2archivetoday.utils.ErrorMessageParser
 import android.content.Context
 import android.util.Log
 
@@ -125,7 +126,7 @@ class ProgressHandler(
         downloadId: String
     ) {
         Log.e(TAG, "Download error: ${progressInfo.error}")
-        if (DownloadErrorHandler.shouldRetryDownload(progressInfo.error)) {
+        if (ErrorMessageParser.shouldRetryDownload(progressInfo.error)) {
             Log.d(TAG, "Attempting automatic retry for error: ${progressInfo.error}")
             downloadResumptionManager.updateRetryStatus(downloadId, "Retrying after error: ${progressInfo.error}")
         } else {

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
+import org.gnosco.share2archivetoday.utils.VideoFileOperationsHelper
 import java.io.File
 
 /**
@@ -17,37 +18,13 @@ class DownloadHistoryFileManager(private val activity: Activity) {
         private const val TAG = "DownloadHistoryFileManager"
     }
     
+    private val fileOperationsHelper = VideoFileOperationsHelper(activity)
+    
     /**
      * Open a file with the appropriate app
      */
     fun openFile(filePath: String) {
-        try {
-            val uri = parseFilePathOrUri(filePath)
-            
-            // Check if the file exists
-            if (!checkUriExists(uri)) {
-                Toast.makeText(activity, "File not found at: $filePath", Toast.LENGTH_LONG).show()
-                Log.e(TAG, "File not found: $filePath")
-                return
-            }
-            
-            val mimeType = getMimeTypeFromUri(uri)
-            Log.d(TAG, "Opening file: $uri with mime type: $mimeType")
-            
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, mimeType)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            
-            if (intent.resolveActivity(activity.packageManager) != null) {
-                activity.startActivity(intent)
-            } else {
-                Toast.makeText(activity, "No app found to open this file", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error opening file: $filePath", e)
-            Toast.makeText(activity, "Error opening file: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
+        fileOperationsHelper.openVideo(filePath)
     }
     
     /**
@@ -55,40 +32,11 @@ class DownloadHistoryFileManager(private val activity: Activity) {
      */
     fun shareVideo(item: DownloadHistoryItem) {
         if (item.filePath != null) {
-            try {
-                val uri = parseFilePathOrUri(item.filePath)
-                
-                // Check if the file exists
-                if (!checkUriExists(uri)) {
-                    Toast.makeText(activity, "Video file no longer exists", Toast.LENGTH_SHORT).show()
-                    return
-                }
-                
-                // Get the proper display name for the file
-                val displayName = getDisplayNameFromUri(uri) ?: item.title
-                
-                val shareIntent = Intent().apply {
-                    action = Intent.ACTION_SEND
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    putExtra(Intent.EXTRA_TEXT, "Shared video: $displayName")
-                    putExtra(Intent.EXTRA_SUBJECT, displayName)
-                    type = getMimeTypeFromUri(uri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    
-                    // Use ClipData to provide better metadata for sharing
-                    val clipData = ClipData.newUri(activity.contentResolver, displayName, uri)
-                    setClipData(clipData)
-                }
-                
-                if (shareIntent.resolveActivity(activity.packageManager) != null) {
-                    activity.startActivity(Intent.createChooser(shareIntent, "Share Video"))
-                } else {
-                    Toast.makeText(activity, "No app found to share this file", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error sharing video", e)
-                Toast.makeText(activity, "Error sharing video: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
+            fileOperationsHelper.shareVideo(
+                filePath = item.filePath,
+                title = item.title,
+                excludeActivity = VideoDownloadActivity::class.java
+            )
         } else {
             Toast.makeText(activity, "No file path available", Toast.LENGTH_SHORT).show()
         }

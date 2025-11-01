@@ -1,7 +1,11 @@
 [versions]
 agp = "8.11.1"
+androidxJunit = "1.1.5"
+bcprovJdk15on = "1.70"
 core = "3.5.3"
 dec = "0.1.2"
+espressoCoreVersion = "3.5.1"
+junitJupiterVersion = "5.10.0"
 kotlin = "2.2.21"
 coreKtx = "1.17.0"
 chaquopy = "16.1.0"
@@ -13,12 +17,20 @@ lifecycleRuntimeKtx = "2.9.4"
 activityCompose = "1.11.0"
 composeBom = "2025.10.01"
 junitJupiter = "6.0.0"
+media3Transformer = "1.8.0"
 okhttp = "5.2.1"
 playServicesMlkitBarcodeScanning = "18.3.1"
 playServicesTasks = "18.4.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-espresso-core-v351 = { module = "androidx.test.espresso:espresso-core", version.ref = "espressoCoreVersion" }
+androidx-junit-v115 = { module = "androidx.test.ext:junit", version.ref = "androidxJunit" }
+androidx-media3-common = { module = "androidx.media3:media3-common", version.ref = "media3Transformer" }
+androidx-media3-effect = { module = "androidx.media3:media3-effect", version.ref = "media3Transformer" }
+androidx-media3-transformer = { module = "androidx.media3:media3-transformer", version.ref = "media3Transformer" }
+bcpkix-jdk15on = { module = "org.bouncycastle:bcpkix-jdk15on", version.ref = "bcprovJdk15on" }
+bcprov-jdk15on = { module = "org.bouncycastle:bcprov-jdk15on", version.ref = "bcprovJdk15on" }
 core = { module = "com.google.zxing:core", version.ref = "core" }
 dec = { module = "org.brotli:dec", version.ref = "dec" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -35,6 +47,7 @@ androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-man
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version.ref = "junitJupiter" }
+junit-jupiter-v5100 = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junitJupiterVersion" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinxCoroutinesAndroid" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 play-services-mlkit-barcode-scanning = { module = "com.google.android.gms:play-services-mlkit-barcode-scanning", version.ref = "playServicesMlkitBarcodeScanning" }

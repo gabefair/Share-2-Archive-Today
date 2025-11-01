@@ -100,21 +100,48 @@ class FormatProcessor:
         debug_print(f"[DEBUG] Added format {format_id}: {quality_label} ({resolution}) - has_video={has_video}, has_audio={has_audio}", flush=True)
         return format_info
     
-    def get_quality_based_format(self, quality: str) -> str:
-        """Get yt-dlp format string based on quality preference"""
-        quality_map = {
-            '2160p': 'best[height<=2160]/best',
-            '1440p': 'best[height<=1440]/best', 
-            '1080p': 'best[height<=1080]/best',
-            '720p': 'best[height<=720]/best',
-            '480p': 'best[height<=480]/best',
-            '360p': 'best[height<=360]/best',
-            'worst': 'worst',
-            'best': 'best',
-            'audio_mp3': 'bestaudio[ext=mp3]/bestaudio',
-            'audio_aac': 'bestaudio[ext=m4a]/bestaudio[ext=aac]/bestaudio',
-        }
-        return quality_map.get(quality, 'best')
+    def get_quality_based_format(self, quality: str, prefer_merged: bool = True) -> str:
+        """
+        Get yt-dlp format string based on quality preference
+        
+        Args:
+            quality: Quality preference (e.g. '1080p', '720p', 'best')
+            prefer_merged: If True, prefer merging video+audio for DASH scenarios
+        
+        Returns:
+            yt-dlp format string
+        """
+        if prefer_merged:
+            # Format strings that handle DASH/separated streams by merging video+audio
+            # Format: bestvideo[height<=X]+bestaudio/best
+            # This tells yt-dlp: "Get best video up to X height + best audio, OR fallback to best single format"
+            quality_map = {
+                '2160p': 'bestvideo[height<=2160]+bestaudio/best',
+                '1440p': 'bestvideo[height<=1440]+bestaudio/best', 
+                '1080p': 'bestvideo[height<=1080]+bestaudio/best',
+                '720p': 'bestvideo[height<=720]+bestaudio/best',
+                '480p': 'bestvideo[height<=480]+bestaudio/best',
+                '360p': 'bestvideo[height<=360]+bestaudio/best',
+                'worst': 'worstvideo+worstaudio/worst',
+                'best': 'bestvideo+bestaudio/best',
+                'audio_mp3': 'bestaudio[ext=mp3]/bestaudio',
+                'audio_aac': 'bestaudio[ext=m4a]/bestaudio[ext=aac]/bestaudio',
+            }
+        else:
+            # Legacy format strings for single-format streams
+            quality_map = {
+                '2160p': 'best[height<=2160]/best',
+                '1440p': 'best[height<=1440]/best', 
+                '1080p': 'best[height<=1080]/best',
+                '720p': 'best[height<=720]/best',
+                '480p': 'best[height<=480]/best',
+                '360p': 'best[height<=360]/best',
+                'worst': 'worst',
+                'best': 'best',
+                'audio_mp3': 'bestaudio[ext=mp3]/bestaudio',
+                'audio_aac': 'bestaudio[ext=m4a]/bestaudio[ext=aac]/bestaudio',
+            }
+        return quality_map.get(quality, 'bestvideo+bestaudio/best' if prefer_merged else 'best')
     
     def analyze_formats(self, formats: List[Dict[str, Any]]) -> Dict[str, bool]:
         """Analyze available formats to determine download strategy"""

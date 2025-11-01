@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import android.widget.Toast
+import org.gnosco.share2archivetoday.utils.FileUtils
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -69,11 +70,11 @@ class DownloadHistoryDialogManager(
     fun showDownloadDetails(item: DownloadHistoryItem) {
         val message = buildString {
             append("Title: ${item.title}\n\n")
-            append("Status: ${item.status}\n\n")
+            append("Status: ${if (item.success) "Completed" else "Failed"}\n\n")
             append("Quality: ${item.quality}\n\n")
             
             if (item.fileSize > 0) {
-                append("Size: ${formatFileSize(item.fileSize)}\n\n")
+                append("Size: ${FileUtils.formatFileSize(item.fileSize)}\n\n")
             }
             
             if (item.uploader.isNotEmpty() && item.uploader != "Unknown") {
@@ -179,22 +180,6 @@ class DownloadHistoryDialogManager(
         val clip = ClipData.newPlainText("Video URL", url)
         clipboard.setPrimaryClip(clip)
         Toast.makeText(activity, "URL copied to clipboard", Toast.LENGTH_SHORT).show()
-    }
-    
-    /**
-     * Format file size for display
-     */
-    private fun formatFileSize(bytes: Long): String {
-        val kb = bytes / 1024.0
-        val mb = kb / 1024.0
-        val gb = mb / 1024.0
-        
-        return when {
-            gb >= 1 -> "%.1f GB".format(gb)
-            mb >= 1 -> "%.1f MB".format(mb)
-            kb >= 1 -> "%.1f KB".format(kb)
-            else -> "$bytes B"
-        }
     }
 }
 

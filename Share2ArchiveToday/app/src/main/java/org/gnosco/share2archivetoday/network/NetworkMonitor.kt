@@ -176,6 +176,17 @@ class NetworkMonitor(private val context: Context) {
     }
     
     /**
+     * Get network-based quality recommendation text for display
+     */
+    fun getRecommendationText(): String {
+        return when {
+            isWiFiConnected() -> "WiFi - Good for original quality"
+            isConnected() -> "Mobile Data - Consider lower resolution"
+            else -> "No connection"
+        }
+    }
+    
+    /**
      * Connection quality levels
      */
     enum class ConnectionQuality {

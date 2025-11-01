@@ -178,7 +178,7 @@ class DownloadHistoryManager(private val context: Context) {
         if (matchingEntry != null) {
             Log.d(TAG, "Found matching URL entry: ${matchingEntry.title}")
             if (matchingEntry.filePath != null) {
-                val fileExists = java.io.File(matchingEntry.filePath).exists()
+                val fileExists = checkFileExists(matchingEntry.filePath)
                 Log.d(TAG, "File path: ${matchingEntry.filePath}, exists: $fileExists")
                 if (fileExists) {
                     Log.d(TAG, "Returning existing download entry")
@@ -194,6 +194,28 @@ class DownloadHistoryManager(private val context: Context) {
         }
         
         return null
+    }
+    
+    /**
+     * Check if a file or content URI exists
+     * Handles both regular file paths and content:// URIs from MediaStore
+     */
+    private fun checkFileExists(filePath: String): Boolean {
+        return try {
+            if (filePath.startsWith("content://")) {
+                // Handle content:// URIs by checking if we can query the content resolver
+                val uri = android.net.Uri.parse(filePath)
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    cursor.moveToFirst()
+                } ?: false
+            } else {
+                // Handle regular file paths
+                java.io.File(filePath).exists()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error checking file existence: ${e.message}")
+            false
+        }
     }
     
     /**

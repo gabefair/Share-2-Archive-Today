@@ -1,6 +1,7 @@
-package org.gnosco.share2archivetoday
+package org.gnosco.share2archivetoday.download
 
 import org.gnosco.share2archivetoday.debug.*
+import org.gnosco.share2archivetoday.MemoryManager
 
 import android.content.Context
 import android.util.Log

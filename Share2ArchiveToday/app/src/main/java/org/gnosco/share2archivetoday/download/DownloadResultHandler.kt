@@ -1,13 +1,8 @@
 package org.gnosco.share2archivetoday.download
 
-import org.gnosco.share2archivetoday.PythonVideoDownloader
-
+import org.gnosco.share2archivetoday.download.PythonVideoDownloader
 import org.gnosco.share2archivetoday.network.*
-
 import org.gnosco.share2archivetoday.utils.*
-
-import org.gnosco.share2archivetoday.download.*
-
 import android.content.Context
 import android.util.Log
 
@@ -79,7 +74,7 @@ class DownloadResultHandler(
         Log.e(TAG, "Download failed: ${result.error}")
         logFailureDetails(url, displayTitle, quality, result.error)
 
-        val userFriendlyError = DownloadErrorHandler.convertToUserFriendlyError(result.error ?: "Unknown error")
+        val userFriendlyError = ErrorMessageParser.parseFriendlyErrorMessage(result.error ?: "Unknown error")
         notificationHelper.updateNotification("Download failed: $userFriendlyError", displayTitle)
 
         orchestrator.finalizeFailedDownload(
@@ -95,7 +90,7 @@ class DownloadResultHandler(
      */
     suspend fun handleException(e: Exception, title: String) {
         Log.e(TAG, "Error in background download", e)
-        val friendlyError = DownloadErrorHandler.convertToUserFriendlyError(e.message ?: "Unknown error")
+        val friendlyError = ErrorMessageParser.parseFriendlyErrorMessage(e)
         notificationHelper.updateNotification("Download error: $friendlyError", title)
         notificationHelper.showErrorNotification(title, friendlyError)
     }

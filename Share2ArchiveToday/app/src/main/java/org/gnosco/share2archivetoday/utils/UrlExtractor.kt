@@ -53,13 +53,29 @@ class UrlExtractor {
 
         /**
          * Simple URL extraction that looks for http:// or https:// and extracts to the next boundary
+         * Prioritizes archive URLs, then uses the FIRST valid URL found (not the last)
          */
         private fun extractUrlSimple(text: String): String? {
-            val httpIndex = text.lastIndexOf("http://")
-            val httpsIndex = text.lastIndexOf("https://")
+            // First, check for archive URLs specifically as they should be prioritized
+            val archivePattern = Regex("https?://(?:archive\\.(?:today|ph|is|fo|li|md|vn))[^\\s]*")
+            val archiveMatch = archivePattern.find(text)
+            if (archiveMatch != null) {
+                val url = cleanArchiveUrl(archiveMatch.value)
+                if (isValidExtractedUrl(url)) {
+                    return url
+                }
+            }
+            
+            // Use indexOf instead of lastIndexOf to get the FIRST URL
+            val httpIndex = text.indexOf("http://")
+            val httpsIndex = text.indexOf("https://")
 
-            val startIndex = maxOf(httpIndex, httpsIndex)
-            if (startIndex == -1) return null
+            val startIndex = when {
+                httpIndex == -1 && httpsIndex == -1 -> return null
+                httpIndex == -1 -> httpsIndex
+                httpsIndex == -1 -> httpIndex
+                else -> minOf(httpIndex, httpsIndex) // Get the first one
+            }
 
             // Find the end of the URL - look for whitespace, newline, or certain punctuation
             var endIndex = text.length
@@ -81,6 +97,13 @@ class UrlExtractor {
 
             val extractedUrl = text.substring(startIndex, endIndex)
             return if (isValidExtractedUrl(extractedUrl)) extractedUrl else null
+        }
+        
+        /**
+         * Clean up archive URLs by removing trailing punctuation that might be captured
+         */
+        private fun cleanArchiveUrl(url: String): String {
+            return url.trimEnd { it in setOf('?', '&', '#', '.', ',', ';', ')', '\'', '"') }
         }
 
         /**

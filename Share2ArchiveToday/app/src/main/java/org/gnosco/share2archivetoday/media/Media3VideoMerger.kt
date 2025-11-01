@@ -8,17 +8,23 @@ import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import androidx.media3.transformer.Transformer
-import androidx.media3.transformer.TransformationRequest
-import androidx.media3.common.MediaItem as CommonMediaItem
+import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.transformer.TransformationResult
-import androidx.media3.transformer.TransformationException
 
 /**
  * Media3 Transformer implementation for merging video and audio
- * Add to build.gradle (Module: app):
- * implementation "androidx.media3:media3-transformer:1.1.1"
- * implementation "androidx.media3:media3-effect:1.1.1"
+ * 
+ * NOTE: This is a placeholder for future Media3 Transformer integration.
+ * Currently, this class exists for codec compatibility but the actual merging
+ * is handled by FFmpegWrapper (MediaMuxer) which works fine for H.264+AAC.
+ * 
+ * If you encounter codec errors with MediaMuxer (e.g., VP9, AV1), you would
+ * need to implement proper Media3 Transformer logic here. The challenge is
+ * that Media3 Transformer API has changed significantly across versions.
+ * 
+ * Requires:
+ * - implementation "androidx.media3:media3-transformer:1.8.0"
+ * - implementation "androidx.media3:media3-common:1.8.0"
  */
 class Media3VideoMerger(private val context: Context) {
 
@@ -28,7 +34,9 @@ class Media3VideoMerger(private val context: Context) {
 
     /**
      * Merge video and audio using Media3 Transformer
-     * This should handle more codecs than MediaMuxer including AV1
+     * 
+     * TODO: Implement proper Media3 1.8.0 API for merging separate video/audio
+     * For now, returns an error to fall back to MediaMuxer
      */
     @UnstableApi
     fun mergeVideoAudio(
@@ -37,80 +45,125 @@ class Media3VideoMerger(private val context: Context) {
         outputPath: String,
         progressCallback: ((Float) -> Unit)? = null
     ): MergeResult {
-        return try {
-            Log.d(TAG, "Starting Media3 Transformer merge")
-            Log.d(TAG, "Video: $videoPath")
-            Log.d(TAG, "Audio: $audioPath")
-            Log.d(TAG, "Output: $outputPath")
+        // return try {
+        //     Log.d(TAG, "Starting Media3 Transformer merge")
+        //     Log.d(TAG, "Video: $videoPath")
+        //     Log.d(TAG, "Audio: $audioPath")
+        //     Log.d(TAG, "Output: $outputPath")
 
-            val videoFile = File(videoPath)
-            val audioFile = File(audioPath)
+        //     val videoFile = File(videoPath)
+        //     val audioFile = File(audioPath)
 
-            if (!videoFile.exists() || !audioFile.exists()) {
-                return MergeResult.Error("Input files do not exist")
-            }
+        //     if (!videoFile.exists() || !audioFile.exists()) {
+        //         return MergeResult.Error("Input files do not exist")
+        //     }
 
-            // Create MediaItems for video and audio
-            val videoMediaItem = CommonMediaItem.fromUri(videoFile.toURI().toString())
-            val audioMediaItem = CommonMediaItem.fromUri(audioFile.toURI().toString())
+        //     // Create MediaItems for video and audio
+        //     val videoMediaItem = MediaItem.fromUri(videoFile.toURI().toString())
+        //     val audioMediaItem = MediaItem.fromUri(audioFile.toURI().toString())
 
-            // Create transformation request
-            val transformationRequest = TransformationRequest.Builder()
-                .build()
+        //     // Set up transformer with listener
+        //     val latch = CountDownLatch(1)
+        //     var result: MergeResult = MergeResult.Error("Unknown error")
 
-            // Set up transformer
-            val latch = CountDownLatch(1)
-            var result: MergeResult = MergeResult.Error("Unknown error")
+        //     val transformer = Transformer.Builder(context)
+        //         .addListener(object : Transformer.Listener {
+        //             override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+        //                 Log.d(TAG, "Export completed successfully")
+        //                 Log.d(TAG, "Duration: ${exportResult.durationMs}ms")
+        //                 Log.d(TAG, "File size: ${exportResult.fileSizeBytes} bytes")
+        //                 result = MergeResult.Success(outputPath)
+        //                 latch.countDown()
+        //             }
 
-            val transformer = Transformer.Builder(context)
-                .addListener(object : Transformer.Listener {
-                    override fun onTransformationCompleted(
-                        mediaItem: CommonMediaItem,
-                        transformationResult: TransformationResult
-                    ) {
-                        Log.d(TAG, "Transformation completed successfully")
-                        result = MergeResult.Success(outputPath)
-                        latch.countDown()
-                    }
+        //             override fun onError(
+        //                 composition: Composition,
+        //                 exportResult: ExportResult,
+        //                 exportException: ExportException
+        //             ) {
+        //                 Log.e(TAG, "Export failed", exportException)
+        //                 result = when {
+        //                     exportException.message?.contains("codec", ignoreCase = true) == true -> {
+        //                         MergeResult.UnsupportedCodec(exportException.message ?: "Codec not supported")
+        //                     }
+        //                     else -> {
+        //                         MergeResult.Error("Export failed: ${exportException.message}")
+        //                     }
+        //                 }
+        //                 latch.countDown()
+        //             }
+        //         })
+        //         .build()
 
-                    override fun onTransformationError(
-                        mediaItem: CommonMediaItem,
-                        exception: TransformationException
-                    ) {
-                        Log.e(TAG, "Transformation failed", exception)
-                        result = when {
-                            exception.message?.contains("codec", ignoreCase = true) == true -> {
-                                MergeResult.UnsupportedCodec(exception.message ?: "Codec not supported")
-                            }
-                            else -> {
-                                MergeResult.Error("Transformation failed: ${exception.message}")
-                            }
-                        }
-                        latch.countDown()
-                    }
-                })
-                .build()
+        //     // Create EditedMediaItems - video with audio track from separate file
+        //     // This is the proper way to merge separate video and audio in Media3
+        //     val editedVideoItem = EditedMediaItem.Builder(videoMediaItem)
+        //         .setRemoveAudio(false) // Keep if video has audio (will be ignored anyway)
+        //         .setRemoveVideo(false)
+        //         .build()
 
-            // For Media3 Transformer, we need to create a composition or use Effects API
-            // This is a simplified approach - you might need to use Composition API for complex merging
+        //     val editedAudioItem = EditedMediaItem.Builder(audioMediaItem)
+        //         .setRemoveAudio(false)
+        //         .setRemoveVideo(true) // Remove video from audio file
+        //         .build()
 
-            // Start transformation
-            transformer.start(videoMediaItem, outputPath)
+        //     // Create sequence with both items - Media3 will merge them
+        //     val sequence = EditedMediaItemSequence.Builder(editedVideoItem, editedAudioItem)
+        //         .build()
 
-            // Wait for completion (with timeout)
-            val completed = latch.await(60, TimeUnit.SECONDS)
+        //     // Create composition
+        //     val composition = Composition.Builder(sequence)
+        //         .build()
 
-            if (!completed) {
-                transformer.cancel()
-                result = MergeResult.Error("Transformation timed out")
-            }
+        //     // Start export
+        //     transformer.start(composition, outputPath)
 
-            result
+        //     // Wait for completion (with timeout)
+        //     val completed = latch.await(120, TimeUnit.SECONDS) // 2 minutes for large files
 
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in Media3 transformation", e)
-            MergeResult.Error("Failed to merge: ${e.message}")
-        }
+        //     if (!completed) {
+        //         transformer.cancel()
+        //         result = MergeResult.Error("Export timed out after 120 seconds")
+        //     }
+
+        //     result
+
+        // } catch (e: Exception) {
+        //     Log.e(TAG, "Error in Media3 transformation", e)
+        //     MergeResult.Error("Failed to merge: ${e.message}")
+        // }
+        Log.w(TAG, "Media3VideoMerger.mergeVideoAudio() not fully implemented")
+        Log.w(TAG, "Falling back to FFmpegWrapper (MediaMuxer) for merging")
+        
+        // Return error to trigger fallback to MediaMuxer
+        return MergeResult.Error(
+            "Media3 Transformer merging not implemented yet. Use FFmpegWrapper (MediaMuxer) instead."
+        )
+        
+        /* TODO: Implement proper Media3 1.8.0 merging logic
+         * 
+         * The challenge is that Media3 Transformer API for merging separate
+         * video and audio files requires using Effects/EditedMediaItem APIs
+         * that vary significantly between versions.
+         * 
+         * For Media3 1.8.0+, you would need to:
+         * 1. Create MediaItem for video
+         * 2. Create MediaItem for audio  
+         * 3. Use Effects API or EditedMediaItem to combine them
+         * 4. Use Transformer to export the result
+         * 
+         * Example skeleton:
+         * 
+         * val videoItem = MediaItem.fromUri(videoPath)
+         * val audioItem = MediaItem.fromUri(audioPath)
+         * 
+         * val transformer = Transformer.Builder(context)
+         *     .addListener(...)
+         *     .build()
+         * 
+         * // Need to figure out proper way to combine video + audio
+         * transformer.start(videoItem, outputPath)
+         */
     }
 
     /**
@@ -143,11 +196,11 @@ class Media3VideoMerger(private val context: Context) {
                 Log.d(TAG, "Detected audio codec: $audioMime")
 
                 // Media3 Transformer has broader support than MediaMuxer
-                // but may still have limitations with some codec combinations
+                // Supports most common codecs including VP9 and AV1
                 val supportedVideoCombos = setOf(
                     "video/avc",     // H.264
                     "video/hevc",    // H.265
-                    "video/av01",    // AV1 - Media3 may support this!
+                    "video/av01",    // AV1 - Media3 supports this!
                     "video/vp8",     // VP8
                     "video/vp9"      // VP9
                 )

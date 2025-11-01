@@ -7,7 +7,7 @@ import time
 from typing import Dict, Any, Optional, Callable
 
 # Debug flag - set by Kotlin side
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 
 def debug_print(*args, **kwargs):
@@ -82,7 +82,8 @@ def get_ydl_base_options(debug_mode: bool = False) -> Dict[str, Any]:
         'fragment_retries': 10,
         'skip_unavailable_fragments': True,
         'socket_timeout': 30,
-        'no-direct-merge': True,
+        # CRITICAL: Prevents yt-dlp from attempting to merge files with ffmpeg
+        'no_direct_merge': True,  # Essential for MediaMuxer-based architecture
         'prefer_ffmpeg': False,
         'writeinfojson': False,
         'writethumbnail': False,

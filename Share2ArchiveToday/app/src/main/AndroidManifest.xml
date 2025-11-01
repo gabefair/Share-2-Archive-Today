@@ -68,7 +68,7 @@
 
         <!-- Video download activity - only available in full flavor -->
         <activity
-            android:name=".VideoDownloadActivity"
+            android:name=".download.VideoDownloadActivity"
             android:exported="true"
             android:label="Download Video/Media"
             android:icon="@drawable/ic_share_video_download"
@@ -101,7 +101,7 @@
 
         <!-- Download history activity -->
         <activity
-            android:name=".DownloadHistoryActivity"
+            android:name=".download.DownloadHistoryActivity"
             android:exported="false"
             android:label="Download History"
             android:theme="@android:style/Theme.Material.Light" />

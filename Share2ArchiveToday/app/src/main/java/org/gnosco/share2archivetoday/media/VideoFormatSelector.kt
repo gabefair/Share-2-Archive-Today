@@ -1,6 +1,6 @@
 package org.gnosco.share2archivetoday.media
 
-import org.gnosco.share2archivetoday.PythonVideoDownloader
+import org.gnosco.share2archivetoday.download.PythonVideoDownloader
 import org.gnosco.share2archivetoday.utils.FileUtils
 import android.util.Log
 

@@ -149,19 +149,19 @@ dependencies {
     implementation(libs.dec)
 
     // Additional crypto support for AES-128 HLS
-    implementation("org.bouncycastle:bcprov-jdk15on:1.70")
-    implementation("org.bouncycastle:bcpkix-jdk15on:1.70")
+    implementation(libs.bcprov.jdk15on)
+    implementation(libs.bcpkix.jdk15on)
 
     // Media3 for video processing (Transformer API)
-    implementation("androidx.media3:media3-transformer:1.5.0")
-    implementation("androidx.media3:media3-common:1.5.0")
-    implementation("androidx.media3:media3-effect:1.5.0")
+    implementation(libs.androidx.media3.transformer)
+    implementation(libs.androidx.media3.common)
+    implementation(libs.androidx.media3.effect)
 
     // Testing dependencies
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    testImplementation(libs.junit)
+    testImplementation(libs.junit.jupiter)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
 }
 java {
     toolchain {

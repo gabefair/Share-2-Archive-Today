@@ -1,46 +1,42 @@
 package org.gnosco.share2archivetoday.download
 
-import org.gnosco.share2archivetoday.download.PythonVideoDownloader
 import android.app.Activity
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.gnosco.share2archivetoday.download.BackgroundDownloadService
 import org.gnosco.share2archivetoday.media.VideoFormatSelector
 import org.gnosco.share2archivetoday.network.NetworkMonitor
 import org.gnosco.share2archivetoday.utils.ErrorMessageParser
 import org.gnosco.share2archivetoday.utils.FileUtils
 import org.gnosco.share2archivetoday.utils.UrlExtractor
-import org.gnosco.share2archivetoday.utils.VideoFileOperationsHelper
 
 /**
- * Coordinates video download operations
+ * Handles the video download initiation flow:
+ * - Checking for duplicates
+ * - Getting video info
+ * - Showing quality selection
+ * - Starting background download
  */
-class VideoDownloadCoordinator(
+class VideoDownloadInitiator(
     private val activity: Activity,
     private val pythonDownloader: PythonVideoDownloader,
     private val downloadHistoryManager: DownloadHistoryManager,
-    private val networkMonitor: NetworkMonitor,
     private val videoFormatSelector: VideoFormatSelector,
-    private val dialogManager: VideoDownloadDialogManager,
+    private val networkMonitor: NetworkMonitor,
+    private val dialogManager: VideoDownloadActivityDialogManager,
     private val downloadScope: CoroutineScope
 ) {
     companion object {
-        private const val TAG = "VideoDownloadCoordinator"
+        private const val TAG = "VideoDownloadInitiator"
     }
-    
-    private val fileOperationsHelper = VideoFileOperationsHelper(activity)
     
     /**
      * Start the download process for a URL
      */
-    fun startDownloadProcess(url: String, onSuccess: () -> Unit, onError: () -> Unit) {
+    fun initiateDownload(url: String) {
         // Block YouTube URLs for Play Store compliance
         if (UrlExtractor.isYouTubeUrl(url)) {
             Toast.makeText(
@@ -49,47 +45,37 @@ class VideoDownloadCoordinator(
                 Toast.LENGTH_LONG
             ).show()
             Log.w(TAG, "Blocked YouTube download attempt: $url")
-            onError()
+            activity.finish()
             return
         }
         
-        checkExistingDownloadAndProceed(url, onSuccess, onError)
+        checkDuplicateAndProceed(url)
     }
     
     /**
      * Check if video was already downloaded
      */
-    private fun checkExistingDownloadAndProceed(
-        url: String,
-        onSuccess: () -> Unit,
-        onError: () -> Unit
-    ) {
+    private fun checkDuplicateAndProceed(url: String) {
         Log.d(TAG, "Checking if URL was already downloaded: $url")
         val existingDownload = downloadHistoryManager.findSuccessfulDownload(url)
         
         if (existingDownload != null) {
-            Log.d(TAG, "Found existing download: ${existingDownload.title}")
+            Log.d(TAG, "Found existing download: ${existingDownload.title}, file: ${existingDownload.filePath}")
             dialogManager.showAlreadyDownloadedDialog(
+                url = url,
                 existingDownload = existingDownload,
-                onShare = {
-                    shareVideoFile(existingDownload.filePath!!, existingDownload.title)
-                    onSuccess()
-                },
-                onDownloadAgain = {
-                    showQualitySelection(url, onSuccess, onError)
-                },
-                onCancel = onError
+                onDownloadAgain = { showQualitySelection(url) }
             )
         } else {
             Log.d(TAG, "No existing download found, proceeding with quality selection")
-            showQualitySelection(url, onSuccess, onError)
+            showQualitySelection(url)
         }
     }
     
     /**
      * Show quality selection dialog
      */
-    private fun showQualitySelection(url: String, onSuccess: () -> Unit, onError: () -> Unit) {
+    private fun showQualitySelection(url: String) {
         val loadingDialog = dialogManager.showLoadingDialog(
             "Analyzing Video",
             "Getting available formats and device compatibility..."
@@ -97,6 +83,7 @@ class VideoDownloadCoordinator(
         
         downloadScope.launch {
             try {
+                // Get video info and available formats
                 Log.d(TAG, "Getting video info for quality selection: $url")
                 val videoInfo = pythonDownloader.getVideoInfo(url)
                 
@@ -104,8 +91,12 @@ class VideoDownloadCoordinator(
                     loadingDialog.dismiss()
                     
                     if (videoInfo == null) {
-                        Toast.makeText(activity, "Unable to get video information", Toast.LENGTH_SHORT).show()
-                        onError()
+                        Toast.makeText(
+                            activity,
+                            "Unable to get video information",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        activity.finish()
                         return@withContext
                     }
                     
@@ -115,35 +106,50 @@ class VideoDownloadCoordinator(
                             "This site is not supported or blocks downloads. Please email support@gnosco.org if you want us to look at it",
                             Toast.LENGTH_LONG
                         ).show()
-                        onError()
+                        activity.finish()
                         return@withContext
                     }
                     
+                    // Build unified quality options
                     val qualityOptions = videoFormatSelector.buildUnifiedQualityOptions(videoInfo)
                     
                     if (qualityOptions.isEmpty()) {
-                        Toast.makeText(activity, "No suitable formats found", Toast.LENGTH_SHORT).show()
-                        onError()
+                        Toast.makeText(
+                            activity,
+                            "No suitable formats found",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        activity.finish()
                         return@withContext
                     }
                     
+                    // Get network recommendation
+                    val networkRecommendation = networkMonitor.getRecommendationText()
+                    
+                    val dialogTitle = buildString {
+                        append("Select Download Quality")
+                        append("\nDuration: ${FileUtils.formatDuration(videoInfo.duration.toLong())}")
+                        append("\nUploader: ${videoInfo.uploader}")
+                        append("\nExtractor: ${videoInfo.extractor ?: "unknown"}")
+                        if (networkRecommendation.isNotEmpty()) {
+                            append("\nNetwork: $networkRecommendation")
+                        }
+                    }
+                    
                     dialogManager.showQualitySelectionDialog(
-                        videoInfo = videoInfo,
+                        title = dialogTitle,
                         qualityOptions = qualityOptions,
                         onQualitySelected = { selectedOption ->
+                            // Show data usage warning if needed
                             if (networkMonitor.shouldWarnAboutDataUsage()) {
                                 dialogManager.showDataUsageWarning(
                                     qualityOption = selectedOption,
-                                    onContinue = {
-                                        executeDownload(url, selectedOption, onSuccess, onError)
-                                    },
-                                    onCancel = onError
+                                    onContinue = { startDownloadWithQualityOption(url, selectedOption) }
                                 )
                             } else {
-                                executeDownload(url, selectedOption, onSuccess, onError)
+                                startDownloadWithQualityOption(url, selectedOption)
                             }
-                        },
-                        onCancel = onError
+                        }
                     )
                 }
             } catch (e: Exception) {
@@ -153,8 +159,7 @@ class VideoDownloadCoordinator(
                     val friendlyError = ErrorMessageParser.parseFriendlyErrorMessage(e)
                     dialogManager.showErrorDialog(
                         title = "Unable to Get Video Information",
-                        message = friendlyError,
-                        onDismiss = onError
+                        message = friendlyError
                     )
                 }
             }
@@ -162,26 +167,25 @@ class VideoDownloadCoordinator(
     }
     
     /**
-     * Execute the download with selected quality
+     * Start download with selected quality option
      */
-    private fun executeDownload(
-        url: String,
-        qualityOption: VideoFormatSelector.QualityOption,
-        onSuccess: () -> Unit,
-        onError: () -> Unit
-    ) {
+    private fun startDownloadWithQualityOption(url: String, qualityOption: VideoFormatSelector.QualityOption) {
         Toast.makeText(activity, "Starting video download...", Toast.LENGTH_SHORT).show()
         
         downloadScope.launch {
             try {
+                // Get video info first
                 Log.d(TAG, "Getting video info for download: $url")
                 val videoInfo = pythonDownloader.getVideoInfo(url)
                 
+                // Determine the best title to use
                 val title = when {
-                    !videoInfo?.title.isNullOrBlank() && videoInfo?.title != "Unknown" -> videoInfo!!.title
+                    !videoInfo?.title.isNullOrBlank() && videoInfo?.title != "Unknown" -> {
+                        videoInfo!!.title
+                    }
                     else -> {
                         try {
-                            val uri = Uri.parse(url)
+                            val uri = android.net.Uri.parse(url)
                             val domain = uri.host?.removePrefix("www.")?.removePrefix("m.") ?: "unknown"
                             "Video from $domain"
                         } catch (e: Exception) {
@@ -191,19 +195,26 @@ class VideoDownloadCoordinator(
                 }
                 
                 val uploader = videoInfo?.uploader ?: "Unknown"
+                
                 Log.d(TAG, "Video info: $title by $uploader")
                 Log.d(TAG, "Selected quality option: ${qualityOption.displayName}")
                 
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(activity, "Downloading: $title", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        activity,
+                        "Downloading: $title",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
                 
+                // Map quality option to download parameters
                 val (quality, formatId) = when (val strategy = qualityOption.downloadStrategy) {
                     is VideoFormatSelector.DownloadStrategy.Combined -> strategy.quality to strategy.formatId
                     is VideoFormatSelector.DownloadStrategy.Separate -> strategy.quality to null
                     is VideoFormatSelector.DownloadStrategy.QualityBased -> strategy.quality to null
                 }
                 
+                // Start background download service
                 BackgroundDownloadService.startDownload(
                     context = activity,
                     url = url,
@@ -220,7 +231,7 @@ class VideoDownloadCoordinator(
                         "Download started in background. You'll be notified when complete.",
                         Toast.LENGTH_LONG
                     ).show()
-                    onSuccess()
+                    activity.finish()
                 }
                 
             } catch (e: Exception) {
@@ -229,30 +240,11 @@ class VideoDownloadCoordinator(
                     val friendlyError = ErrorMessageParser.parseFriendlyErrorMessage(e)
                     dialogManager.showErrorDialog(
                         title = "Download Failed",
-                        message = friendlyError,
-                        onDismiss = onError
+                        message = friendlyError
                     )
                 }
             }
         }
-    }
-    
-    /**
-     * Share a video file, excluding the VideoDownloadActivity from the chooser
-     */
-    private fun shareVideoFile(filePath: String, title: String) {
-        fileOperationsHelper.shareVideo(
-            filePath = filePath,
-            title = title,
-            excludeActivity = VideoDownloadActivity::class.java
-        )
-    }
-    
-    /**
-     * Open a video file with the default player
-     */
-    private fun openVideoFile(filePath: String) {
-        fileOperationsHelper.openVideo(filePath)
     }
 }
 

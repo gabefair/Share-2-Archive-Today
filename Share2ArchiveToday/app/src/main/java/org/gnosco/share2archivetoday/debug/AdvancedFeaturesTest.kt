@@ -1,6 +1,6 @@
 package org.gnosco.share2archivetoday.debug
 
-import org.gnosco.share2archivetoday.PythonVideoDownloader
+import org.gnosco.share2archivetoday.download.PythonVideoDownloader
 import org.gnosco.share2archivetoday.crypto.*
 import org.gnosco.share2archivetoday.network.*
 import android.content.Context

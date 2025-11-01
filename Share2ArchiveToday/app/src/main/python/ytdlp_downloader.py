@@ -171,36 +171,15 @@ class VideoDownloader:
             if format_id:
                 debug_print(f"[info] Note: format_id '{format_id}' is deprecated, using quality-based selection", flush=True)
 
-            if DEBUG_MODE:
-                self.video_handler.debug_available_formats(url)
+            # Note: Don't call debug_available_formats() here - it makes an extra yt-dlp call
+            # The user already got formats from the initial getVideoInfo() call
 
             progress_tracker = ProgressTracker(progress_callback)
 
-            # Get video info to understand available formats
-            try:
-                video_info = self.get_video_info(url)
-                extractor = video_info.get('extractor', 'unknown')
-                debug_print(f"[info] Video extractor: {extractor}", flush=True)
-
-                formats = video_info.get('formats', [])
-                format_analysis = self.format_processor.analyze_formats(formats)
-                
-                debug_print(f"[info] Format analysis: DASH={format_analysis['has_dash_streams']}, " +
-                          f"Audio-only={format_analysis['has_audio_only']}, " +
-                          f"Video-only={format_analysis['has_video_only']}", flush=True)
-                
-                if format_analysis['has_dash_streams'] or \
-                   (format_analysis['has_video_only'] and format_analysis['has_audio_only']):
-                    debug_print(f"[info] Using DASH-optimized strategy for complex streams", flush=True)
-                    return self.video_handler.download_dash_video(url, output_dir, quality, progress_tracker)
-
-            except Exception as e:
-                debug_print(f"[warning] Could not get video info for optimization: {e}", flush=True)
-
-            # Try standard download strategies
-            return self.video_handler.download_video_with_strategies(
-                url, output_dir, quality, progress_tracker, self.format_processor
-            )
+            # Always use DASH-optimized download for resilience
+            # DASH strategy handles both separate and combined streams
+            debug_print(f"[info] Using DASH-capable download strategy", flush=True)
+            return self.video_handler.download_dash_video(url, output_dir, quality, progress_tracker)
 
         except Exception as e:
             error_msg = str(e)
