@@ -19,7 +19,7 @@ open class MainActivity : Activity() {
     private val urlExtractor: UrlExtractor by lazy { UrlExtractor() }
     private val urlCleaner: UrlCleaner by lazy { UrlCleaner() }
     private val urlOptimizer: UrlOptimizer by lazy { UrlOptimizer() }
-    private val archiveUrlProcessor: ArchiveUrlProcessor by lazy { ArchiveUrlProcessor() }
+    internal val archiveUrlProcessor: ArchiveUrlProcessor by lazy { ArchiveUrlProcessor() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,7 +72,7 @@ open class MainActivity : Activity() {
                         val url = extractUrl(sharedText)
 
                         if (url != null) {
-                            threeSteps(url)
+                            fourSteps(url)
                         } else {
                             Toast.makeText(this, "No URL found in shared text", Toast.LENGTH_SHORT).show()
                             finish()
@@ -105,10 +105,23 @@ open class MainActivity : Activity() {
         finish()
     }
 
-    open fun threeSteps(url: String) {
+    open fun fourSteps(url: String) {
         val processedUrl = processArchiveUrl(url)
         val cleanedUrl = handleURL(processedUrl)
+        
+        // Check if the cleaned URL can be archived (single check - getNonArchivableReason returns null if archivable)
+        val nonArchivableReason = archiveUrlProcessor.getNonArchivableReason(cleanedUrl)
+        if (nonArchivableReason != null) {
+            Toast.makeText(this, nonArchivableReason, Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
+        nowOpenInBrowser(cleanedUrl)
+    }
+
+    open fun nowOpenInBrowser(cleanedUrl: String): Boolean {
         openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
+        return true
     }
 
     internal fun handleImageShare(imageUri: Uri) {
@@ -117,7 +130,7 @@ open class MainActivity : Activity() {
             val qrUrl = extractUrl(qrCodeText)
 
             if (qrUrl != null) {
-                threeSteps(qrUrl)
+                fourSteps(qrUrl)
                 Toast.makeText(this, "URL found in QR code", Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(this, "No URL found in QR code image", Toast.LENGTH_SHORT).show()
@@ -134,6 +147,7 @@ open class MainActivity : Activity() {
      * Main URL handling method that combines ClearURLs rules with platform-specific optimizations
      */
     internal fun handleURL(url: String): String {
+
         // First clean with ClearURLs rules
         var rulesCleanedUrl = url
         if (clearUrlsRulesManager?.areRulesLoaded() == true) {
