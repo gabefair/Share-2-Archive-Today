@@ -11,8 +11,8 @@ android {
         applicationId = "org.gnosco.share2archivetoday"
         minSdk = 21
         targetSdk = 36
-        versionCode = 59
-        versionName = "5.9"
+        versionCode = 60
+        versionName = "6.0"
     }
 
     buildFeatures {
