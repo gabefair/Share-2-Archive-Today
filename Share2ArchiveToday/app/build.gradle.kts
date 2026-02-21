@@ -16,7 +16,7 @@ android {
         versionName = "7.1"
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters += listOf("arm64-v8a", "x86_64")
         }
 
         // Feature flags for different architectures
@@ -109,7 +109,7 @@ android {
 
 chaquopy {
     defaultConfig {
-        version = "3.11"
+        version = "3.13"
 
         pip {
             // yt-dlp dependencies (yt-dlp itself is now included from source)
