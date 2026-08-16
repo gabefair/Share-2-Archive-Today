@@ -144,6 +144,8 @@ class UrlOptimizer {
         var removeYouTubeParams = false
         var removeSubstackParams = false
         var removeFacebookParams = false
+        var removeRedditParams = false
+        var removeMSNParams = false
 
         // Additional handling for YouTube URLs
         if (uri.host?.contains("youtube.com") == true || uri.host?.contains("youtu.be") == true) {
@@ -170,12 +172,22 @@ class UrlOptimizer {
             removeFacebookParams = true
         }
 
+        else if(uri.host?.endsWith(".reddit.com") == true) {
+            removeRedditParams = true
+        }
+
+        else if(uri.host?.endsWith(".msn.com") == true) {
+            removeMSNParams = true
+        }
+
         uri.legacyGetQueryParameterNames().forEach { param ->
             // Add only non-tracking parameters to the new URL aka anything that is false on this return
             if (!isTrackingParam(param) &&
                 !(removeYouTubeParams && isUnwantedYoutubeParam(param)) &&
                 !(removeSubstackParams && isUnwantedSubstackParam(param)) &&
-                !(removeFacebookParams && isUnwantedFacebookParam(param))
+                !(removeFacebookParams && isUnwantedFacebookParam(param)) &&
+                !(removeRedditParams && isUnwantedRedditParam(param)) &&
+                !(removeMSNParams && isUnwantedMSNParam(param))
                 )
             {
                 newUriBuilder.appendQueryParameter(param, uri.getQueryParameter(param))
@@ -208,12 +220,22 @@ class UrlOptimizer {
             "rcm", //Linkedin's new tracker
             "maca", //Flipboard's tracker
             "xmt", //threads new tracker
+            "gad_source", "gad_campaignid", "gclid", "ref_src", "campaignid",
             "gc_id","h_ga_id","h_ad_id","h_keyword_id","gad_source", "impressionid", //reddit ad tracker
             "ga_source", "ga_medium", "ga_campaign", "ga_content", "ga_term", "int_source",
-            "chainedPosts", // Reddits new tracker
+            "screen_view_count", "chainedPosts", // Reddits new tracker
+            "mbnlid","mblid", //morning brew's newsletter trackers
+            "cvpid",  //tracker used by MSN and some microsoft products
             "mibextid" //facebooks new tracker
         )
         return param in trackingParams
+    }
+
+    fun isUnwantedMSNParam(param: String): Boolean {
+        val msnParams = setOf(
+            "pc"
+        )
+        return param in msnParams
     }
 
     fun isUnwantedFacebookParam(param: String): Boolean {
@@ -224,6 +246,17 @@ class UrlOptimizer {
             "fs"
         )
         return param in facebookParams
+    }
+
+    fun isUnwantedRedditParam(param: String): Boolean {
+        val redditParams = setOf(
+            "screen_view_count",
+            "chainedPosts",
+            "solution",
+            "token",
+            "jsc_orig_r"
+        )
+        return param in redditParams
     }
 
     fun isUnwantedYoutubeParam(param: String): Boolean {
