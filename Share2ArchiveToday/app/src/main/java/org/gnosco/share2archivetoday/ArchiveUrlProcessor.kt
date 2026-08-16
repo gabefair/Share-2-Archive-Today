@@ -10,6 +10,8 @@ class ArchiveUrlProcessor {
 
     private val nonArchivablePatterns = listOf(
         Pair(Regex("^https?://news\\.google\\.com/read/.*", RegexOption.IGNORE_CASE), "news.google.com/read URLs cannot be archived yet"),
+        Pair(Regex("^https?://share\\.google\\.com/.*", RegexOption.IGNORE_CASE), "share.google.com URLs cannot be archived anymore"),
+        Pair(Regex("^https?://finance\\.yahoo\\.com/.*", RegexOption.IGNORE_CASE), "finance.yahoo.com URLs cannot be archived anymore"),
     )
     
     // Cache for the last checked URL to avoid duplicate searches
