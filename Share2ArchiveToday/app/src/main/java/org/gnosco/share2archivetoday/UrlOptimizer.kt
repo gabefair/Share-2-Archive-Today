@@ -51,8 +51,8 @@ class UrlOptimizer {
             }
         }
 
-        // Substack-specific handling
-        else if(uri.host?.endsWith(".substack.com") == true) {
+        // Substack-specific handling (publication subdomains only; notes live on substack.com)
+        else if (hostMatchesDomain(uri.host, "substack.com") && uri.host != "substack.com") {
             // Add "no_cover=true" parameter for better archive quality
             if (uri.getQueryParameter("no_cover") == null) {
                 newUriBuilder.appendQueryParameter("no_cover", "true")
@@ -164,19 +164,19 @@ class UrlOptimizer {
             }
         }
 
-        else if(uri.host?.endsWith(".substack.com") == true) {
+        else if (hostMatchesDomain(uri.host, "substack.com")) {
             removeSubstackParams = true
         }
 
-        else if(uri.host?.endsWith(".facebook.com") == true) {
+        else if (hostMatchesDomain(uri.host, "facebook.com")) {
             removeFacebookParams = true
         }
 
-        else if(uri.host?.endsWith(".reddit.com") == true) {
+        else if (hostMatchesDomain(uri.host, "reddit.com")) {
             removeRedditParams = true
         }
 
-        else if(uri.host?.endsWith(".msn.com") == true) {
+        else if (hostMatchesDomain(uri.host, "msn.com")) {
             removeMSNParams = true
         }
 
@@ -275,6 +275,10 @@ class UrlOptimizer {
             "showWelcomeOnShare"
         )
         return param in substackParams
+    }
+
+    private fun hostMatchesDomain(host: String?, domain: String): Boolean {
+        return host != null && (host == domain || host.endsWith(".$domain"))
     }
 }
 
