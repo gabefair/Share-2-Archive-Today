@@ -136,8 +136,19 @@ open class MainActivity : Activity() {
      */
     internal fun handleURL(url: String): String {
 
-        // First clean with ClearURLs rules
-        var rulesCleanedUrl = url
+        // Find the last occurrence of "https://" in the URL, which should be the start of the valid part
+        val lastValidUrlIndex = url.lastIndexOf("https://")
+        // Sometimes nested urls which have already been archived by the service are saved with double or param expanded urls. This cleans that up. For example archives from fascist news site westernjournal
+        return if (lastValidUrlIndex != -1) {
+            // Extract the portion from the last valid "https://" and clean any remaining %09 sequences
+            url.substring(lastValidUrlIndex).replace(Regex("%09+"), "")
+        } else {
+            // If no valid "https://" is found, return the original URL cleaned of %09 sequences
+            url.replace(Regex("%09+"), "")
+        }
+
+        // Second clean with ClearURLs rules
+        var rulesCleanedUrl = url //init with originoal url in case the clearUrls don't load in time
         if (clearUrlsRulesManager?.areRulesLoaded() == true) {
             rulesCleanedUrl = clearUrlsRulesManager!!.clearUrl(url)
         }
@@ -147,8 +158,7 @@ open class MainActivity : Activity() {
         rulesCleanedUrl = removeAnchorsAndTextFragments(rulesCleanedUrl)
 
         // Then apply additional platform-specific optimizations that might not are in the rules
-        val result = applyPlatformSpecificOptimizations(rulesCleanedUrl)
-        return result
+        return applyPlatformSpecificOptimizations(rulesCleanedUrl)
     }
 
     internal fun processArchiveUrl(url: String): String {
