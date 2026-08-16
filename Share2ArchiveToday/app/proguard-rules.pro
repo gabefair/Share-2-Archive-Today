@@ -184,6 +184,24 @@
     public <methods>;
 }
 
+##---------------Begin: uBlock removeparam Components ----------
+-keep class org.gnosco.share2archivetoday.ublock.UBlockRemoveParamCleaner {
+    public <init>(...);
+    public *** cleanUrl(...);
+    public *** areRulesLoaded();
+}
+
+-keep class org.gnosco.share2archivetoday.ublock.UBlockRemoveParamRuleParser {
+    public static *** parseLine(...);
+    public static *** parseAll(...);
+}
+
+-keepclassmembers class org.gnosco.share2archivetoday.ublock.** {
+    public <init>();
+    public <fields>;
+    public <methods>;
+}
+
 ##---------------Begin: Kotlin ----------
 # Keep Kotlin metadata for reflection
 -keep class kotlin.Metadata { *; }

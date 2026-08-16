@@ -3,12 +3,15 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
+import org.gnosco.share2archivetoday.ublock.UBlockRemoveParamCleaner
 
 open class MainActivity : Activity() {
     private var clearUrlsRulesManager: ClearUrlsRulesManager? = null
+    private var uBlockRemoveParamCleaner: UBlockRemoveParamCleaner? = null
     private var qrCodeScanner: QRCodeScanner? = null
     
     // Lazy initialization for components that don't need context
@@ -22,6 +25,7 @@ open class MainActivity : Activity() {
 
         // Initialize components that need context
         clearUrlsRulesManager = ClearUrlsRulesManager(applicationContext)
+        uBlockRemoveParamCleaner = UBlockRemoveParamCleaner(applicationContext)
         qrCodeScanner = QRCodeScanner(applicationContext)
 
         handleShareIntent(intent)
@@ -36,7 +40,7 @@ open class MainActivity : Activity() {
      * Show a toast on first use to help users discover they can pin the app
      */
     private fun showFirstTimeToast() {
-        val prefs = getSharedPreferences("share2archive_prefs", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("share2archive_prefs", MODE_PRIVATE)
         val isFirstTime = prefs.getBoolean("is_first_time", true)
 
         if (isFirstTime) {
@@ -71,7 +75,7 @@ open class MainActivity : Activity() {
                     // Handle image shares
                     if (intent.type?.startsWith("image/") == true) {
                         try {
-                            val imageUri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                            val imageUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                 intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
                             } else {
                                 @Suppress("DEPRECATION")
@@ -135,23 +139,28 @@ open class MainActivity : Activity() {
      * Main URL handling method that combines ClearURLs rules with platform-specific optimizations
      */
     internal fun handleURL(url: String): String {
-
+        var rulesCleanedUrl: String
         // Find the last occurrence of "https://" in the URL, which should be the start of the valid part
         val lastValidUrlIndex = url.lastIndexOf("https://")
         // Sometimes nested urls which have already been archived by the service are saved with double or param expanded urls. This cleans that up. For example archives from fascist news site westernjournal
-        return if (lastValidUrlIndex != -1) {
+        if (lastValidUrlIndex != -1) {
             // Extract the portion from the last valid "https://" and clean any remaining %09 sequences
-            url.substring(lastValidUrlIndex).replace(Regex("%09+"), "")
+            rulesCleanedUrl = url.substring(lastValidUrlIndex).replace(Regex("%09+"), "")
         } else {
             // If no valid "https://" is found, return the original URL cleaned of %09 sequences
-            url.replace(Regex("%09+"), "")
+            rulesCleanedUrl = url.replace(Regex("%09+"), "")
         }
 
-        // Second clean with ClearURLs rules
-        var rulesCleanedUrl = url //init with originoal url in case the clearUrls don't load in time
+        // Clean with ClearURLs rules
         if (clearUrlsRulesManager?.areRulesLoaded() == true) {
-            rulesCleanedUrl = clearUrlsRulesManager!!.clearUrl(url)
+            rulesCleanedUrl = clearUrlsRulesManager!!.clearUrl(rulesCleanedUrl)
         }
+
+        // Clean with uBlock Origin removeparam rules
+        if (uBlockRemoveParamCleaner?.areRulesLoaded() == true) {
+            rulesCleanedUrl = uBlockRemoveParamCleaner!!.cleanUrl(rulesCleanedUrl)
+        }
+
         rulesCleanedUrl = cleanTrackingParamsFromUrl(rulesCleanedUrl)
 
         // Remove anchors and text fragments
