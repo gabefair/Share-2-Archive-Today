@@ -11,13 +11,11 @@ class UrlCleaner {
      * Clean a URL by removing trailing punctuation and normalizing protocol
      */
     fun cleanUrl(url: String): String {
-        val cleanedUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            val lastHttpsIndex = url.lastIndexOf("https://")
-            val lastHttpIndex = url.lastIndexOf("http://")
-            val lastValidUrlIndex = maxOf(lastHttpsIndex, lastHttpIndex)
+        val cleanedUrl = if (!hasHttpProtocol(url)) {
+            val lastValidUrlIndex = findLastHttpProtocolStart(url)
 
-            if (lastValidUrlIndex != -1) {
                 // Extract the portion from the last valid protocol and clean any remaining %09 sequences
+            if (lastValidUrlIndex != null) {
                 url.substring(lastValidUrlIndex).replace(Regex("%09+"), "")
             } else {
                 // If no valid protocol is found, add https:// and clean %09 sequences
@@ -25,7 +23,7 @@ class UrlCleaner {
             }
         } else {
             // URL already starts with a protocol, just clean %09 sequences
-            url.replace(Regex("%09+"), "")
+            normalizeUrlProtocol(url).replace(Regex("%09+"), "")
         }
 
         // Parse the URL to check if it has query parameters

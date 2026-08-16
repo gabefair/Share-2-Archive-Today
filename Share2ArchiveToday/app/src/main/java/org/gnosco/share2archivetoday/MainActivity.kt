@@ -140,14 +140,12 @@ open class MainActivity : Activity() {
      */
     internal fun handleURL(url: String): String {
         var rulesCleanedUrl: String
-        // Find the last occurrence of "https://" in the URL, which should be the start of the valid part
-        val lastValidUrlIndex = url.lastIndexOf("https://")
+        // Find the last occurrence of a protocol in the URL, which should be the start of the valid part
+        val lastValidUrlIndex = findLastHttpProtocolStart(url)
         // Sometimes nested urls which have already been archived by the service are saved with double or param expanded urls. This cleans that up. For example archives from fascist news site westernjournal
-        if (lastValidUrlIndex != -1) {
-            // Extract the portion from the last valid "https://" and clean any remaining %09 sequences
+        if (lastValidUrlIndex != null) {
             rulesCleanedUrl = url.substring(lastValidUrlIndex).replace(Regex("%09+"), "")
         } else {
-            // If no valid "https://" is found, return the original URL cleaned of %09 sequences
             rulesCleanedUrl = url.replace(Regex("%09+"), "")
         }
 
