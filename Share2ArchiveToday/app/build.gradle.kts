@@ -3,6 +3,12 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.android)
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+    }
+}
+
 android {
     namespace = "org.gnosco.share2archivetoday"
     compileSdk = 36
@@ -59,6 +65,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.core.ktx)
     implementation("com.google.zxing:core:3.5.3")
 
     // ML Kit for barcode scanning (optional dependency)

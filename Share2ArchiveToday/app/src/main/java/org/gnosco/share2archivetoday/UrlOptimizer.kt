@@ -2,6 +2,7 @@ package org.gnosco.share2archivetoday
 
 import android.net.Uri
 import android.util.Log
+import androidx.core.net.toUri
 
 /**
  * Handles platform-specific URL optimizations and tracking parameter removal
@@ -11,7 +12,7 @@ class UrlOptimizer {
      * Apply platform-specific optimizations that may not be covered by ClearURLs rules
      */
     fun applyPlatformSpecificOptimizations(url: String): String {
-        val uri = Uri.parse(url)
+        val uri = url.toUri()
         val newUriBuilder = uri.buildUpon()
         var changed = false
 
@@ -34,7 +35,7 @@ class UrlOptimizer {
             val nestedQueryParams = uri.getQueryParameter("q")
             if (nestedQueryParams != null && nestedQueryParams.contains("?")) {
                 try {
-                    val nestedUri = Uri.parse(nestedQueryParams)
+                    val nestedUri = nestedQueryParams.toUri()
                     val newNestedUriBuilder = nestedUri.buildUpon().legacyClearQuery()
 
                     nestedUri.legacyGetQueryParameterNames().forEach { nestedParam ->
@@ -92,10 +93,10 @@ class UrlOptimizer {
             if (targetUrl != null) {
                 try {
                     // Parse the nested target URL
-                    val targetUri = Uri.parse(targetUrl)
+                    val targetUri = targetUrl.toUri()
 
                     val cleanedTargetUrl = cleanTrackingParamsFromUrl(targetUri.toString())
-                    val cleanedTargetUri = Uri.parse(cleanedTargetUrl)
+                    val cleanedTargetUri = cleanedTargetUrl.toUri()
                     
                     // Create a new URI builder with the target URL
                     val newTargetUriBuilder = cleanedTargetUri.buildUpon().legacyClearQuery()
@@ -135,7 +136,7 @@ class UrlOptimizer {
      * Clean tracking parameters from URLs
      */
     fun cleanTrackingParamsFromUrl(url: String): String {
-        val uri = Uri.parse(url)
+        val uri = url.toUri()
         if (uri.legacyGetQueryParameterNames().isEmpty()) {
             return url
         }
@@ -152,7 +153,7 @@ class UrlOptimizer {
             removeYouTubeParams = true
             val nestedQueryParams = uri.getQueryParameter("q")
             if (nestedQueryParams != null) {
-                val nestedUri = Uri.parse(nestedQueryParams)
+                val nestedUri = nestedQueryParams.toUri()
                 val newNestedUriBuilder = nestedUri.buildUpon().legacyClearQuery()
 
                 nestedUri.legacyGetQueryParameterNames().forEach { nestedParam ->
