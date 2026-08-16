@@ -11,14 +11,14 @@ kotlin {
 
 android {
     namespace = "org.gnosco.share2archivetoday"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "org.gnosco.share2archivetoday"
-        minSdk = 21
-        targetSdk = 36
-        versionCode = 60
-        versionName = "6.0"
+        minSdk = 23
+        targetSdk = 37
+        versionCode = 61
+        versionName = "6.1"
     }
 
     buildFeatures {
