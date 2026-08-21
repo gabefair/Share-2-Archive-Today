@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import java.util.UUID
@@ -108,6 +109,7 @@ class VideoDownloadService : Service() {
                 partials.clear(downloadId)
                 notifyFinished(true, title, uri, null)
             } catch (t: Throwable) {
+                Log.e(TAG, "Download failed for $url", t)
                 history.add(
                     HistoryEntry(
                         id = downloadId,
@@ -224,6 +226,7 @@ class VideoDownloadService : Service() {
         name.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(80).ifBlank { "download" }
 
     companion object {
+        private const val TAG = "VideoDownload"
         const val CHANNEL_ID = "video_downloads"
         const val NOTIFICATION_ID = 42
         const val EXTRA_URL = "url"

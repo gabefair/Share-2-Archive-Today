@@ -5,7 +5,7 @@ import json
 import os
 from typing import Any, Callable, Optional
 
-import yt_dlp
+from yt_dlp.YoutubeDL import YoutubeDL
 
 
 def _filesize(fmt: dict[str, Any]) -> Optional[int]:
@@ -23,8 +23,10 @@ def probe(url: str) -> str:
         "no_warnings": True,
         "skip_download": True,
         "noplaylist": True,
+        # Prefer native HLS; our Android stub disables ffmpeg/external FDs.
+        "hls_prefer_native": True,
     }
-    with yt_dlp.YoutubeDL(opts) as ydl:
+    with YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
 
     formats_out = []
@@ -111,9 +113,10 @@ def download(
         # Never invoke ffmpeg merge/postprocess — Kotlin/Media3 handles muxing.
         "postprocessors": [],
         "keepvideo": False,
+        "hls_prefer_native": True,
     }
 
-    with yt_dlp.YoutubeDL(opts) as ydl:
+    with YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
         filepath = ydl.prepare_filename(info)
 

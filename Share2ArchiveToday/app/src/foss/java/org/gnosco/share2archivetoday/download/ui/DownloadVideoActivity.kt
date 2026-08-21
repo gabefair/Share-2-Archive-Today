@@ -7,6 +7,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -103,7 +104,12 @@ class DownloadVideoActivity : MainActivity() {
                 showQualityPicker(url, probe.title, probe.formats)
             } catch (t: Throwable) {
                 progress.dismiss()
-                Toast.makeText(this@DownloadVideoActivity, t.message ?: "Probe failed", Toast.LENGTH_LONG).show()
+                Log.e(TAG, "Probe failed", t)
+                Toast.makeText(
+                    this@DownloadVideoActivity,
+                    t.message?.take(180) ?: "Probe failed",
+                    Toast.LENGTH_LONG,
+                ).show()
                 finish()
             }
         }
@@ -255,6 +261,7 @@ class DownloadVideoActivity : MainActivity() {
     }
 
     companion object {
+        private const val TAG = "DownloadVideo"
         private const val REQ_NOTIF = 1001
     }
 }

@@ -13,7 +13,7 @@ from pathlib import Path
 
 DROP_FILES = {
     "yt_dlp/__main__.py",
-    "yt_dlp/options.py",
+    # Keep options.py: package __init__ imports parseOpts at load time.
 }
 DROP_DIRS = {
     "yt_dlp/__pyinstaller",
@@ -68,15 +68,49 @@ def main() -> int:
         if path.is_dir():
             shutil.rmtree(path)
 
-    # external.py shells out to aria2c/curl/wget — unusable on Android app storage.
+    # external.py shells out to aria2c/curl/wget/ffmpeg — unusable in the app sandbox.
+    # Keep the public names yt-dlp imports at load time; make them refuse to run.
     external = dest_pkg / "downloader" / "external.py"
     if external.exists():
         external.write_text(
             '"""Stub: external downloaders are not available on Android."""\n'
             "from ..utils import DownloadError\n\n"
+            "\n"
             "class ExternalFD:\n"
+            "    EXE_NAME = 'external'\n"
+            "    SUPPORTED_PROTOCOLS = ()\n"
+            "    SUPPORTED_FEATURES = ()\n"
+            "\n"
+            "    @classmethod\n"
+            "    def get_basename(cls):\n"
+            "        return cls.__name__[:-2].lower()\n"
+            "\n"
+            "    @classmethod\n"
+            "    def can_download(cls, info_dict, path=None):\n"
+            "        return False\n"
+            "\n"
             "    def __init__(self, *args, **kwargs):\n"
             "        raise DownloadError('External downloaders are not supported on Android')\n"
+            "\n"
+            "\n"
+            "class FFmpegFD(ExternalFD):\n"
+            "    EXE_NAME = 'ffmpeg'\n"
+            "\n"
+            "    @classmethod\n"
+            "    def can_merge_formats(cls, info_dict, params):\n"
+            "        return False\n"
+            "\n"
+            "    @classmethod\n"
+            "    def can_download(cls, info_dict, path=None):\n"
+            "        return False\n"
+            "\n"
+            "\n"
+            "def list_external_downloaders():\n"
+            "    return []\n"
+            "\n"
+            "\n"
+            "def get_external_downloader(external_downloader):\n"
+            "    return None\n"
         )
 
     print(f"Wrote trimmed yt-dlp to {out}")
