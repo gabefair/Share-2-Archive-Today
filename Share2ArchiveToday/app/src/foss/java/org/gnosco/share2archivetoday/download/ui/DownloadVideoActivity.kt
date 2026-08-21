@@ -184,6 +184,7 @@ class DownloadVideoActivity : MainActivity() {
                     audioOnly = true,
                     requiresVideoExtract = audio.requiresVideoExtract,
                 )
+                toastDownloadContinuing()
                 finish()
             }
         }
@@ -223,7 +224,12 @@ class DownloadVideoActivity : MainActivity() {
             needsMux = opt.needsMux,
             audioOnly = false,
         )
+        toastDownloadContinuing()
         finish()
+    }
+
+    private fun toastDownloadContinuing() {
+        Toast.makeText(this, R.string.download_continue_in_notifications, Toast.LENGTH_LONG).show()
     }
 
     private fun maybeWarnCellular(estimatedBytes: Long?, onContinue: () -> Unit) {

@@ -24,6 +24,8 @@ def probe(url: str) -> str:
         "skip_download": True,
         "noplaylist": True,
         # Prefer native HLS; our Android stub disables ffmpeg/external FDs.
+        # Do not override youtube player_client — yt-dlp's default fallback chain
+        # (android_sdkless → tv → web_safari → web) is the maintained workaround.
         "hls_prefer_native": True,
     }
     with YoutubeDL(opts) as ydl:
@@ -114,6 +116,8 @@ def download(
         "postprocessors": [],
         "keepvideo": False,
         "hls_prefer_native": True,
+        "retries": 3,
+        "fragment_retries": 3,
     }
 
     with YoutubeDL(opts) as ydl:

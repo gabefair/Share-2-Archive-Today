@@ -17,4 +17,5 @@
     <string name="download_cancel">Cancel</string>
     <string name="download_history_empty">No downloads yet</string>
     <string name="download_size_unknown">Size unknown</string>
+    <string name="download_continue_in_notifications">Download will continue in your notifications</string>
 </resources>
