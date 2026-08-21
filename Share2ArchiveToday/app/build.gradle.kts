@@ -21,6 +21,29 @@ android {
         versionName = "6.1"
     }
 
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("foss") {
+            dimension = "distribution"
+            isDefault = true
+            minSdk = 24
+            ndk {
+                abiFilters += listOf("arm64-v8a")
+            }
+        }
+        create("play") {
+            dimension = "distribution"
+            minSdk = 23
+        }
+        create("dev") {
+            dimension = "distribution"
+            minSdk = 24
+            ndk {
+                abiFilters += listOf("arm64-v8a", "x86_64")
+            }
+        }
+    }
+
     buildFeatures {
         viewBinding = true
     }
@@ -51,7 +74,7 @@ android {
         }
     }
 
-    dependenciesInfo { // The name of these variables are misleading, they need to be false in order to make the app more transparent.
+    dependenciesInfo {
         includeInApk = false
         includeInBundle = false
     }
@@ -62,17 +85,29 @@ android {
             isIncludeAndroidResources = true
         }
     }
+
+    // Share FOSS download sources with the emulator (dev) flavor.
+    sourceSets {
+        getByName("dev") {
+            kotlin.srcDir("src/foss/java")
+            res.srcDir("src/foss/res")
+            manifest.srcFile("src/foss/AndroidManifest.xml")
+        }
+    }
 }
 
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation("com.google.zxing:core:3.5.3")
 
-    // ML Kit for barcode scanning (optional dependency)
     compileOnly("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1")
     compileOnly("com.google.android.gms:play-services-tasks:18.2.0")
 
-    // Testing dependencies
+    "fossImplementation"(project(":ytdlp"))
+    "devImplementation"(project(":ytdlp"))
+    "fossImplementation"(libs.kotlinx.coroutines.android)
+    "devImplementation"(libs.kotlinx.coroutines.android)
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.1")
     testImplementation("org.robolectric:robolectric:4.13")

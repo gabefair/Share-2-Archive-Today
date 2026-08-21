@@ -24,4 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Share 2 Archive Today"
 include(":app")
- 
+include(":ytdlp")

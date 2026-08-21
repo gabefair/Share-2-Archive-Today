@@ -28,8 +28,22 @@ Find the companion chrome browser app on the [Chrome Web Store](https://chromewe
  - ⭐ Remove reddit's new chained-posts tracker
  - ⭐ Remove amazon ref url path tracker
  - ⭐ Remove mailchimp trackers
+ - ⭐ **F-Droid / GitHub builds only:** share-menu “Download video” via yt-dlp (not on Google Play)
 
 
 <img src="https://github.com/gabefair/Share-2-Archive-Today/assets/2096785/4a0c0e79-f6ff-48c0-819d-84687af98772" width="300">
+
+### Building (Android)
+
+Flavors: `play` (archive only), `foss` (default, includes download), `dev` (foss + emulator ABIs).
+
+On **NixOS**, AGP’s `aapt2` needs a normal Linux linker — use `steam-run`:
+
+```bash
+cd Share2ArchiveToday
+steam-run ./gradlew :app:assembleFossDebug :app:assemblePlayDebug
+```
+
+See [Share2ArchiveToday/YT-DLP_SUBMODULE.md](Share2ArchiveToday/YT-DLP_SUBMODULE.md) for the yt-dlp submodule and trim script.
 
 Also, in order for this app to be listed on the google play store, I have to reference the [privacy polcy](https://github.com/gabefair/Share-2-Archive-Today/blob/main/privacy.policy).

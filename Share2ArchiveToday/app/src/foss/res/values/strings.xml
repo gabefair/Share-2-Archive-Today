@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="download_video_label">Download video</string>
+    <string name="download_history_label">Video download history</string>
+    <string name="download_channel_name">Video downloads</string>
+    <string name="download_analyzing">Analyzing video…</string>
+    <string name="download_pick_quality">Choose quality</string>
+    <string name="download_audio_only">Audio only</string>
+    <string name="download_cellular_title">Using mobile data</string>
+    <string name="download_cellular_message">This download may use a large amount of mobile data. Continue?</string>
+    <string name="download_audio_extract_title">Audio requires full video</string>
+    <string name="download_audio_extract_message">No separate audio stream is available. The app must download the video first and then extract the audio. Continue?</string>
+    <string name="download_already_title">Already downloaded</string>
+    <string name="download_open_existing">Open existing</string>
+    <string name="download_again">Download again</string>
+    <string name="download_continue">Continue</string>
+    <string name="download_cancel">Cancel</string>
+    <string name="download_history_empty">No downloads yet</string>
+    <string name="download_size_unknown">Size unknown</string>
+</resources>

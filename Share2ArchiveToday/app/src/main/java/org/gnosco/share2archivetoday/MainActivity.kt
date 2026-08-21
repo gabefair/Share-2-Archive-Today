@@ -94,8 +94,13 @@ open class MainActivity : Activity() {
                 }
             }
         }
-        finish()
+        if (shouldFinishAfterShareIntent()) {
+            finish()
+        }
     }
+
+    /** Download UI overrides this so dialogs can stay open. */
+    protected open fun shouldFinishAfterShareIntent(): Boolean = true
 
     open fun fourSteps(url: String) {
         val processedUrl = processArchiveUrl(url)
