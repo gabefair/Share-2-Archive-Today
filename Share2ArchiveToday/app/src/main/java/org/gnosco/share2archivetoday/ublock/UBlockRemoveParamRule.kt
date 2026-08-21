@@ -73,7 +73,11 @@ internal sealed class UrlFilter {
 
 internal object UBlockRemoveParamRuleParser {
     private const val TAG = "UBlockRemoveParamParser"
-    private val RESOURCE_ONLY_MODIFIERS = Regex("""\$?(?:xhr|script|image)\b|,xhr\b|,script\b|,image\b""")
+    /** Network resource types — not document navigations / shared page URLs. */
+    private val RESOURCE_ONLY_MODIFIERS = Regex(
+        """(?:^|[,${'$'}])(?:xhr|xmlhttprequest|script|image|stylesheet|font|media|object|ping|websocket|other)\b"""
+    )
+    private val DOCUMENT_MODIFIER = Regex("""(?:^|[,${'$'}])doc(?:ument)?\b""")
 
     fun parseLine(line: String): UBlockRemoveParamRule? {
         var text = line.trim()
@@ -82,9 +86,7 @@ internal object UBlockRemoveParamRuleParser {
         val isException = text.startsWith("@@")
         if (isException) text = text.substring(2)
 
-        if (RESOURCE_ONLY_MODIFIERS.containsMatchIn(text) &&
-            !text.contains("\$document") && !text.contains("\$doc") && !text.contains(",doc")
-        ) {
+        if (RESOURCE_ONLY_MODIFIERS.containsMatchIn(text) && !DOCUMENT_MODIFIER.containsMatchIn(text)) {
             return null
         }
 
@@ -129,21 +131,14 @@ internal object UBlockRemoveParamRuleParser {
     )
 
     private fun extractRemoveParamClause(text: String): RemoveParamClause? {
-        val patterns = listOf(
-            Regex("${'$'}removeparam=([^,${'$'}]+)"),
-            Regex(",removeparam=([^,${'$'}]+)"),
-            Regex("${'$'}removeparam${'$'}"),
-            Regex(",removeparam${'$'}"),
-        )
-
-        for (pattern in patterns) {
-            val match = pattern.find(text) ?: continue
-            val value = match.groups[1]?.value
-            val trailingStart = match.range.last + 1
-            val trailing = if (trailingStart < text.length) text.substring(trailingStart) else ""
-            return RemoveParamClause(match.range.first, value, trailing)
-        }
-        return null
+        // Bare or valued removeparam; value may be absent (remove all params).
+        val pattern = Regex("""(?:^|[,${'$'}])removeparam(?:=([^,${'$'}]+))?""")
+        val match = pattern.find(text) ?: return null
+        // Optional group: empty string when bare; never use groups[1] (throws if absent).
+        val value = match.groupValues.getOrNull(1)?.takeIf { it.isNotEmpty() }
+        val trailingStart = match.range.last + 1
+        val trailing = if (trailingStart < text.length) text.substring(trailingStart) else ""
+        return RemoveParamClause(match.range.first, value, trailing)
     }
 
     private fun parseParamSpec(value: String?): ParamSpec? {
