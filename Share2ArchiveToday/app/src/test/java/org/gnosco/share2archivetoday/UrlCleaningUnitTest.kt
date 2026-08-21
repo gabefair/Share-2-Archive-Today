@@ -250,4 +250,38 @@ class UrlCleaningUnitTest {
         
         assertEquals("Should return original URL for wrong path", inputUrl, result)
     }
+
+    /**
+     * Hash fragments used as parameters (contain '=') should be preserved;
+     * plain anchors and Chrome text fragments should still be removed.
+     */
+    @Test
+    fun testRemoveAnchors_PreservesHashParams() {
+        val urlCleaner = UrlCleaner()
+        val inputUrl = "https://www.foxnews.com/search-results/search#q=trump"
+
+        val result = urlCleaner.removeAnchorsAndTextFragments(inputUrl)
+
+        assertEquals("Hash params with '=' should be preserved", inputUrl, result)
+    }
+
+    @Test
+    fun testRemoveAnchors_StripsPlainAnchors() {
+        val urlCleaner = UrlCleaner()
+        val inputUrl = "https://example.com/page#section"
+
+        val result = urlCleaner.removeAnchorsAndTextFragments(inputUrl)
+
+        assertEquals("Plain anchors should be stripped", "https://example.com/page", result)
+    }
+
+    @Test
+    fun testRemoveAnchors_StripsChromeTextFragments() {
+        val urlCleaner = UrlCleaner()
+        val inputUrl = "https://example.com/page#:~:text=hello%20world"
+
+        val result = urlCleaner.removeAnchorsAndTextFragments(inputUrl)
+
+        assertEquals("Chrome text fragments should be stripped", "https://example.com/page", result)
+    }
 }
