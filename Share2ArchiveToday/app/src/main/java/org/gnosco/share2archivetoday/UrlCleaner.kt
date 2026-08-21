@@ -73,7 +73,9 @@ class UrlCleaner {
     }
 
     /**
-     * Remove anchors and text fragments from URLs
+     * Remove anchors and text fragments from URLs.
+     * Fragments that contain '=' (e.g. #q=trump) are treated as hash-based
+     * parameters and preserved. Chrome text fragments (#:~:text=...) are always removed.
      */
     fun removeAnchorsAndTextFragments(url: String): String {
         try {
@@ -85,12 +87,16 @@ class UrlCleaner {
                 return url
             }
             
-            // Check if this is a Chrome text fragment (#:~:text=...)
+            // Chrome text fragments always strip, even though they contain '='
             if (fragment.startsWith(":~:text=") || fragment.contains(":~:text=")) {
-                // Remove the entire fragment for text fragments
                 val builder = uri.buildUpon()
                 builder.fragment(null)
                 return builder.build().toString()
+            }
+
+            // Hash used as parameters (e.g. #q=trump) — keep the fragment
+            if (fragment.contains('=')) {
+                return url
             }
             
             val builder = uri.buildUpon()
@@ -111,13 +117,17 @@ class UrlCleaner {
         // This pattern matches #:~:text= followed by any characters until end of string
         val textFragmentPattern = Regex("#:~:text=.*$")
         var cleanedUrl = url.replace(textFragmentPattern, "")
-        
-        // Remove regular anchors (#fragment) but preserve query parameters
-        // This pattern matches # followed by any characters that are not ? until end of string
-        val anchorPattern = Regex("#[^?]*$")
-        cleanedUrl = cleanedUrl.replace(anchorPattern, "")
-        
-        return cleanedUrl
+
+        val hashIndex = cleanedUrl.indexOf('#')
+        if (hashIndex == -1) return cleanedUrl
+
+        val fragment = cleanedUrl.substring(hashIndex + 1)
+        // Preserve hash-based parameters (contain '='); strip plain anchors
+        if (fragment.contains('=')) {
+            return cleanedUrl
+        }
+
+        return cleanedUrl.substring(0, hashIndex)
     }
 
     /**
