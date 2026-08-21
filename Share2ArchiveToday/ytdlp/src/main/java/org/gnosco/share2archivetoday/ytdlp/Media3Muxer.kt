@@ -1,6 +1,7 @@
 package org.gnosco.share2archivetoday.ytdlp
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.transformer.Composition
@@ -17,33 +18,65 @@ import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
- * Losslessly transmux separate video + audio files into one MP4 via Media3 Transformer.
+ * Media3 remux helpers: merge A/V, or strip video to keep audio only.
  */
 class Media3Muxer(private val context: Context) {
 
-    suspend fun mux(videoFile: File, audioFile: File, outputFile: File): File {
+    suspend fun mux(videoFile: File, audioFile: File, outputFile: File): File =
+        suspendExport(outputFile) {
+            val videoItem = EditedMediaItem.Builder(uriItem(videoFile)).build()
+            val audioItem = EditedMediaItem.Builder(uriItem(audioFile)).build()
+            Composition.Builder(
+                EditedMediaItemSequence.Builder(listOf(videoItem)).build(),
+                EditedMediaItemSequence.Builder(listOf(audioItem)).build(),
+            ).setTransmuxAudio(true).setTransmuxVideo(true).build()
+        }
+
+    suspend fun extractAudio(inputFile: File, outputFile: File): File =
+        suspendExport(outputFile) {
+            val audioOnly = EditedMediaItem.Builder(uriItem(inputFile))
+                .setRemoveVideo(true)
+                .build()
+            Composition.Builder(
+                EditedMediaItemSequence.Builder(listOf(audioOnly)).build(),
+            ).setTransmuxAudio(true).build()
+        }
+
+    fun muxBlocking(videoFile: File, audioFile: File, outputFile: File): File =
+        blockExport(outputFile) {
+            val videoItem = EditedMediaItem.Builder(uriItem(videoFile)).build()
+            val audioItem = EditedMediaItem.Builder(uriItem(audioFile)).build()
+            Composition.Builder(
+                EditedMediaItemSequence.Builder(listOf(videoItem)).build(),
+                EditedMediaItemSequence.Builder(listOf(audioItem)).build(),
+            ).setTransmuxAudio(true).setTransmuxVideo(true).build()
+        }
+
+    fun extractAudioBlocking(inputFile: File, outputFile: File): File =
+        blockExport(outputFile) {
+            val audioOnly = EditedMediaItem.Builder(uriItem(inputFile))
+                .setRemoveVideo(true)
+                .build()
+            Composition.Builder(
+                EditedMediaItemSequence.Builder(listOf(audioOnly)).build(),
+            ).setTransmuxAudio(true).build()
+        }
+
+    private fun uriItem(file: File): MediaItem =
+        MediaItem.fromUri(Uri.fromFile(file))
+
+    private suspend fun suspendExport(outputFile: File, composition: () -> Composition): File {
         if (outputFile.exists()) outputFile.delete()
         outputFile.parentFile?.mkdirs()
-
         return suspendCancellableCoroutine { cont ->
-            val videoItem = EditedMediaItem.Builder(MediaItem.fromUri(UriFromFile(videoFile))).build()
-            val audioItem = EditedMediaItem.Builder(MediaItem.fromUri(UriFromFile(audioFile))).build()
-
-            val videoSeq = EditedMediaItemSequence.Builder(videoItem).build()
-            val audioSeq = EditedMediaItemSequence.Builder(audioItem).build()
-            val composition = Composition.Builder(videoSeq, audioSeq)
-                .setTransmuxAudio(true)
-                .setTransmuxVideo(true)
-                .build()
-
             val transformer = Transformer.Builder(context)
                 .addListener(object : Transformer.Listener {
-                    override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+                    override fun onCompleted(c: Composition, exportResult: ExportResult) {
                         if (cont.isActive) cont.resume(outputFile)
                     }
 
                     override fun onError(
-                        composition: Composition,
+                        c: Composition,
                         exportResult: ExportResult,
                         exportException: ExportException,
                     ) {
@@ -51,36 +84,27 @@ class Media3Muxer(private val context: Context) {
                     }
                 })
                 .build()
-
-            cont.invokeOnCancellation {
-                runCatching { transformer.cancel() }
-            }
-            transformer.start(composition, outputFile.absolutePath)
+            cont.invokeOnCancellation { runCatching { transformer.cancel() } }
+            transformer.start(composition(), outputFile.absolutePath)
         }
     }
 
-    /** Blocking helper for callers not on a coroutine dispatcher yet. */
-    fun muxBlocking(videoFile: File, audioFile: File, outputFile: File): File {
+    private fun blockExport(outputFile: File, composition: () -> Composition): File {
         val latch = CountDownLatch(1)
         val result = AtomicReference<File?>()
         val error = AtomicReference<Throwable?>()
-
-        val videoItem = EditedMediaItem.Builder(MediaItem.fromUri(UriFromFile(videoFile))).build()
-        val audioItem = EditedMediaItem.Builder(MediaItem.fromUri(UriFromFile(audioFile))).build()
-        val composition = Composition.Builder(
-            EditedMediaItemSequence.Builder(videoItem).build(),
-            EditedMediaItemSequence.Builder(audioItem).build(),
-        ).setTransmuxAudio(true).setTransmuxVideo(true).build()
+        if (outputFile.exists()) outputFile.delete()
+        outputFile.parentFile?.mkdirs()
 
         val transformer = Transformer.Builder(context)
             .addListener(object : Transformer.Listener {
-                override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+                override fun onCompleted(c: Composition, exportResult: ExportResult) {
                     result.set(outputFile)
                     latch.countDown()
                 }
 
                 override fun onError(
-                    composition: Composition,
+                    c: Composition,
                     exportResult: ExportResult,
                     exportException: ExportException,
                 ) {
@@ -89,19 +113,14 @@ class Media3Muxer(private val context: Context) {
                 }
             })
             .build()
-
-        if (outputFile.exists()) outputFile.delete()
-        outputFile.parentFile?.mkdirs()
-        transformer.start(composition, outputFile.absolutePath)
+        transformer.start(composition(), outputFile.absolutePath)
         latch.await()
         error.get()?.let { throw it }
-        return result.get() ?: error("Mux produced no file")
+        return result.get() ?: error("Export produced no file")
     }
-
-    private fun UriFromFile(file: File): android.net.Uri = android.net.Uri.fromFile(file)
 
     companion object {
         private const val TAG = "Media3Muxer"
-        fun logFailure(t: Throwable) = Log.e(TAG, "Mux failed", t)
+        fun logFailure(t: Throwable) = Log.e(TAG, "Mux/extract failed", t)
     }
 }

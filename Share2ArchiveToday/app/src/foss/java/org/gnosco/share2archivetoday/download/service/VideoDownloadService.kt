@@ -13,7 +13,6 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
-import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +25,6 @@ import org.gnosco.share2archivetoday.download.history.DownloadHistoryStore
 import org.gnosco.share2archivetoday.download.history.HistoryEntry
 import org.gnosco.share2archivetoday.download.ui.DownloadHistoryActivity
 import org.gnosco.share2archivetoday.ytdlp.DownloadsPublisher
-import org.gnosco.share2archivetoday.ytdlp.Media3Muxer
 import org.gnosco.share2archivetoday.ytdlp.YtDlpBridge
 
 class VideoDownloadService : Service() {
@@ -48,17 +46,17 @@ class VideoDownloadService : Service() {
         val url = intent?.getStringExtra(EXTRA_URL) ?: return stopAndFinish()
         val title = intent.getStringExtra(EXTRA_TITLE) ?: "video"
         val videoFormatId = intent.getStringExtra(EXTRA_VIDEO_FORMAT_ID)
-        val audioFormatId = intent.getStringExtra(EXTRA_AUDIO_FORMAT_ID)
+        val audioFormatIds = intent.getStringArrayListExtra(EXTRA_AUDIO_FORMAT_IDS).orEmpty()
         val combinedFormatId = intent.getStringExtra(EXTRA_COMBINED_FORMAT_ID)
         val needsMux = intent.getBooleanExtra(EXTRA_NEEDS_MUX, false)
         val audioOnly = intent.getBooleanExtra(EXTRA_AUDIO_ONLY, false)
+        val requiresVideoExtract = intent.getBooleanExtra(EXTRA_REQUIRES_VIDEO_EXTRACT, false)
         val downloadId = intent.getStringExtra(EXTRA_DOWNLOAD_ID) ?: UUID.randomUUID().toString()
 
-        val notification = buildNotification("Starting download…", title, indeterminate = true)
         ServiceCompat.startForeground(
             this,
             NOTIFICATION_ID,
-            notification,
+            buildNotification("Starting download…", title, indeterminate = true),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             } else {
@@ -68,10 +66,47 @@ class VideoDownloadService : Service() {
 
         scope.launch {
             try {
-                runDownload(
-                    downloadId, url, title, videoFormatId, audioFormatId,
-                    combinedFormatId, needsMux, audioOnly,
+                val executor = DownloadExecutor(
+                    context = this@VideoDownloadService,
+                    bridge = YtDlpBridge.get(this@VideoDownloadService),
+                    partials = partials,
+                    onProgress = { done, total -> updateFromProgress(title, done, total) },
+                    onStatus = { msg -> updateNotification(msg, title, indeterminate = true) },
                 )
+                val result = executor.execute(
+                    downloadId = downloadId,
+                    url = url,
+                    videoFormatId = videoFormatId,
+                    audioFormatIds = audioFormatIds,
+                    combinedFormatId = combinedFormatId,
+                    needsMux = needsMux,
+                    audioOnly = audioOnly,
+                    requiresVideoExtract = requiresVideoExtract,
+                )
+
+                val best = partials.bestFile(downloadId) ?: result.file
+                val publishSource =
+                    if (best.length() >= result.file.length()) best else result.file
+                val ext = if (result.mimeType.startsWith("audio")) ".m4a" else ".mp4"
+                val displayName = sanitizeName(title) + ext
+                val uri = DownloadsPublisher.publish(
+                    this@VideoDownloadService, publishSource, displayName, result.mimeType,
+                )
+
+                history.add(
+                    HistoryEntry(
+                        id = downloadId,
+                        url = url,
+                        title = title,
+                        mediaStoreUri = uri.toString(),
+                        success = true,
+                        error = null,
+                        timestamp = System.currentTimeMillis(),
+                        estimatedBytes = publishSource.length(),
+                    )
+                )
+                partials.clear(downloadId)
+                notifyFinished(true, title, uri, null)
             } catch (t: Throwable) {
                 history.add(
                     HistoryEntry(
@@ -92,93 +127,6 @@ class VideoDownloadService : Service() {
             }
         }
         return START_NOT_STICKY
-    }
-
-    private fun runDownload(
-        downloadId: String,
-        url: String,
-        title: String,
-        videoFormatId: String?,
-        audioFormatId: String?,
-        combinedFormatId: String?,
-        needsMux: Boolean,
-        audioOnly: Boolean,
-    ) {
-        val bridge = YtDlpBridge.get(this)
-        val work = partials.workDir(downloadId)
-        updateNotification("Downloading…", title, 0, 100)
-
-        val finalFile: File
-        val mime: String
-
-        when {
-            audioOnly && audioFormatId != null && !needsMux -> {
-                val result = bridge.download(url, audioFormatId, work.absolutePath, continuedl = true) {
-                    updateFromProgress(title, it.downloaded, it.total)
-                }
-                finalFile = File(result.filepath)
-                partials.considerPartial(downloadId, finalFile)
-                mime = guessAudioMime(finalFile)
-            }
-            combinedFormatId != null && !needsMux -> {
-                val result = bridge.download(url, combinedFormatId, work.absolutePath, continuedl = true) {
-                    updateFromProgress(title, it.downloaded, it.total)
-                }
-                finalFile = File(result.filepath)
-                partials.considerPartial(downloadId, finalFile)
-                mime = if (audioOnly) guessAudioMime(finalFile) else "video/mp4"
-            }
-            videoFormatId != null && audioFormatId != null && needsMux -> {
-                val video = bridge.download(
-                    url, videoFormatId, work.absolutePath,
-                    outTemplate = "video.%(ext)s", continuedl = true,
-                ) { updateFromProgress(title, it.downloaded, it.total) }
-                val videoFile = File(video.filepath).also { partials.considerPartial(downloadId, it) }
-
-                val audioIds = listOf(audioFormatId) // caller already chose best; service can extend later
-                var audioFile: File? = null
-                var lastError: Throwable? = null
-                for (aid in audioIds) {
-                    try {
-                        val audio = bridge.download(
-                            url, aid, work.absolutePath,
-                            outTemplate = "audio.%(ext)s", continuedl = true,
-                        ) { updateFromProgress(title, it.downloaded, it.total) }
-                        audioFile = File(audio.filepath)
-                        break
-                    } catch (t: Throwable) {
-                        lastError = t
-                    }
-                }
-                val audio = audioFile ?: throw lastError ?: IllegalStateException("No audio track")
-                updateNotification("Merging…", title, indeterminate = true)
-                val out = File(work, "merged.mp4")
-                finalFile = Media3Muxer(this).muxBlocking(videoFile, audio, out)
-                partials.considerPartial(downloadId, finalFile)
-                mime = "video/mp4"
-            }
-            else -> error("Invalid download parameters")
-        }
-
-        val best = partials.bestFile(downloadId) ?: finalFile
-        val publishSource = if (best.length() >= finalFile.length()) best else finalFile
-        val displayName = sanitizeName(title) + if (mime.startsWith("audio")) ".m4a" else ".mp4"
-        val uri = DownloadsPublisher.publish(this, publishSource, displayName, mime)
-
-        history.add(
-            HistoryEntry(
-                id = downloadId,
-                url = url,
-                title = title,
-                mediaStoreUri = uri.toString(),
-                success = true,
-                error = null,
-                timestamp = System.currentTimeMillis(),
-                estimatedBytes = publishSource.length(),
-            )
-        )
-        partials.clear(downloadId)
-        notifyFinished(true, title, uri, null)
     }
 
     private fun updateFromProgress(title: String, downloaded: Long, total: Long) {
@@ -211,7 +159,8 @@ class VideoDownloadService : Service() {
             .setAutoCancel(true)
             .addAction(0, "History", historyPendingIntent())
         if (success && uri != null) {
-            val open = Intent(Intent.ACTION_VIEW).setDataAndType(uri, contentResolver.getType(uri) ?: "*/*")
+            val open = Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, contentResolver.getType(uri) ?: "*/*")
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             builder.setContentIntent(
                 PendingIntent.getActivity(
@@ -253,7 +202,11 @@ class VideoDownloadService : Service() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, getString(R.string.download_channel_name), NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(
+                CHANNEL_ID,
+                getString(R.string.download_channel_name),
+                NotificationManager.IMPORTANCE_LOW,
+            )
         )
     }
 
@@ -270,24 +223,17 @@ class VideoDownloadService : Service() {
     private fun sanitizeName(name: String): String =
         name.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(80).ifBlank { "download" }
 
-    private fun guessAudioMime(file: File): String = when (file.extension.lowercase()) {
-        "mp3" -> "audio/mpeg"
-        "m4a", "mp4" -> "audio/mp4"
-        "webm" -> "audio/webm"
-        "opus" -> "audio/opus"
-        else -> "audio/*"
-    }
-
     companion object {
         const val CHANNEL_ID = "video_downloads"
         const val NOTIFICATION_ID = 42
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
         const val EXTRA_VIDEO_FORMAT_ID = "video_format_id"
-        const val EXTRA_AUDIO_FORMAT_ID = "audio_format_id"
+        const val EXTRA_AUDIO_FORMAT_IDS = "audio_format_ids"
         const val EXTRA_COMBINED_FORMAT_ID = "combined_format_id"
         const val EXTRA_NEEDS_MUX = "needs_mux"
         const val EXTRA_AUDIO_ONLY = "audio_only"
+        const val EXTRA_REQUIRES_VIDEO_EXTRACT = "requires_video_extract"
         const val EXTRA_DOWNLOAD_ID = "download_id"
 
         fun start(
@@ -295,19 +241,21 @@ class VideoDownloadService : Service() {
             url: String,
             title: String,
             videoFormatId: String? = null,
-            audioFormatId: String? = null,
+            audioFormatIds: List<String> = emptyList(),
             combinedFormatId: String? = null,
             needsMux: Boolean = false,
             audioOnly: Boolean = false,
+            requiresVideoExtract: Boolean = false,
         ) {
             val i = Intent(context, VideoDownloadService::class.java).apply {
                 putExtra(EXTRA_URL, url)
                 putExtra(EXTRA_TITLE, title)
                 putExtra(EXTRA_VIDEO_FORMAT_ID, videoFormatId)
-                putExtra(EXTRA_AUDIO_FORMAT_ID, audioFormatId)
+                putStringArrayListExtra(EXTRA_AUDIO_FORMAT_IDS, ArrayList(audioFormatIds))
                 putExtra(EXTRA_COMBINED_FORMAT_ID, combinedFormatId)
                 putExtra(EXTRA_NEEDS_MUX, needsMux)
                 putExtra(EXTRA_AUDIO_ONLY, audioOnly)
+                putExtra(EXTRA_REQUIRES_VIDEO_EXTRACT, requiresVideoExtract)
                 putExtra(EXTRA_DOWNLOAD_ID, UUID.randomUUID().toString())
             }
             context.startForegroundService(i)

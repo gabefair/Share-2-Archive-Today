@@ -116,6 +116,7 @@ class DownloadVideoActivity : MainActivity() {
     ) {
         val videos = QualityPickerModel.buildVideoOptions(formats)
         val audio = QualityPickerModel.bestAudioOnly(formats)
+        val rankedAudioIds = QualityPickerModel.rankedAudioFormatIds(formats)
         val labels = videos.map { opt ->
             buildString {
                 append(opt.label)
@@ -136,11 +137,11 @@ class DownloadVideoActivity : MainActivity() {
             .setTitle(R.string.download_pick_quality)
             .setItems(labels.toTypedArray()) { _, which ->
                 if (which == labels.lastIndex) {
-                    onAudioChosen(url, title, audio)
+                    onAudioChosen(url, title, audio, rankedAudioIds)
                 } else {
                     val opt = videos[which]
                     maybeWarnCellular(opt.estimatedBytes) {
-                        startVideo(url, title, opt)
+                        startVideo(url, title, opt, rankedAudioIds)
                     }
                 }
             }
@@ -148,22 +149,34 @@ class DownloadVideoActivity : MainActivity() {
             .show()
     }
 
-    private fun onAudioChosen(url: String, title: String, audio: QualityPickerModel.AudioOption) {
-        if (audio.formatId == null) {
+    private fun onAudioChosen(
+        url: String,
+        title: String,
+        audio: QualityPickerModel.AudioOption,
+        rankedAudioIds: List<String>,
+    ) {
+        val audioId = audio.formatId
+        if (audioId == null) {
             Toast.makeText(this, "No audio format available", Toast.LENGTH_LONG).show()
             finish()
             return
         }
         val proceed = {
             maybeWarnCellular(audio.estimatedBytes) {
+                val ids = when {
+                    audio.requiresVideoExtract -> emptyList()
+                    rankedAudioIds.isNotEmpty() -> rankedAudioIds
+                    else -> listOf(audioId)
+                }
                 VideoDownloadService.start(
                     this,
                     url = url,
                     title = title,
-                    audioFormatId = audio.formatId,
-                    combinedFormatId = if (audio.requiresVideoExtract) audio.formatId else null,
+                    audioFormatIds = ids,
+                    combinedFormatId = if (audio.requiresVideoExtract) audioId else null,
                     needsMux = false,
                     audioOnly = true,
+                    requiresVideoExtract = audio.requiresVideoExtract,
                 )
                 finish()
             }
@@ -181,13 +194,25 @@ class DownloadVideoActivity : MainActivity() {
         }
     }
 
-    private fun startVideo(url: String, title: String, opt: QualityPickerModel.VideoOption) {
+    private fun startVideo(
+        url: String,
+        title: String,
+        opt: QualityPickerModel.VideoOption,
+        rankedAudioIds: List<String>,
+    ) {
+        val preferred = opt.audioFormatId
+        val audioIds = when {
+            !opt.needsMux -> emptyList()
+            preferred != null ->
+                listOf(preferred) + rankedAudioIds.filter { it != preferred }
+            else -> rankedAudioIds
+        }
         VideoDownloadService.start(
             this,
             url = url,
             title = title,
             videoFormatId = if (opt.needsMux) opt.videoFormatId else null,
-            audioFormatId = opt.audioFormatId,
+            audioFormatIds = audioIds,
             combinedFormatId = if (!opt.needsMux) (opt.combinedFormatId ?: opt.videoFormatId) else null,
             needsMux = opt.needsMux,
             audioOnly = false,
