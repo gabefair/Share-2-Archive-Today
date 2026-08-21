@@ -2,6 +2,10 @@
 .gradle/
 build/
 
+# Project-local Python for Chaquopy / trim (see YT-DLP_SUBMODULE.md)
+.venv/
+Share2ArchiveToday/.venv/
+
 # Local configuration file (sdk path, etc)
 local.properties
 
