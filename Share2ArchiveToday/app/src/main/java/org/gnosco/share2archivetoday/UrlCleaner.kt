@@ -7,6 +7,18 @@ import android.util.Log
  * Handles URL cleaning, formatting, and removal of unwanted elements
  */
 class UrlCleaner {
+    companion object {
+        /**
+         * Matches comment-related anchors across common languages.
+         * Latin stems cover EN/FR/IT (comment*), ES/PT/RO (coment*), DE/Nordic/FI (komment*),
+         * and Slavic (komentar*). Also includes reply, Dutch reactie, Turkish yorum,
+         * and common CJK/Arabic/Hebrew terms used as fragment ids.
+         */
+        private val COMMENT_ANCHOR_PATTERN = Regex(
+            """(?i)(?:comments?|com+ent\w*|komment\w*|komentar\w*|replies|reply|reacties?|yorum(?:lar)?|コメント|댓글|评论|تعليق|תגובה)"""
+        )
+    }
+
     /**
      * Clean a URL by removing trailing punctuation and normalizing protocol
      */
@@ -75,7 +87,8 @@ class UrlCleaner {
     /**
      * Remove anchors and text fragments from URLs.
      * Fragments that contain '=' (e.g. #q=trump) are treated as hash-based
-     * parameters and preserved. Chrome text fragments (#:~:text=...) are always removed.
+     * parameters and preserved. Comment-related anchors (multilingual) are kept.
+     * Chrome text fragments (#:~:text=...) are always removed.
      */
     fun removeAnchorsAndTextFragments(url: String): String {
         try {
@@ -98,6 +111,11 @@ class UrlCleaner {
             if (fragment.contains('=')) {
                 return url
             }
+
+            // Comment permalinks (e.g. #comment-123, #comentarios, #Kommentar) — keep
+            if (isCommentAnchor(fragment)) {
+                return url
+            }
             
             val builder = uri.buildUpon()
             builder.fragment(null)
@@ -109,6 +127,9 @@ class UrlCleaner {
             return removeAnchorsAndTextFragmentsSimple(url)
         }
     }
+
+    private fun isCommentAnchor(fragment: String): Boolean =
+        COMMENT_ANCHOR_PATTERN.containsMatchIn(fragment)
     
     /**
      * Fallback method for removing anchors and text fragments
@@ -124,6 +145,9 @@ class UrlCleaner {
         val fragment = cleanedUrl.substring(hashIndex + 1)
         // Preserve hash-based parameters (contain '='); strip plain anchors
         if (fragment.contains('=')) {
+            return cleanedUrl
+        }
+        if (isCommentAnchor(fragment)) {
             return cleanedUrl
         }
 

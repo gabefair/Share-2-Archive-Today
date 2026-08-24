@@ -284,4 +284,58 @@ class UrlCleaningUnitTest {
 
         assertEquals("Chrome text fragments should be stripped", "https://example.com/page", result)
     }
+    @Test
+    fun testRemoveAnchors_PreservesEnglishCommentAnchors() {
+        val urlCleaner = UrlCleaner()
+        val urls = listOf(
+            "https://example.com/post#comment-123",
+            "https://example.com/post#comments",
+            "https://github.com/org/repo/issues/1#issuecomment-999",
+            "https://example.com/post#reply-42",
+        )
+        for (url in urls) {
+            assertEquals("Comment anchor should be preserved: $url", url, urlCleaner.removeAnchorsAndTextFragments(url))
+        }
+    }
+
+    @Test
+    fun testRemoveAnchors_PreservesMultilingualCommentAnchors() {
+        val urlCleaner = UrlCleaner()
+        val urls = listOf(
+            "https://example.com/post#comentario-12",   // Spanish
+            "https://example.com/post#commentaire-3",   // French
+            "https://example.com/post#comentário-7",    // Portuguese
+            "https://example.com/post#Kommentar-5",     // German
+            "https://example.com/post#komentarz-9",     // Polish
+            "https://example.com/post#reactie-2",       // Dutch
+            "https://example.com/post#yorum-4",         // Turkish
+            "https://example.com/post#コメント",          // Japanese
+            "https://example.com/post#댓글",             // Korean
+            "https://example.com/post#评论",             // Chinese
+        )
+        for (url in urls) {
+            assertEquals("Multilingual comment anchor should be preserved: $url", url, urlCleaner.removeAnchorsAndTextFragments(url))
+        }
+    }
+
+    @Test
+    fun testCleanTrackingParamsFromUrl_substackMainDomainRemovesR() {
+        val mainActivity = MainActivity()
+        val inputUrl = "https://substack.com/@xennialfarmer/note/c-296655740?r=8xfxyi"
+        val expectedUrl = "https://substack.com/@xennialfarmer/note/c-296655740"
+
+        val result = mainActivity.cleanTrackingParamsFromUrl(inputUrl)
+
+        assertEquals("Substack referral param r should be removed on substack.com", expectedUrl, result)
+    }
+
+    @Test
+    fun testExtractUrl_capitalizedProtocol() {
+        val mainActivity = MainActivity()
+        val input = "Https://msn.com"
+
+        val result = mainActivity.extractUrl(input)
+
+        assertEquals("https://msn.com", result)
+    }
 }
