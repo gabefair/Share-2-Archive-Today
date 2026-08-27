@@ -38,9 +38,20 @@ class DownloadHistoryStore(context: Context) {
         val list = all().toMutableList()
         list.removeAll { it.id == entry.id }
         list.add(0, entry)
-        val trimmed = list.take(MAX_ENTRIES)
+        persist(list.take(MAX_ENTRIES))
+    }
+
+    fun remove(id: String) {
+        persist(all().filterNot { it.id == id })
+    }
+
+    fun clear() {
+        prefs.edit().putString(KEY, "[]").apply()
+    }
+
+    private fun persist(list: List<HistoryEntry>) {
         val arr = JSONArray()
-        trimmed.forEach { arr.put(toJson(it)) }
+        list.forEach { arr.put(toJson(it)) }
         prefs.edit().putString(KEY, arr.toString()).apply()
     }
 

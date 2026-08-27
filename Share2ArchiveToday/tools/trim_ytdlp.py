@@ -14,6 +14,7 @@ from pathlib import Path
 DROP_FILES = {
     "yt_dlp/__main__.py",
     # Keep options.py: package __init__ imports parseOpts at load time.
+    # Keep update.py: YoutubeDL/options import several symbols from it.
 }
 DROP_DIRS = {
     "yt_dlp/__pyinstaller",
@@ -69,39 +70,55 @@ def main() -> int:
             shutil.rmtree(path)
 
     # external.py shells out to aria2c/curl/wget/ffmpeg — unusable in the app sandbox.
-    # Keep the public names yt-dlp imports at load time; make them refuse to run.
+    # Keep the public names yt-dlp imports / calls; report unavailable so native FDs are used.
     external = dest_pkg / "downloader" / "external.py"
     if external.exists():
         external.write_text(
             '"""Stub: external downloaders are not available on Android."""\n'
-            "from ..utils import DownloadError\n\n"
+            "from ..utils import DownloadError\n"
+            "\n"
             "\n"
             "class ExternalFD:\n"
             "    EXE_NAME = 'external'\n"
             "    SUPPORTED_PROTOCOLS = ()\n"
             "    SUPPORTED_FEATURES = ()\n"
             "\n"
+            "    def __init__(self, ydl, params):\n"
+            "        self.ydl = ydl\n"
+            "        self.params = params\n"
+            "\n"
             "    @classmethod\n"
             "    def get_basename(cls):\n"
             "        return cls.__name__[:-2].lower()\n"
             "\n"
             "    @classmethod\n"
+            "    def available(cls, path=None):\n"
+            "        return False\n"
+            "\n"
+            "    @classmethod\n"
+            "    def supports(cls, info_dict):\n"
+            "        return False\n"
+            "\n"
+            "    @classmethod\n"
             "    def can_download(cls, info_dict, path=None):\n"
             "        return False\n"
             "\n"
-            "    def __init__(self, *args, **kwargs):\n"
-            "        raise DownloadError('External downloaders are not supported on Android')\n"
+            "    def real_download(self, filename, info_dict):\n"
+            "        raise DownloadError(\n"
+            "            f'{self.get_basename()} is not available on Android; '\n"
+            "            'use a progressive/native format instead'\n"
+            "        )\n"
             "\n"
             "\n"
             "class FFmpegFD(ExternalFD):\n"
             "    EXE_NAME = 'ffmpeg'\n"
+            "    SUPPORTED_PROTOCOLS = (\n"
+            "        'http', 'https', 'ftp', 'ftps', 'm3u8', 'm3u8_native',\n"
+            "        'rtsp', 'rtmp', 'rtmp_ffmpeg', 'mms', 'http_dash_segments',\n"
+            "    )\n"
             "\n"
             "    @classmethod\n"
             "    def can_merge_formats(cls, info_dict, params):\n"
-            "        return False\n"
-            "\n"
-            "    @classmethod\n"
-            "    def can_download(cls, info_dict, path=None):\n"
             "        return False\n"
             "\n"
             "\n"

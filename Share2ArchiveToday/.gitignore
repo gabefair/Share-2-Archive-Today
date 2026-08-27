@@ -1,17 +1,20 @@
+# Module-local mirrors of the repo root ignores (safe if opened as its own project root).
 *.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+.gradle/
 local.properties
-/.vscode/
+.idea/
+.vscode/
+.DS_Store
 **/build/
+.externalNativeBuild/
+.cxx/
+captures/
+
+# Python bytecode from local yt-dlp / bridge runs (not packaged by Chaquopy)
+**/__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

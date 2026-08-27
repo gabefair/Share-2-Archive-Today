@@ -1,5 +1,6 @@
 package org.gnosco.share2archivetoday.ytdlp
 
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Build
@@ -10,6 +11,8 @@ import java.io.File
 /** Publishes completed media into the public Downloads collection. */
 object DownloadsPublisher {
 
+    private const val REL_DOWNLOADS = "Download/Share2Archive"
+
     fun publish(
         context: Context,
         sourceFile: File,
@@ -19,12 +22,13 @@ object DownloadsPublisher {
         require(sourceFile.exists()) { "Missing file: ${sourceFile.absolutePath}" }
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val values = android.content.ContentValues().apply {
-                put(MediaStore.Downloads.DISPLAY_NAME, displayName)
-                put(MediaStore.Downloads.MIME_TYPE, mimeType)
-                put(MediaStore.Downloads.IS_PENDING, 1)
-            }
             val resolver = context.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, REL_DOWNLOADS)
+            }
             val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
             val uri = resolver.insert(collection, values)
                 ?: error("MediaStore insert failed")
@@ -32,17 +36,20 @@ object DownloadsPublisher {
                 sourceFile.inputStream().use { input -> input.copyTo(output) }
             } ?: error("Cannot open MediaStore output stream")
             values.clear()
-            values.put(MediaStore.Downloads.IS_PENDING, 0)
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
             resolver.update(uri, values, null, null)
             uri
         } else {
             @Suppress("DEPRECATION")
-            val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val dir = File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                "Share2Archive",
+            )
             if (!dir.exists()) dir.mkdirs()
             val dest = File(dir, displayName)
             sourceFile.copyTo(dest, overwrite = true)
             @Suppress("DEPRECATION")
-            val values = android.content.ContentValues().apply {
+            val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DATA, dest.absolutePath)
                 put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
                 put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)

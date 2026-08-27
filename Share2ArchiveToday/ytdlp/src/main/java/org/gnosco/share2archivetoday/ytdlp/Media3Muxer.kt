@@ -2,6 +2,8 @@ package org.gnosco.share2archivetoday.ytdlp
 
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.transformer.Composition
@@ -15,31 +17,40 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 
 /**
  * Media3 remux helpers: merge A/V, or strip video to keep audio only.
+ * Transformer must be created/started on the main thread.
  */
 class Media3Muxer(private val context: Context) {
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     suspend fun mux(videoFile: File, audioFile: File, outputFile: File): File =
-        suspendExport(outputFile) {
-            val videoItem = EditedMediaItem.Builder(uriItem(videoFile)).build()
-            val audioItem = EditedMediaItem.Builder(uriItem(audioFile)).build()
-            Composition.Builder(
-                EditedMediaItemSequence.Builder(listOf(videoItem)).build(),
-                EditedMediaItemSequence.Builder(listOf(audioItem)).build(),
-            ).setTransmuxAudio(true).setTransmuxVideo(true).build()
+        withContext(Dispatchers.Main) {
+            suspendExport(outputFile) {
+                val videoItem = EditedMediaItem.Builder(uriItem(videoFile)).build()
+                val audioItem = EditedMediaItem.Builder(uriItem(audioFile)).build()
+                Composition.Builder(
+                    EditedMediaItemSequence.Builder(listOf(videoItem)).build(),
+                    EditedMediaItemSequence.Builder(listOf(audioItem)).build(),
+                ).setTransmuxAudio(true).setTransmuxVideo(true).build()
+            }
         }
 
     suspend fun extractAudio(inputFile: File, outputFile: File): File =
-        suspendExport(outputFile) {
-            val audioOnly = EditedMediaItem.Builder(uriItem(inputFile))
-                .setRemoveVideo(true)
-                .build()
-            Composition.Builder(
-                EditedMediaItemSequence.Builder(listOf(audioOnly)).build(),
-            ).setTransmuxAudio(true).build()
+        withContext(Dispatchers.Main) {
+            suspendExport(outputFile) {
+                val audioOnly = EditedMediaItem.Builder(uriItem(inputFile))
+                    .setRemoveVideo(true)
+                    .build()
+                Composition.Builder(
+                    EditedMediaItemSequence.Builder(listOf(audioOnly)).build(),
+                ).setTransmuxAudio(true).build()
+            }
         }
 
     fun muxBlocking(videoFile: File, audioFile: File, outputFile: File): File =
@@ -90,30 +101,40 @@ class Media3Muxer(private val context: Context) {
     }
 
     private fun blockExport(outputFile: File, composition: () -> Composition): File {
+        check(Looper.myLooper() != Looper.getMainLooper()) {
+            "muxBlocking/extractAudioBlocking must not run on the main thread"
+        }
         val latch = CountDownLatch(1)
         val result = AtomicReference<File?>()
         val error = AtomicReference<Throwable?>()
         if (outputFile.exists()) outputFile.delete()
         outputFile.parentFile?.mkdirs()
 
-        val transformer = Transformer.Builder(context)
-            .addListener(object : Transformer.Listener {
-                override fun onCompleted(c: Composition, exportResult: ExportResult) {
-                    result.set(outputFile)
-                    latch.countDown()
-                }
+        mainHandler.post {
+            try {
+                val transformer = Transformer.Builder(context)
+                    .addListener(object : Transformer.Listener {
+                        override fun onCompleted(c: Composition, exportResult: ExportResult) {
+                            result.set(outputFile)
+                            latch.countDown()
+                        }
 
-                override fun onError(
-                    c: Composition,
-                    exportResult: ExportResult,
-                    exportException: ExportException,
-                ) {
-                    error.set(exportException)
-                    latch.countDown()
-                }
-            })
-            .build()
-        transformer.start(composition(), outputFile.absolutePath)
+                        override fun onError(
+                            c: Composition,
+                            exportResult: ExportResult,
+                            exportException: ExportException,
+                        ) {
+                            error.set(exportException)
+                            latch.countDown()
+                        }
+                    })
+                    .build()
+                transformer.start(composition(), outputFile.absolutePath)
+            } catch (t: Throwable) {
+                error.set(t)
+                latch.countDown()
+            }
+        }
         latch.await()
         error.get()?.let { throw it }
         return result.get() ?: error("Export produced no file")

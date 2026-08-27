@@ -1,8 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Host for AlertDialog-only flows (quality picker, etc.): activity itself stays invisible. -->
     <style name="Theme.Share2Archive.DialogHost" parent="@android:style/Theme.DeviceDefault.Light.Dialog.NoActionBar">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:backgroundDimEnabled">true</item>
+    </style>
+
+    <!-- Floating panel with real content (download history list). -->
+    <style name="Theme.Share2Archive.History" parent="@android:style/Theme.DeviceDefault.Light.Dialog.NoActionBar">
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowBackground">@drawable/bg_history_panel</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:windowMinWidthMajor">92%</item>
+        <item name="android:windowMinWidthMinor">96%</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
     </style>
 </resources>

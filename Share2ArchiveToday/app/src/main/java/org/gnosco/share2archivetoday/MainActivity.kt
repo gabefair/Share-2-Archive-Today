@@ -53,7 +53,11 @@ open class MainActivity : Activity() {
         }
     }
 
+    /** FOSS download UI may defer until runtime permissions are granted. */
+    protected open fun deferShareIntentHandling(): Boolean = false
+
     private fun handleShareIntent(intent: Intent?) {
+        if (deferShareIntentHandling()) return
         if (intent?.action == Intent.ACTION_SEND) {
             // Show first-time usage tip only when actually sharing
             showFirstTimeToast()

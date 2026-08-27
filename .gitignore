@@ -1,68 +1,65 @@
-# Gradle files
+# Gradle / Android build
 .gradle/
-build/
-
-# Project-local Python for Chaquopy / trim (see YT-DLP_SUBMODULE.md)
-.venv/
-Share2ArchiveToday/.venv/
-
-# Local configuration file (sdk path, etc)
-local.properties
-
-# Log/OS Files
-*.log
-
-# Android Studio generated files and folders
+**/build/
 captures/
 .externalNativeBuild/
 .cxx/
 *.apk
+*.aab
+*.ap_
 output.json
 
-# IntelliJ
+# Local SDK / machine config
+local.properties
+
+# Python (Chaquopy uses .py sources only; bytecode is local cache)
+.venv/
+Share2ArchiveToday/.venv/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / OS
 *.iml
 .idea/
+.vscode/
+*.log
+.DS_Store
+
+# IntelliJ leftovers (also covered by .idea/)
 misc.xml
 deploymentTargetDropDown.xml
 render.experimental.xml
-
-# Keystore files
-*.jks
-*.keystore
-
-# Google Services (e.g. APIs or Firebase)
-google-services.json
-
-# Android Profiling
-*.hprof
-.DS_Store
-
-
-*.iml
-.gradle
-/local.properties
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml
 /.idea/workspace.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
-local.properties
-key2
-key3
-/Share2ArchiveToday/app/release
+
+# Signing / secrets (never commit)
+*.jks
+*.keystore
 *.dm
 *.der
 *.pem
+key2
+key3
+key9
+google-services.json
+
+# Android Studio profiling / release artifacts
+*.hprof
+Share2ArchiveToday/app/release/
+Share2ArchiveToday/app/mapping.txt
+Share2ArchiveToday/app/seeds.txt
+Share2ArchiveToday/app/unused.txt
+
+# iOS (sibling tree in this monorepo)
 ios/Share-2-Archive-Today/Share-2-Archive-Today.xcodeproj/project.xcworkspace/xcuserdata/gabirelfair.xcuserdatad/UserInterfaceState.xcuserstate
 /ios/Share-2-Archive-Today/Share-2-Archive-Today.xcodeproj/project.xcworkspace
 /ios/Share-2-Archive-Today/Share-2-Archive-Today.xcodeproj/project.xcworkspace/xcuserdata
-Share2ArchiveToday/app/mapping.txt
-key9
-Share2ArchiveToday/app/seeds.txt
-Share2ArchiveToday/app/unused.txt

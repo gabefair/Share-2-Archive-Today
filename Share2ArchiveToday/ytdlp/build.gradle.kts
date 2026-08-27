@@ -73,7 +73,25 @@ val hostPython: String = run {
         ?: "python3" // last resort; Exec/Chaquopy will surface a clear failure
 }
 
+/**
+ * Checkout yt-dlp's latest GitHub *release* tag into third_party/yt-dlp before trim.
+ *
+ * Override with S2A_YTDLP_TAG=YYYY.MM.DD for reproducible / offline builds.
+ * Needs network unless the desired tag is already checked out.
+ */
+val fetchYtdlpLatest by tasks.registering(Exec::class) {
+    inputs.file(rootProject.file("tools/fetch_ytdlp_latest.py"))
+    // Tag file changes when checkout moves; also re-run when forced via --rerun-tasks.
+    outputs.file(rootProject.file("third_party/yt-dlp/yt_dlp/version.py"))
+    // Always consult GitHub for "latest" (script no-ops if already on the desired tag).
+    // Pin with S2A_YTDLP_TAG for reproducible builds; still runs so a stale checkout is fixed.
+    outputs.upToDateWhen { false }
+    workingDir = rootProject.projectDir
+    commandLine(hostPython, "tools/fetch_ytdlp_latest.py")
+}
+
 val trimYtdlp by tasks.registering(Exec::class) {
+    dependsOn(fetchYtdlpLatest)
     val outDir = layout.buildDirectory.dir("generated/ytdlp")
     inputs.dir(rootProject.file("third_party/yt-dlp/yt_dlp"))
     inputs.file(rootProject.file("tools/trim_ytdlp.py"))

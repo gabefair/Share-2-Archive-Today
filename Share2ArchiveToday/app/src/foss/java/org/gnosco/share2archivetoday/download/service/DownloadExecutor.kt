@@ -3,6 +3,7 @@ package org.gnosco.share2archivetoday.download.service
 import android.content.Context
 import java.io.File
 import org.gnosco.share2archivetoday.download.history.BestPartialStore
+import org.gnosco.share2archivetoday.ytdlp.DownloadSidecar
 import org.gnosco.share2archivetoday.ytdlp.Media3Muxer
 import org.gnosco.share2archivetoday.ytdlp.YtDlpBridge
 
@@ -15,7 +16,11 @@ class DownloadExecutor(
     private val onStatus: (String) -> Unit,
 ) {
 
-    data class Result(val file: File, val mimeType: String)
+    data class Result(
+        val file: File,
+        val mimeType: String,
+        val sidecars: List<DownloadSidecar> = emptyList(),
+    )
 
     fun execute(
         downloadId: String,
@@ -26,24 +31,30 @@ class DownloadExecutor(
         needsMux: Boolean,
         audioOnly: Boolean,
         requiresVideoExtract: Boolean,
+        archiveMetadata: Boolean = false,
     ): Result {
         val work = partials.workDir(downloadId)
         return when {
             audioOnly && requiresVideoExtract && combinedFormatId != null ->
-                downloadThenExtractAudio(downloadId, url, combinedFormatId, work)
+                downloadThenExtractAudio(downloadId, url, combinedFormatId, work, archiveMetadata)
 
             audioOnly && audioFormatIds.isNotEmpty() ->
-                downloadFirstWorkingAudio(downloadId, url, audioFormatIds, work)
+                downloadFirstWorkingAudio(downloadId, url, audioFormatIds, work, archiveMetadata)
 
             needsMux && videoFormatId != null ->
-                downloadMux(downloadId, url, videoFormatId, audioFormatIds, work)
+                downloadMux(downloadId, url, videoFormatId, audioFormatIds, work, archiveMetadata)
 
             combinedFormatId != null -> {
-                val result = bridge.download(url, combinedFormatId, work.absolutePath, continuedl = true) {
+                if (archiveMetadata) onStatus("Fetching metadata…")
+                val result = bridge.download(
+                    url, combinedFormatId, work.absolutePath,
+                    continuedl = true,
+                    archiveMetadata = archiveMetadata,
+                ) {
                     onProgress(it.downloaded, it.total)
                 }
                 val file = File(result.filepath).also { partials.considerPartial(downloadId, it) }
-                Result(file, "video/mp4")
+                Result(file, "video/mp4", result.sidecars)
             }
 
             else -> error("Invalid download parameters")
@@ -55,15 +66,21 @@ class DownloadExecutor(
         url: String,
         audioFormatIds: List<String>,
         work: File,
+        archiveMetadata: Boolean,
     ): Result {
         var lastError: Throwable? = null
         for (id in audioFormatIds) {
             try {
-                val result = bridge.download(url, id, work.absolutePath, continuedl = true) {
+                if (archiveMetadata) onStatus("Fetching metadata…")
+                val result = bridge.download(
+                    url, id, work.absolutePath,
+                    continuedl = true,
+                    archiveMetadata = archiveMetadata,
+                ) {
                     onProgress(it.downloaded, it.total)
                 }
                 val file = File(result.filepath).also { partials.considerPartial(downloadId, it) }
-                return Result(file, guessAudioMime(file))
+                return Result(file, guessAudioMime(file), result.sidecars)
             } catch (t: Throwable) {
                 lastError = t
             }
@@ -76,8 +93,14 @@ class DownloadExecutor(
         url: String,
         combinedFormatId: String,
         work: File,
+        archiveMetadata: Boolean,
     ): Result {
-        val result = bridge.download(url, combinedFormatId, work.absolutePath, continuedl = true) {
+        if (archiveMetadata) onStatus("Fetching metadata…")
+        val result = bridge.download(
+            url, combinedFormatId, work.absolutePath,
+            continuedl = true,
+            archiveMetadata = archiveMetadata,
+        ) {
             onProgress(it.downloaded, it.total)
         }
         val av = File(result.filepath).also { partials.considerPartial(downloadId, it) }
@@ -85,7 +108,7 @@ class DownloadExecutor(
         val out = File(work, "audio_only.m4a")
         val audio = Media3Muxer(context).extractAudioBlocking(av, out)
         partials.considerPartial(downloadId, audio)
-        return Result(audio, "audio/mp4")
+        return Result(audio, "audio/mp4", result.sidecars)
     }
 
     private fun downloadMux(
@@ -94,10 +117,14 @@ class DownloadExecutor(
         videoFormatId: String,
         audioFormatIds: List<String>,
         work: File,
+        archiveMetadata: Boolean,
     ): Result {
+        if (archiveMetadata) onStatus("Fetching metadata…")
         val video = bridge.download(
             url, videoFormatId, work.absolutePath,
-            outTemplate = "video.%(ext)s", continuedl = true,
+            outTemplate = "video.%(ext)s",
+            continuedl = true,
+            archiveMetadata = archiveMetadata,
         ) { onProgress(it.downloaded, it.total) }
         val videoFile = File(video.filepath).also { partials.considerPartial(downloadId, it) }
 
@@ -108,7 +135,9 @@ class DownloadExecutor(
             try {
                 val audio = bridge.download(
                     url, aid, work.absolutePath,
-                    outTemplate = "audio_%(format_id)s.%(ext)s", continuedl = true,
+                    outTemplate = "audio_%(format_id)s.%(ext)s",
+                    continuedl = true,
+                    archiveMetadata = false,
                 ) { onProgress(it.downloaded, it.total) }
                 audioFile = File(audio.filepath)
                 break
@@ -120,8 +149,9 @@ class DownloadExecutor(
         onStatus("Merging…")
         val out = File(work, "merged.mp4")
         val merged = Media3Muxer(context).muxBlocking(videoFile, audio, out)
+        onStatus("Saving…")
         partials.considerPartial(downloadId, merged)
-        return Result(merged, "video/mp4")
+        return Result(merged, "video/mp4", video.sidecars)
     }
 
     private fun guessAudioMime(file: File): String = when (file.extension.lowercase()) {
