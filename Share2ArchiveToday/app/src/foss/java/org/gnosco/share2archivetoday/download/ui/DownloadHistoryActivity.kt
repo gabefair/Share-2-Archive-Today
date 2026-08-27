@@ -183,6 +183,7 @@ class DownloadHistoryActivity : Activity() {
         val items = mutableListOf<String>()
         if (canOpen) items.add(getString(R.string.download_open))
         items.add(getString(R.string.download_share))
+        items.add(getString(R.string.download_archive_page))
         items.add(getString(R.string.download_again))
         items.add(getString(R.string.download_copy_url))
         items.add(getString(R.string.download_delete_entry))
@@ -195,6 +196,7 @@ class DownloadHistoryActivity : Activity() {
                 when (items[which]) {
                     getString(R.string.download_open) -> openEntry(entry)
                     getString(R.string.download_share) -> shareEntry(entry, detailText, canOpen)
+                    getString(R.string.download_archive_page) -> archivePage(entry)
                     getString(R.string.download_again) -> {
                         startActivity(
                             Intent(this, DownloadVideoActivity::class.java).apply {
@@ -214,6 +216,18 @@ class DownloadHistoryActivity : Activity() {
                 }
             }
             .show()
+    }
+
+    /** Snapshot the page the media came from, so the download keeps its context. */
+    private fun archivePage(entry: HistoryEntry) {
+        val intent = Intent(
+            Intent.ACTION_VIEW,
+            android.net.Uri.parse(
+                org.gnosco.share2archivetoday.ArchiveToday.submissionUrl(entry.url),
+            ),
+        )
+        runCatching { startActivity(intent) }
+            .onFailure { Toast.makeText(this, R.string.download_no_browser, Toast.LENGTH_LONG).show() }
     }
 
     private fun buildEntryDetailText(entry: HistoryEntry, canOpen: Boolean): String =

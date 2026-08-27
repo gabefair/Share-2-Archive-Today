@@ -121,7 +121,7 @@ open class MainActivity : Activity() {
     }
 
     open fun nowOpenInBrowser(cleanedUrl: String): Boolean {
-        openInBrowser("https://archive.today/?run=1&url=${Uri.encode(cleanedUrl)}")
+        openInBrowser(ArchiveToday.submissionUrl(cleanedUrl))
         return true
     }
 

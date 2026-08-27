@@ -3,6 +3,7 @@
     <string name="download_video_label">Download video</string>
     <string name="download_history_label">Video download history</string>
     <string name="download_history_title">Download history</string>
+    <string name="download_history_action">History</string>
     <string name="download_history_count">%1$d downloads</string>
     <string name="download_history_clear">Clear</string>
     <string name="download_history_clear_confirm">Remove all history entries? Downloaded files in Downloads are kept.</string>
@@ -17,7 +18,13 @@
     <string name="download_delete_entry">Remove from history</string>
     <string name="download_delete_entry_short">Remove</string>
     <string name="download_archive_meta">Save archivist metadata</string>
-    <string name="download_archive_meta_hint">Also writes .info.json (title, uploader, description, comments if available). Off by default — metadata can include personal or identifying information.</string>
+    <string name="download_archive_meta_hint">Also writes .info.json, the description, thumbnail, subtitles and a yt-dlp log. Off by default — metadata can include personal or identifying information.</string>
+    <string name="download_include_comments">Include comments</string>
+    <string name="download_include_comments_hint">Scrapes the comment section into .info.json. Can add many minutes and hundreds of megabytes on a popular video.</string>
+    <string name="download_max_quality">Archive quality</string>
+    <string name="download_max_quality_hint">Removes the 1080p limit and prefers the highest-bitrate stream, even when that means merging separate video and audio on device.</string>
+    <string name="download_mux_note">merge required</string>
+    <string name="download_mux_risk_note">merge may fail</string>
     <string name="download_pick_download">Download</string>
     <string name="download_channel_name">Video downloads</string>
     <string name="download_analyzing">Analyzing video…</string>
@@ -37,6 +44,8 @@
     <string name="download_history_empty_message">Completed downloads appear here. Share a video link to get started.</string>
     <string name="download_history_swipe_hint">Swipe left to open · swipe right to remove · tap for more</string>
     <string name="download_share">Share</string>
+    <string name="download_archive_page">Archive page</string>
+    <string name="download_no_browser">No browser available to open archive.today</string>
     <string name="download_share_via">Share via</string>
     <string name="download_share_failed">No app available to share this</string>
     <string name="download_history_removed">Removed from history</string>
@@ -57,4 +66,14 @@
     <string name="download_err_no_formats">No downloadable formats were found for this video.</string>
     <string name="download_err_generic">Download failed: %1$s</string>
     <string name="download_err_ok">OK</string>
+    <string name="download_cancelled">Download cancelled</string>
+    <string name="download_timeout_title">Download stopped</string>
+    <string name="download_timeout">Android limits how long a background download may run. The partial file was kept — share the link again to resume.</string>
+    <string name="download_err_incomplete_title">Incomplete video</string>
+    <string name="download_err_incomplete">Part of the video could not be fetched, so the file would have had gaps. Nothing was saved. Try again, or pick a different quality.</string>
+    <string name="download_err_no_space_title">Not enough space</string>
+    <string name="download_err_no_space">There isn\'t enough free storage for this download. Free some space and try again.</string>
+    <string name="download_err_mux">The video and audio could not be combined on this device.</string>
+    <string name="download_waiting_busy">Waiting for the current download to finish…</string>
+    <string name="download_notifications_denied">Notifications are off, so there will be no progress or cancel button. You can still watch the download in history.</string>
 </resources>

@@ -46,6 +46,8 @@ android {
 
     buildFeatures {
         viewBinding = true
+        // Version and flavor are recorded in each download's provenance manifest.
+        buildConfig = true
     }
 
     buildTypes {

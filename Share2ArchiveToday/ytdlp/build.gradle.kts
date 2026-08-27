@@ -105,6 +105,27 @@ val trimYtdlp by tasks.registering(Exec::class) {
     )
 }
 
+/**
+ * Host-side tests for ytdlp_bridge.py against a local HTTP server.
+ *
+ * Covers the parts no JVM test can reach: real yt-dlp extraction, the native HLS
+ * downloader, progress hooks, cancellation and sidecar collection. No network needed.
+ */
+val pythonBridgeTest by tasks.registering(Exec::class) {
+    dependsOn(trimYtdlp)
+    inputs.dir(layout.projectDirectory.dir("src/main/python"))
+    inputs.dir(layout.projectDirectory.dir("src/test/python"))
+    inputs.dir(layout.buildDirectory.dir("generated/ytdlp"))
+    outputs.file(layout.buildDirectory.file("python-bridge-test.ok"))
+    workingDir = rootProject.projectDir
+    commandLine(hostPython, "ytdlp/src/test/python/test_ytdlp_bridge.py")
+    doLast {
+        layout.buildDirectory.file("python-bridge-test.ok").get().asFile.writeText("ok")
+    }
+}
+
+tasks.named("check").configure { dependsOn(pythonBridgeTest) }
+
 chaquopy {
     defaultConfig {
         version = "3.14"
@@ -131,4 +152,6 @@ dependencies {
     implementation(libs.androidx.media3.common)
 
     testImplementation("junit:junit:4.13.2")
+    // Real org.json on the unit-test classpath; the android.jar stub throws instead.
+    testImplementation("org.json:json:20240303")
 }

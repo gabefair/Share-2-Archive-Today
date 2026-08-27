@@ -16,12 +16,21 @@ object YtDlpFailureClassifier {
         GEO_BLOCKED,
         NETWORK,
         NO_FORMATS,
+        /** The user stopped the download from the notification. */
+        CANCELLED,
+        /** A fragment was unavailable; the file would have had holes. */
+        INCOMPLETE_FRAGMENTS,
+        /** Ran out of room on the device. */
+        NO_SPACE,
+        /** Media3 could not put these codecs in an MP4 container. */
+        MUX_FAILED,
         OTHER,
     }
 
     fun classify(throwable: Throwable): Kind {
         val msg = rootMessage(throwable).lowercase()
         return when {
+            "downloadcancelled" in msg || "download cancelled" in msg -> Kind.CANCELLED
             "unsupported url" in msg -> Kind.UNSUPPORTED_URL
             "http error 403" in msg || "error 403" in msg || "status code 403" in msg ->
                 Kind.HTTP_FORBIDDEN
@@ -43,6 +52,12 @@ object YtDlpFailureClassifier {
             "requested format is not available" in msg ||
                 "no video formats" in msg ||
                 "no formats found" in msg -> Kind.NO_FORMATS
+            "fragment" in msg && ("not found" in msg || "unavailable" in msg) ->
+                Kind.INCOMPLETE_FRAGMENTS
+            "enospc" in msg || "no space left" in msg || "not enough space" in msg ->
+                Kind.NO_SPACE
+            "muxer" in msg || "exportexception" in msg || "transformer" in msg ->
+                Kind.MUX_FAILED
             else -> Kind.OTHER
         }
     }

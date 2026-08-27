@@ -3,20 +3,31 @@ package org.gnosco.share2archivetoday.ytdlp
 /**
  * Opinionated quality list for the picker (pure logic, unit-testable).
  *
- * Rules:
- * - Soft ceiling 1080p on mobile (4K/2K HLS + mux is slow and rarely useful on phone).
+ * Default (phone) rules:
+ * - Soft ceiling 1080p (4K/2K HLS + mux is slow and rarely useful on a phone).
  * - If any height > 720 exists, floor is 720 (drop SD).
- * - If more than 3 video options remain, keep top 2 by height and always include 1080 if present.
+ * - If more than 3 video options remain, keep top 2 by height and always include 1080.
  * - Prefer native HLS (m3u8) over progressive https when both exist.
  * - Prefer a single combined A/V format when available (avoids mux).
+ *
+ * Archive mode ([buildVideoOptions] with archiveMode = true) drops the ceiling and the
+ * pruning, and will pick a higher-bitrate video-only stream over a lower-bitrate
+ * combined one, because for an archive fidelity outranks convenience.
+ *
+ * Shared rules:
  * - Audio: prefer tracks matching [preferredLanguages] (system locale), then untagged,
  *   then other languages; among equals, largest/best quality.
- * - Size: never show audio-only bytes as a video option's size; estimate from tbr×duration when needed.
+ * - When a mux is required, prefer codecs the on-device MP4 muxer can actually contain.
+ * - Size: never show audio-only bytes as a video option's size; estimate from
+ *   tbr x duration when needed.
  */
 object QualityPickerModel {
 
     /** Phone-friendly max height offered in the picker. */
     const val MAX_HEIGHT = 1080
+
+    /** Upper bound on rows in archive mode, so the dialog stays usable. */
+    private const val ARCHIVE_MAX_OPTIONS = 10
 
     data class VideoOption(
         val label: String,
@@ -26,6 +37,13 @@ object QualityPickerModel {
         val combinedFormatId: String?,
         val estimatedBytes: Long?,
         val needsMux: Boolean,
+        /**
+         * True when this option must be muxed but the codecs are ones the platform MP4
+         * muxer often rejects (VP9/AV1 video, Opus/Vorbis audio). The download still
+         * proceeds; the streams are kept separately if the mux fails.
+         */
+        val muxRisk: Boolean = false,
+        val codecSummary: String? = null,
     )
 
     data class AudioOption(
@@ -40,23 +58,26 @@ object QualityPickerModel {
         formats: List<FormatInfo>,
         durationSec: Double? = null,
         preferredLanguages: List<String> = emptyList(),
+        archiveMode: Boolean = false,
     ): List<VideoOption> {
         val playable = formats.filter { it.isPlayableStream }
         val heights = playable.mapNotNull { it.height }.toSet()
-        val cappedHeights = if (heights.any { it <= MAX_HEIGHT }) {
-            heights.filter { it <= MAX_HEIGHT }.toSet()
-        } else {
-            heights // only >1080 available — keep them
+        val cappedHeights = when {
+            archiveMode -> heights
+            heights.any { it <= MAX_HEIGHT } -> heights.filter { it <= MAX_HEIGHT }.toSet()
+            else -> heights // only >1080 available - keep them
         }
         val hdAvailable = cappedHeights.any { it > 720 }
 
         val byHeight = linkedMapOf<Int, VideoOption>()
         val candidateHeights = cappedHeights
-            .filter { h -> if (hdAvailable) h >= 720 else true }
+            .filter { h -> if (hdAvailable && !archiveMode) h >= 720 else true }
             .sortedDescending()
 
         for (height in candidateHeights) {
-            val option = optionForHeight(playable, height, durationSec, preferredLanguages) ?: continue
+            val option =
+                optionForHeight(playable, height, durationSec, preferredLanguages, archiveMode)
+                    ?: continue
             byHeight[height] = option
         }
 
@@ -65,17 +86,18 @@ object QualityPickerModel {
         // Progressive sources often omit height (e.g. xnxx low/high). Still offer them.
         if (options.isEmpty()) {
             val prefer = formatPreference(preferredLanguages)
+            val muxPrefer = muxFormatPreference(preferredLanguages)
             val combined = playable
                 .filter { it.hasVideo && it.hasAudio && it.height == null }
                 .sortedWith(prefer)
                 .firstOrNull()
             val videoOnly = playable
                 .filter { it.hasVideo && !it.hasAudio && it.height == null }
-                .sortedWith(prefer)
+                .sortedWith(muxPrefer)
                 .firstOrNull()
             val bestAudio = playable
                 .filter { it.hasAudio && !it.hasVideo }
-                .sortedWith(prefer)
+                .sortedWith(muxPrefer)
                 .firstOrNull()
             val fallback = when {
                 combined != null ->
@@ -87,6 +109,10 @@ object QualityPickerModel {
                 else -> null
             }
             if (fallback != null) options = listOf(fallback)
+        }
+
+        if (archiveMode) {
+            return options.take(ARCHIVE_MAX_OPTIONS)
         }
 
         if (options.size > 3) {
@@ -135,13 +161,23 @@ object QualityPickerModel {
         )
     }
 
+    /**
+     * Audio format ids in the order the downloader should try them.
+     *
+     * @param forMux when true, codecs the MP4 muxer can contain are tried first, so a
+     *   merge is not sunk by an Opus track when an AAC one exists.
+     */
     fun rankedAudioFormatIds(
         formats: List<FormatInfo>,
         preferredLanguages: List<String> = emptyList(),
+        forMux: Boolean = false,
     ): List<String> =
         formats
             .filter { it.isPlayableStream && it.hasAudio && !it.hasVideo }
-            .sortedWith(formatPreference(preferredLanguages))
+            .sortedWith(
+                if (forMux) muxFormatPreference(preferredLanguages)
+                else formatPreference(preferredLanguages)
+            )
             .map { it.formatId }
 
     private fun optionForHeight(
@@ -149,8 +185,10 @@ object QualityPickerModel {
         height: Int,
         durationSec: Double?,
         preferredLanguages: List<String>,
+        archiveMode: Boolean,
     ): VideoOption? {
         val prefer = formatPreference(preferredLanguages)
+        val muxPrefer = muxFormatPreference(preferredLanguages)
         val atHeight = formats.filter { it.height == height }
         val combined = atHeight
             .filter { it.hasVideo && it.hasAudio }
@@ -158,18 +196,29 @@ object QualityPickerModel {
             .firstOrNull()
         val videoOnly = atHeight
             .filter { it.hasVideo && !it.hasAudio }
-            .sortedWith(prefer)
+            .sortedWith(muxPrefer)
             .firstOrNull()
         val bestAudio = formats
             .filter { it.hasAudio && !it.hasVideo }
-            .sortedWith(prefer)
+            .sortedWith(muxPrefer)
             .firstOrNull()
 
+        // Outside archive mode a combined stream always wins: no mux, no risk. In
+        // archive mode a progressive stream at the same height is often a much lower
+        // bitrate than the adaptive one, so take whichever carries more data.
+        val preferMuxForFidelity = archiveMode &&
+            combined != null &&
+            videoOnly != null &&
+            bestAudio != null &&
+            (videoOnly.tbr ?: 0.0) > (combined.tbr ?: 0.0)
+
         return when {
-            combined != null ->
+            combined != null && !preferMuxForFidelity ->
                 videoOption(height, null, null, combined, needsMux = false, durationSec)
             videoOnly != null && bestAudio != null ->
                 videoOption(height, videoOnly, bestAudio, null, needsMux = true, durationSec)
+            combined != null ->
+                videoOption(height, null, null, combined, needsMux = false, durationSec)
             videoOnly != null ->
                 videoOption(height, videoOnly, null, null, needsMux = false, durationSec)
             else -> null
@@ -198,6 +247,8 @@ object QualityPickerModel {
             }
             else -> estimateBytes(video, durationSec)
         }
+        val risky = needsMux &&
+            !((video?.isMp4MuxableVideo ?: true) && (audio?.isMp4MuxableAudio ?: true))
         return VideoOption(
             label = label,
             height = height,
@@ -206,10 +257,22 @@ object QualityPickerModel {
             combinedFormatId = combined?.formatId,
             estimatedBytes = est,
             needsMux = needsMux,
+            muxRisk = risky,
+            codecSummary = codecSummary(video ?: combined, audio),
         )
     }
 
-    /** Prefer known filesize; else tbr (kbps) × duration. */
+    private fun codecSummary(video: FormatInfo?, audio: FormatInfo?): String? {
+        val parts = listOfNotNull(
+            video?.vcodec?.takeIf { it.isNotBlank() && it != "none" }?.substringBefore('.'),
+            (audio?.acodec ?: video?.acodec)
+                ?.takeIf { it.isNotBlank() && it != "none" }
+                ?.substringBefore('.'),
+        )
+        return parts.takeIf { it.isNotEmpty() }?.joinToString(" + ")
+    }
+
+    /** Prefer known filesize; else tbr (kbps) x duration. */
     internal fun estimateBytes(fmt: FormatInfo?, durationSec: Double?): Long? {
         if (fmt == null) return null
         fmt.filesize?.takeIf { it > 0 }?.let { return it }
@@ -219,8 +282,8 @@ object QualityPickerModel {
     }
 
     /**
-     * Higher is better. Exact tag match > primary-language match > untagged > other languages.
-     * Index in [preferred] breaks ties (first preferred locale wins).
+     * Higher is better. Exact tag match > primary-language match > untagged > other
+     * languages. Index in [preferred] breaks ties (first preferred locale wins).
      */
     internal fun languageScore(language: String?, preferred: List<String>): Int {
         if (preferred.isEmpty()) return 0
@@ -244,8 +307,43 @@ object QualityPickerModel {
             .thenByDescending { it.tbr ?: 0.0 }
             .thenByDescending { it.filesize ?: 0L }
 
+    /**
+     * Same ordering, but muxability outranks protocol and bitrate.
+     *
+     * A failed merge costs the whole download, and at a given height the MP4-native
+     * codecs are usually the higher-bitrate encodes anyway, so this is not a fidelity
+     * trade in practice.
+     */
+    private fun muxFormatPreference(preferredLanguages: List<String>): Comparator<FormatInfo> =
+        compareByDescending<FormatInfo> { languageScore(it.language, preferredLanguages) }
+            .thenByDescending { it.isMp4Muxable }
+            .thenByDescending { it.isNativeHls }
+            .thenByDescending { it.tbr ?: 0.0 }
+            .thenByDescending { it.filesize ?: 0L }
+
     private val FormatInfo.isNativeHls: Boolean
         get() = protocol?.contains("m3u8", ignoreCase = true) == true
+
+    /**
+     * Codecs the platform MP4 muxer reliably accepts. VP8/VP9 and Opus/Vorbis are only
+     * containerable in WebM, which Media3 cannot write.
+     */
+    internal val FormatInfo.isMp4MuxableVideo: Boolean
+        get() {
+            val codec = vcodec?.lowercase()?.substringBefore('.') ?: return true
+            if (codec == "none" || codec == "unknown") return true
+            return codec in setOf("avc1", "avc3", "h264", "hev1", "hvc1", "h265", "av01", "mp4v")
+        }
+
+    internal val FormatInfo.isMp4MuxableAudio: Boolean
+        get() {
+            val codec = acodec?.lowercase()?.substringBefore('.') ?: return true
+            if (codec == "none" || codec == "unknown") return true
+            return codec in setOf("mp4a", "aac", "alac", "mp3", "amrnb", "amrwb")
+        }
+
+    private val FormatInfo.isMp4Muxable: Boolean
+        get() = isMp4MuxableVideo && isMp4MuxableAudio
 
     private val FormatInfo.isPlayableStream: Boolean
         get() {

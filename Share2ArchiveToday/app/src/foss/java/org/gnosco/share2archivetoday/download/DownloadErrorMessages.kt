@@ -24,6 +24,14 @@ object DownloadErrorMessages {
                 context.getString(R.string.download_err_network)
             Kind.NO_FORMATS ->
                 context.getString(R.string.download_err_no_formats)
+            Kind.CANCELLED ->
+                context.getString(R.string.download_cancelled)
+            Kind.INCOMPLETE_FRAGMENTS ->
+                context.getString(R.string.download_err_incomplete)
+            Kind.NO_SPACE ->
+                context.getString(R.string.download_err_no_space)
+            Kind.MUX_FAILED ->
+                context.getString(R.string.download_err_mux)
             Kind.OTHER ->
                 context.getString(
                     R.string.download_err_generic,
@@ -35,6 +43,8 @@ object DownloadErrorMessages {
     fun title(context: Context, throwable: Throwable): String {
         return when (YtDlpFailureClassifier.classify(throwable)) {
             Kind.UNSUPPORTED_URL -> context.getString(R.string.download_err_unsupported_title)
+            Kind.INCOMPLETE_FRAGMENTS -> context.getString(R.string.download_err_incomplete_title)
+            Kind.NO_SPACE -> context.getString(R.string.download_err_no_space_title)
             else -> context.getString(R.string.download_err_title)
         }
     }

@@ -9,11 +9,12 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.widget.CheckBox
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import java.util.Locale
 import androidx.core.os.ConfigurationCompat
+import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,12 +26,14 @@ import org.gnosco.share2archivetoday.download.DownloadErrorMessages
 import org.gnosco.share2archivetoday.download.OpenDownloadedMedia
 import org.gnosco.share2archivetoday.download.history.DownloadHistoryStore
 import org.gnosco.share2archivetoday.download.service.VideoDownloadService
+import org.gnosco.share2archivetoday.ytdlp.FormatInfo
 import org.gnosco.share2archivetoday.ytdlp.QualityPickerModel
 import org.gnosco.share2archivetoday.ytdlp.YtDlpBridge
 import org.gnosco.share2archivetoday.ytdlp.YtDlpFailureClassifier
 
 /**
- * Share-target entry: clean URL → duplicate check → probe → quality picker → optional cellular warn → FGS.
+ * Share-target entry: clean URL -> duplicate check -> probe -> quality picker ->
+ * optional cellular warning -> foreground service.
  */
 class DownloadVideoActivity : MainActivity() {
 
@@ -65,6 +68,11 @@ class DownloadVideoActivity : MainActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != REQ_NOTIF) return
+        val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            // The download still runs, but with no progress and no cancel button, so say so.
+            Toast.makeText(this, R.string.download_notifications_denied, Toast.LENGTH_LONG).show()
+        }
         pendingShareUrl?.let { url ->
             pendingShareUrl = null
             fourSteps(url)
@@ -118,19 +126,34 @@ class DownloadVideoActivity : MainActivity() {
     private fun beginProbe(url: String) {
         val progress = AlertDialog.Builder(this)
             .setMessage(R.string.download_analyzing)
-            .setCancelable(false)
+            // The Python interpreter is serialized behind one thread, so this can queue
+            // behind an active download. It must always be possible to back out.
+            .setCancelable(true)
+            .setOnCancelListener { finish() }
             .create()
         progress.show()
 
         scope.launch {
             try {
                 Log.i(TAG, "Probe starting for $url")
-                val probe = withContext(Dispatchers.IO) {
-                    YtDlpBridge.get(this@DownloadVideoActivity).probe(url)
+                val bridge = withContext(Dispatchers.IO) {
+                    YtDlpBridge.get(this@DownloadVideoActivity)
                 }
+                if (bridge.isBusy) {
+                    progress.setMessage(getString(R.string.download_waiting_busy))
+                }
+                val probe = withContext(Dispatchers.IO) { bridge.probe(url) }
                 Log.i(TAG, "Probe ok: ${probe.title}, ${probe.formats.size} formats")
                 progress.dismiss()
-                showQualityPicker(url, probe.title, probe.formats, probe.duration)
+                showQualityPicker(
+                    originalUrl = url,
+                    // Playlist and channel shares resolve to a single video here; using the
+                    // canonical URL means the download does not have to resolve it again.
+                    downloadUrl = probe.webpageUrl ?: url,
+                    title = probe.title,
+                    formats = probe.formats,
+                    durationSec = probe.duration,
+                )
             } catch (t: Throwable) {
                 progress.dismiss()
                 Log.e(TAG, "Probe failed kind=${YtDlpFailureClassifier.classify(t)}", t)
@@ -144,16 +167,69 @@ class DownloadVideoActivity : MainActivity() {
         }
     }
 
+    private data class Choice(
+        val label: String,
+        val isAudio: Boolean,
+        val videoIndex: Int = -1,
+    )
+
     private fun showQualityPicker(
-        url: String,
+        originalUrl: String,
+        downloadUrl: String,
         title: String,
-        formats: List<org.gnosco.share2archivetoday.ytdlp.FormatInfo>,
+        formats: List<FormatInfo>,
         durationSec: Double?,
     ) {
         val langs = preferredAudioLanguages()
-        val videos = QualityPickerModel.buildVideoOptions(formats, durationSec, langs)
         val audio = QualityPickerModel.bestAudioOnly(formats, durationSec, langs)
-        val rankedAudioIds = QualityPickerModel.rankedAudioFormatIds(formats, langs)
+
+        val content = layoutInflater.inflate(R.layout.dialog_download_quality, null)
+        val listView = content.findViewById<android.widget.ListView>(R.id.quality_list)
+        val maxQuality = content.findViewById<CheckBox>(R.id.quality_max_quality)
+        val archiveMeta = content.findViewById<CheckBox>(R.id.quality_archive_meta)
+        val includeComments = content.findViewById<CheckBox>(R.id.quality_include_comments)
+
+        // Comments are a separate, much more expensive opt-in than the rest of the metadata.
+        includeComments.isEnabled = false
+        archiveMeta.setOnCheckedChangeListener { _, checked ->
+            includeComments.isEnabled = checked
+            if (!checked) includeComments.isChecked = false
+        }
+
+        var videos: List<QualityPickerModel.VideoOption> = emptyList()
+        var choices: List<Choice> = emptyList()
+
+        fun rebuild(archiveMode: Boolean) {
+            videos = QualityPickerModel.buildVideoOptions(formats, durationSec, langs, archiveMode)
+            choices = buildList {
+                videos.forEachIndexed { index, opt ->
+                    add(Choice(videoLabel(opt, archiveMode), isAudio = false, videoIndex = index))
+                }
+                if (audio.formatId != null) {
+                    add(
+                        Choice(
+                            label = buildString {
+                                append(getString(R.string.download_audio_only))
+                                append(" — ")
+                                append(formatSize(audio.estimatedBytes))
+                                if (audio.requiresVideoExtract) append(" (extract)")
+                            },
+                            isAudio = true,
+                        )
+                    )
+                }
+            }
+            listView.adapter = android.widget.ArrayAdapter(
+                this,
+                android.R.layout.simple_list_item_single_choice,
+                choices.map { it.label },
+            )
+            listView.choiceMode = android.widget.ListView.CHOICE_MODE_SINGLE
+            listView.setItemChecked(0, true)
+            sizeList(listView)
+        }
+
+        rebuild(archiveMode = false)
 
         if (videos.isEmpty() && audio.formatId == null) {
             AlertDialog.Builder(this)
@@ -165,62 +241,7 @@ class DownloadVideoActivity : MainActivity() {
             return
         }
 
-        data class Choice(val label: String, val isAudio: Boolean, val videoIndex: Int = -1)
-
-        val choices = mutableListOf<Choice>()
-        videos.forEachIndexed { index, opt ->
-            choices.add(
-                Choice(
-                    label = "${opt.label} — ${formatSize(opt.estimatedBytes)}",
-                    isAudio = false,
-                    videoIndex = index,
-                )
-            )
-        }
-        if (audio.formatId != null) {
-            choices.add(
-                Choice(
-                    label = buildString {
-                        append(getString(R.string.download_audio_only))
-                        append(" — ")
-                        append(formatSize(audio.estimatedBytes))
-                        if (audio.requiresVideoExtract) append(" (extract)")
-                    },
-                    isAudio = true,
-                )
-            )
-        }
-
-        val content = layoutInflater.inflate(R.layout.dialog_download_quality, null)
-        val listView = content.findViewById<android.widget.ListView>(R.id.quality_list)
-        val archiveMeta = content.findViewById<android.widget.CheckBox>(R.id.quality_archive_meta)
-        archiveMeta.isChecked = false
-
-        val labels = choices.map { it.label }.toTypedArray()
-        listView.adapter = android.widget.ArrayAdapter(
-            this,
-            android.R.layout.simple_list_item_single_choice,
-            labels,
-        )
-        listView.choiceMode = android.widget.ListView.CHOICE_MODE_SINGLE
-        listView.setItemChecked(0, true)
-
-        // Size the list so it doesn't collapse inside AlertDialog.
-        listView.post {
-            var total = 0
-            val adapter = listView.adapter ?: return@post
-            val maxRows = minOf(adapter.count, 6)
-            for (i in 0 until maxRows) {
-                val row = adapter.getView(i, null, listView)
-                row.measure(
-                    android.view.View.MeasureSpec.makeMeasureSpec(listView.width, android.view.View.MeasureSpec.EXACTLY),
-                    android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED),
-                )
-                total += row.measuredHeight
-            }
-            listView.layoutParams = listView.layoutParams.apply { height = total }
-            listView.requestLayout()
-        }
+        maxQuality.setOnCheckedChangeListener { _, checked -> rebuild(checked) }
 
         AlertDialog.Builder(this)
             .setTitle(R.string.download_pick_quality)
@@ -228,13 +249,14 @@ class DownloadVideoActivity : MainActivity() {
             .setPositiveButton(R.string.download_pick_download) { _, _ ->
                 val which = listView.checkedItemPosition.coerceAtLeast(0)
                 val choice = choices.getOrNull(which) ?: return@setPositiveButton
-                val includeMeta = archiveMeta.isChecked
+                val meta = archiveMeta.isChecked
+                val comments = meta && includeComments.isChecked
                 if (choice.isAudio) {
-                    onAudioChosen(url, title, audio, rankedAudioIds, includeMeta)
+                    onAudioChosen(originalUrl, downloadUrl, title, audio, formats, langs, meta, comments)
                 } else {
                     val opt = videos[choice.videoIndex]
                     maybeWarnCellular(opt.estimatedBytes) {
-                        startVideo(url, title, opt, rankedAudioIds, includeMeta)
+                        startVideo(originalUrl, downloadUrl, title, opt, formats, langs, meta, comments)
                     }
                 }
             }
@@ -243,29 +265,78 @@ class DownloadVideoActivity : MainActivity() {
             .show()
     }
 
+    private fun videoLabel(opt: QualityPickerModel.VideoOption, archiveMode: Boolean): String =
+        buildString {
+            append(opt.label)
+            append(" — ")
+            append(formatSize(opt.estimatedBytes))
+            if (archiveMode) {
+                opt.codecSummary?.let { append(" · ").append(it) }
+            }
+            if (opt.needsMux) {
+                append(" · ")
+                append(
+                    getString(
+                        if (opt.muxRisk) R.string.download_mux_risk_note
+                        else R.string.download_mux_note
+                    )
+                )
+            }
+        }
+
+    /** Size the list so it doesn't collapse inside AlertDialog. */
+    private fun sizeList(listView: android.widget.ListView) {
+        listView.post {
+            var total = 0
+            val adapter = listView.adapter ?: return@post
+            val maxRows = minOf(adapter.count, 6)
+            for (i in 0 until maxRows) {
+                val row = adapter.getView(i, null, listView)
+                row.measure(
+                    android.view.View.MeasureSpec.makeMeasureSpec(
+                        listView.width,
+                        android.view.View.MeasureSpec.EXACTLY,
+                    ),
+                    android.view.View.MeasureSpec.makeMeasureSpec(
+                        0,
+                        android.view.View.MeasureSpec.UNSPECIFIED,
+                    ),
+                )
+                total += row.measuredHeight
+            }
+            listView.layoutParams = listView.layoutParams.apply { height = total }
+            listView.requestLayout()
+        }
+    }
+
     private fun onAudioChosen(
-        url: String,
+        originalUrl: String,
+        downloadUrl: String,
         title: String,
         audio: QualityPickerModel.AudioOption,
-        rankedAudioIds: List<String>,
+        formats: List<FormatInfo>,
+        langs: List<String>,
         archiveMetadata: Boolean,
+        includeComments: Boolean,
     ) {
         val audioId = audio.formatId
         if (audioId == null) {
-            Toast.makeText(this, "No audio format available", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, R.string.download_err_no_formats, Toast.LENGTH_LONG).show()
             finish()
             return
         }
         val proceed = {
             maybeWarnCellular(audio.estimatedBytes) {
+                val ranked = QualityPickerModel.rankedAudioFormatIds(formats, langs)
                 val ids = when {
                     audio.requiresVideoExtract -> emptyList()
-                    rankedAudioIds.isNotEmpty() -> rankedAudioIds
+                    ranked.isNotEmpty() -> ranked
                     else -> listOf(audioId)
                 }
                 VideoDownloadService.start(
                     this,
-                    url = url,
+                    url = downloadUrl,
+                    originalUrl = originalUrl,
                     title = title,
                     audioFormatIds = ids,
                     combinedFormatId = if (audio.requiresVideoExtract) audioId else null,
@@ -273,6 +344,8 @@ class DownloadVideoActivity : MainActivity() {
                     audioOnly = true,
                     requiresVideoExtract = audio.requiresVideoExtract,
                     archiveMetadata = archiveMetadata,
+                    includeComments = includeComments,
+                    estimatedBytes = audio.estimatedBytes,
                 )
                 toastDownloadContinuing()
                 finish()
@@ -292,29 +365,37 @@ class DownloadVideoActivity : MainActivity() {
     }
 
     private fun startVideo(
-        url: String,
+        originalUrl: String,
+        downloadUrl: String,
         title: String,
         opt: QualityPickerModel.VideoOption,
-        rankedAudioIds: List<String>,
+        formats: List<FormatInfo>,
+        langs: List<String>,
         archiveMetadata: Boolean,
+        includeComments: Boolean,
     ) {
         val preferred = opt.audioFormatId
+        // When merging, try muxable codecs first so an Opus track does not sink the merge.
+        val ranked = QualityPickerModel.rankedAudioFormatIds(formats, langs, forMux = opt.needsMux)
         val audioIds = when {
             !opt.needsMux -> emptyList()
-            preferred != null ->
-                listOf(preferred) + rankedAudioIds.filter { it != preferred }
-            else -> rankedAudioIds
+            preferred != null -> listOf(preferred) + ranked.filter { it != preferred }
+            else -> ranked
         }
         VideoDownloadService.start(
             this,
-            url = url,
+            url = downloadUrl,
+            originalUrl = originalUrl,
             title = title,
             videoFormatId = if (opt.needsMux) opt.videoFormatId else null,
             audioFormatIds = audioIds,
-            combinedFormatId = if (!opt.needsMux) (opt.combinedFormatId ?: opt.videoFormatId) else null,
+            combinedFormatId =
+                if (!opt.needsMux) (opt.combinedFormatId ?: opt.videoFormatId) else null,
             needsMux = opt.needsMux,
             audioOnly = false,
             archiveMetadata = archiveMetadata,
+            includeComments = includeComments,
+            estimatedBytes = opt.estimatedBytes,
         )
         toastDownloadContinuing()
         finish()
@@ -355,6 +436,7 @@ class DownloadVideoActivity : MainActivity() {
     private fun formatSize(bytes: Long?): String {
         if (bytes == null || bytes <= 0) return getString(R.string.download_size_unknown)
         val mb = bytes / (1024.0 * 1024.0)
+        if (mb >= 1024) return String.format(Locale.US, "%.2f GB", mb / 1024.0)
         return String.format(Locale.US, "%.1f MB", mb)
     }
 

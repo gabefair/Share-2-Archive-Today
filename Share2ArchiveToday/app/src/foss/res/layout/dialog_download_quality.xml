@@ -1,44 +1,92 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:paddingHorizontal="20dp"
-    android:paddingTop="8dp"
-    android:paddingBottom="4dp">
+    android:layout_height="wrap_content">
 
-    <ListView
-        android:id="@+id/quality_list"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:choiceMode="singleChoice"
-        android:divider="@null"
-        android:dividerHeight="0dp"
-        android:minHeight="48dp" />
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="4dp">
 
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="12dp"
-        android:background="#1F000000" />
+        <ListView
+            android:id="@+id/quality_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:choiceMode="singleChoice"
+            android:divider="@null"
+            android:dividerHeight="0dp"
+            android:minHeight="48dp" />
 
-    <CheckBox
-        android:id="@+id/quality_archive_meta"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:checked="false"
-        android:text="@string/download_archive_meta"
-        android:textSize="14sp" />
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="12dp"
+            android:background="#1F000000" />
 
-    <TextView
-        android:id="@+id/quality_archive_meta_hint"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="32dp"
-        android:layout_marginTop="2dp"
-        android:lineSpacingExtra="2dp"
-        android:text="@string/download_archive_meta_hint"
-        android:textColor="#99000000"
-        android:textSize="12sp" />
-</LinearLayout>
+        <CheckBox
+            android:id="@+id/quality_max_quality"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="false"
+            android:text="@string/download_max_quality"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/quality_max_quality_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="32dp"
+            android:layout_marginTop="2dp"
+            android:lineSpacingExtra="2dp"
+            android:text="@string/download_max_quality_hint"
+            android:textColor="#99000000"
+            android:textSize="12sp" />
+
+        <CheckBox
+            android:id="@+id/quality_archive_meta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:checked="false"
+            android:text="@string/download_archive_meta"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/quality_archive_meta_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="32dp"
+            android:layout_marginTop="2dp"
+            android:lineSpacingExtra="2dp"
+            android:text="@string/download_archive_meta_hint"
+            android:textColor="#99000000"
+            android:textSize="12sp" />
+
+        <CheckBox
+            android:id="@+id/quality_include_comments"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="8dp"
+            android:checked="false"
+            android:enabled="false"
+            android:text="@string/download_include_comments"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/quality_include_comments_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="56dp"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="4dp"
+            android:lineSpacingExtra="2dp"
+            android:text="@string/download_include_comments_hint"
+            android:textColor="#99000000"
+            android:textSize="12sp" />
+    </LinearLayout>
+</ScrollView>

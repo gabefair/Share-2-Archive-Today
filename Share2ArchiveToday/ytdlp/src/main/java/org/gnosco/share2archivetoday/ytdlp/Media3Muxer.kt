@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
@@ -24,7 +25,11 @@ import kotlinx.coroutines.withContext
 /**
  * Media3 remux helpers: merge A/V, or strip video to keep audio only.
  * Transformer must be created/started on the main thread.
+ *
+ * The whole Transformer surface is marked unstable by Media3; it is the only ffmpeg
+ * substitute available in a FOSS build, so the opt-in is deliberate.
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 class Media3Muxer(private val context: Context) {
 
     private val mainHandler = Handler(Looper.getMainLooper())
