@@ -109,6 +109,8 @@ dependencies {
     "devImplementation"(project(":ytdlp"))
     "fossImplementation"(libs.kotlinx.coroutines.android)
     "devImplementation"(libs.kotlinx.coroutines.android)
+    "fossImplementation"("androidx.work:work-runtime-ktx:2.10.5")
+    "devImplementation"("androidx.work:work-runtime-ktx:2.10.5")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.1")

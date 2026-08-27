@@ -332,6 +332,10 @@ class BridgeTest(unittest.TestCase):
     def test_strict_fragments_is_on_by_default(self):
         self.assertIs(ytdlp_bridge._base_opts()["skip_unavailable_fragments"], False)
 
+    def test_concurrent_fragment_downloads_is_bounded(self):
+        # Parallel HLS/DASH fragment fetch without thrashing Chaquopy/IO.
+        self.assertEqual(ytdlp_bridge._base_opts()["concurrent_fragment_downloads"], 4)
+
     def test_cachedir_is_redirected_to_app_storage(self):
         self.assertEqual(ytdlp_bridge._base_opts()["cachedir"], self.cache)
 

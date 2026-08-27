@@ -141,12 +141,20 @@ object DownloadsPublisher {
      * Publishing copies rather than moves, so a download needs room for the work file
      * and the published copy at the same time. Checked up front because discovering it
      * mid-copy means throwing away a completed transfer.
+     *
+     * @param copies peak concurrent occupancy multiplier. Progressive download ≈ 2
+     *   (work + publish). Mux/extract needs ≈ 4 (video + audio + merged/extracted +
+     *   publish) because intermediate streams coexist until publish finishes.
      */
     fun hasRoomFor(context: Context, estimatedBytes: Long?, copies: Int = 2): Boolean {
         if (estimatedBytes == null || estimatedBytes <= 0) return true
         val needed = estimatedBytes * copies + SAFETY_MARGIN_BYTES
         return minOf(freeBytesForWork(context), freeBytesForDownloads(context)) >= needed
     }
+
+    /** Peak occupancy multiplier for the download strategy about to run. */
+    fun peakCopies(needsMux: Boolean, requiresVideoExtract: Boolean): Int =
+        if (needsMux || requiresVideoExtract) 4 else 2
 
     private const val SAFETY_MARGIN_BYTES = 64L * 1024 * 1024
 }

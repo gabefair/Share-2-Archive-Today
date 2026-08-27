@@ -30,8 +30,8 @@ import org.gnosco.share2archivetoday.download.history.HistoryEntry
  *
  * Swipe left on a row → open the file.
  * Swipe right → remove from history (with undo).
- * Tap → open when possible, otherwise show actions.
- * Long-press → full action sheet.
+ * Tap → share.
+ * Long-press → action sheet (summary + Details, Open, Retry, …).
  */
 class DownloadHistoryActivity : Activity() {
 
@@ -64,13 +64,6 @@ class DownloadHistoryActivity : Activity() {
         clearButton.setOnClickListener { confirmClear() }
 
         listView.adapter = HistoryAdapter()
-        listView.setOnItemClickListener { _, _, position, _ ->
-            onRowTap(entries[position])
-        }
-        listView.setOnItemLongClickListener { _, _, position, _ ->
-            showEntryActions(entries[position])
-            true
-        }
         swipeController = HistorySwipeController(
             listView = listView,
             onOpen = { position ->
@@ -81,6 +74,16 @@ class DownloadHistoryActivity : Activity() {
             },
         )
         swipeController.attach()
+        listView.setOnItemClickListener { _, _, position, _ ->
+            if (swipeController.shouldSuppressItemInteraction()) return@setOnItemClickListener
+            shareFromRow(entries[position])
+        }
+        listView.setOnItemLongClickListener { _, _, position, _ ->
+            // Consume the event either way so a mid-swipe long-press never opens the sheet.
+            if (swipeController.shouldSuppressItemInteraction()) return@setOnItemLongClickListener true
+            showEntryActions(entries[position])
+            true
+        }
 
         reload()
     }
@@ -95,12 +98,9 @@ class DownloadHistoryActivity : Activity() {
         super.onDestroy()
     }
 
-    private fun onRowTap(entry: HistoryEntry) {
-        if (entry.success && store.uriStillValid(this, entry)) {
-            openEntry(entry)
-        } else {
-            showEntryActions(entry)
-        }
+    private fun shareFromRow(entry: HistoryEntry) {
+        val canOpen = entry.success && store.uriStillValid(this, entry)
+        shareEntry(entry, buildEntryDetailText(entry, canOpen), canOpen)
     }
 
     private fun openEntry(entry: HistoryEntry) {
@@ -180,23 +180,31 @@ class DownloadHistoryActivity : Activity() {
     private fun showEntryActions(entry: HistoryEntry) {
         val canOpen = entry.success && store.uriStillValid(this, entry)
         val detailText = buildEntryDetailText(entry, canOpen)
+        // Keep the message short: AlertDialog + setMessage + setItems often collapses
+        // the action list (Share disappears below a long URL wall of text).
+        val summary = buildEntrySummary(entry, canOpen)
         val items = mutableListOf<String>()
         if (canOpen) items.add(getString(R.string.download_open))
         items.add(getString(R.string.download_share))
         items.add(getString(R.string.download_archive_page))
+        if (!entry.success && entry.retry != null) {
+            items.add(getString(R.string.download_retry))
+        }
         items.add(getString(R.string.download_again))
+        items.add(getString(R.string.download_details))
         items.add(getString(R.string.download_copy_url))
         items.add(getString(R.string.download_delete_entry))
         items.add(getString(R.string.download_cancel))
 
         AlertDialog.Builder(this)
             .setTitle(entry.title)
-            .setMessage(detailText)
+            .setMessage(summary)
             .setItems(items.toTypedArray()) { _, which ->
                 when (items[which]) {
                     getString(R.string.download_open) -> openEntry(entry)
                     getString(R.string.download_share) -> shareEntry(entry, detailText, canOpen)
                     getString(R.string.download_archive_page) -> archivePage(entry)
+                    getString(R.string.download_retry) -> retryEntry(entry)
                     getString(R.string.download_again) -> {
                         startActivity(
                             Intent(this, DownloadVideoActivity::class.java).apply {
@@ -207,6 +215,7 @@ class DownloadHistoryActivity : Activity() {
                         )
                         finish()
                     }
+                    getString(R.string.download_details) -> showEntryDetails(entry, detailText)
                     getString(R.string.download_copy_url) -> {
                         val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
                         cm.setPrimaryClip(ClipData.newPlainText("url", entry.url))
@@ -216,6 +225,52 @@ class DownloadHistoryActivity : Activity() {
                 }
             }
             .show()
+    }
+
+    private fun showEntryDetails(entry: HistoryEntry, detailText: String) {
+        AlertDialog.Builder(this)
+            .setTitle(entry.title)
+            .setMessage(detailText)
+            .setPositiveButton(R.string.download_copy_url) { _, _ ->
+                val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("url", entry.url))
+                Toast.makeText(this, R.string.download_url_copied, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.download_err_ok, null)
+            .show()
+    }
+
+    private fun buildEntrySummary(entry: HistoryEntry, canOpen: Boolean): String =
+        buildString {
+            append(formatRelativeTime(entry.timestamp))
+            entry.estimatedBytes?.takeIf { it > 0 }?.let {
+                append(" · ")
+                append(formatSize(it))
+            }
+            urlHost(entry.url)?.let {
+                append("\n")
+                append(it)
+            }
+            when {
+                !entry.success -> {
+                    append("\n")
+                    append(entry.error?.take(80) ?: getString(R.string.download_status_fail))
+                }
+                !canOpen -> {
+                    append("\n")
+                    append(getString(R.string.download_file_missing))
+                }
+            }
+        }
+
+    private fun retryEntry(entry: HistoryEntry) {
+        val ok = org.gnosco.share2archivetoday.download.service.DownloadScheduler.retry(this, entry)
+        Toast.makeText(
+            this,
+            if (ok) R.string.download_retry_started else R.string.download_retry_unavailable,
+            Toast.LENGTH_SHORT,
+        ).show()
+        if (ok) finish()
     }
 
     /** Snapshot the page the media came from, so the download keeps its context. */

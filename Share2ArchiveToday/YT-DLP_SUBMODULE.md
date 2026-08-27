@@ -2,7 +2,7 @@
 
 yt-dlp lives at [`https://github.com/yt-dlp/yt-dlp`](https://github.com/yt-dlp/yt-dlp) under `third_party/yt-dlp`.
 
-## Always build against the latest *release*
+## Pinned release (default)
 
 On every `:ytdlp` / app build, Gradle runs:
 
@@ -11,22 +11,19 @@ python3 tools/fetch_ytdlp_latest.py
 python3 tools/trim_ytdlp.py --out ytdlp/build/generated/ytdlp
 ```
 
-`fetch_ytdlp_latest.py` queries GitHub for the **latest release tag** (not `master`) and checks it out. That is what fixes YouTube “probe OK / download 403” when extractors age out.
+`fetch_ytdlp_latest.py` checks out the tag in [`ytdlp/YTDLP_PIN`](ytdlp/YTDLP_PIN) so FOSS/F-Droid builds are reproducible. Every download still records the packaged `yt_dlp.version.__version__` in its provenance manifest.
 
-Because the version is not pinned in the source tree, every download records the yt-dlp release that produced it in its provenance manifest (read at runtime from the packaged `yt_dlp.version.__version__`, so it always matches the code that actually ran).
+| Env | Effect |
+|-----|--------|
+| *(none)* | Use `ytdlp/YTDLP_PIN` |
+| `S2A_YTDLP_TAG=YYYY.MM.DD` | Force that tag |
+| `S2A_YTDLP_LATEST=1` | Query GitHub for the newest release tag |
 
-### Pin / offline (optional)
-
-```bash
-export S2A_YTDLP_TAG=2026.08.19   # skip “latest” lookup; use this tag
-./gradlew :app:assembleFossDebug
-```
-
-Use a pin for reproducible CI / F-Droid builds. If the tag is already checked out, no network is required.
+If the desired tag is already checked out, no network is required.
 
 ## Trim for Chaquopy
 
-The trim stubs `external.py` (no ffmpeg/aria2c on Android). The stub is **generated from the upstream module's public surface** rather than hand-written, so a new external-downloader class in yt-dlp cannot turn into an `ImportError` or `AttributeError` on a user's device. Every class becomes an `ExternalFD` subclass reporting `available() == False`, and `FFmpegFD.can_merge_formats()` returns `False` so the native downloaders are used.
+The trim stubs `external.py` (no ffmpeg/aria2c on Android). The stub is **generated from the upstream module's public surface** rather than hand-written, so a new external-downloader class in yt-dlp cannot turn into an `ImportError` or `AttributeError` on a user's device. Every class becomes an `ExternalFD` subclass reporting `available() == False`, and `FFmpegFD.can_merge_formats()` returns `False` so the native downloaders are used. If upstream drops a symbol the stub must export, trim **fails the build** instead of warning.
 
 **No site / adult filtering.** The FOSS download build keeps the full extractor set (including adult sites). `ytdlp_bridge` sets `age_limit: None` so yt-dlp does not skip age-restricted videos. The Play flavor has no download feature at all — it does not ship a reduced extractor list.
 
@@ -34,11 +31,18 @@ The trim stubs `external.py` (no ffmpeg/aria2c on Android). The stub is **genera
 
 Modern yt-dlp prefers a JS runtime (Deno/Node) for some YouTube clients. On-device we usually have none, so yt-dlp falls back to its **JS-less** client set (e.g. `visionos`) and mostly HLS (`m3u8_native`) formats. That is expected — do **not** invent custom `player_client` overrides unless comparing against current upstream docs.
 
+## ABI
+
+FOSS is **arm64-v8a only** (Chaquopy + yt-dlp size and native-wheel limits). The `dev` flavor also includes `x86_64` for emulators. There is no `armeabi-v7a` build.
+
 ## Download behaviour
+
+Downloads run as a **WorkManager** long-running / expedited worker (`VideoDownloadWorker`) with a foreground notification (cancel + history). That replaces a hand-rolled `dataSync` foreground service and avoids Android 15 `Service.onTimeout` daily caps for the download path. Partial files are kept; the same `downloadId` resumes work under the scratch dir. History **Retry** re-enqueues with `ExistingWorkPolicy.REPLACE` and the stored format selectors.
 
 ### Archive integrity
 
 - `skip_unavailable_fragments` is **off**. A fragmented download that loses a segment fails loudly instead of publishing a file with silent gaps.
+- `concurrent_fragment_downloads` is **4** (bounded parallelism for HLS/DASH).
 - The output path comes from `requested_downloads[0].filepath` (falling back to the `finished` progress hook), not `prepare_filename()`, which recomputes a name and can diverge from what was written.
 - Container and MIME type are derived from the file yt-dlp actually produced, so a WebM or MKV is never labelled `.mp4`.
 - Every download writes a `.manifest.json` next to it: shared and resolved URL, UTC timestamps, app and yt-dlp versions, every stream fetched, a SHA-256 of every saved file, and whether Media3 re-containered the bytes on device.
@@ -50,11 +54,13 @@ A merged download uses a **comma** format selector (`"137,140"`), which fetches 
 
 The output template must contain `%(format_id)s` when the selector has a comma, or the streams overwrite each other. If an extractor collapses the selector to one stream, the executor falls back to fetching them one at a time.
 
-Playlist and channel shares are resolved to a canonical single-video URL during the probe, and the download uses that URL, so the resolution happens once rather than on every call.
+Playlist and channel shares are resolved to a canonical single-video URL during the probe, and the download uses that URL, so the resolution happens once rather than on every call. The UI toasts when a playlist/channel URL was narrowed to the first entry, and duplicate detection also matches `webpage_url` / video id.
 
 ### Sidecars
 
-With “Save archivist metadata” on, yt-dlp writes `.info.json`, the description, the thumbnail, **subtitles and auto-captions** (`subtitleslangs: ["all"]`, no ffmpeg needed), and a `.ytdlp.log` of the run's warnings. Comments are a **separate** opt-in because scraping them can add many minutes and hundreds of megabytes.
+With “Save archivist metadata” on, yt-dlp writes `.info.json`, the description, the thumbnail, **subtitles and auto-captions** (device locales + `en` — not `all`, which 429s YouTube), and a `.ytdlp.log` of the run's warnings. Caption/side-file download errors use `ignoreerrors: only_download` so a finished media file is kept. Comments are a **separate** opt-in because scraping them can add many minutes and hundreds of megabytes.
+
+Repeated “no impersonate target” warnings are suppressed after the first (Android has no `curl_cffi`). Missing JS runtime is expected on-device; yt-dlp falls back to JS-less YouTube clients.
 
 A download that produces more than one file gets its own folder under `Download/Share2Archive/` so media and metadata cannot be separated or mismatched by MediaStore's de-duplication.
 
@@ -64,18 +70,22 @@ The picker prefers `m3u8_native` over progressive `https`, soft-caps at 1080p, a
 
 **Archive quality** (checkbox) removes the cap and prefers the highest-bitrate stream even when that requires a merge — on YouTube the adaptive streams are a much higher bitrate than the progressive one at the same height.
 
-When a merge is required, codecs the platform MP4 muxer can actually contain (`avc1`/`hev1`/`av01` + `mp4a`) are preferred over VP9/Opus, which are only containerable in WebM. If the merge still fails, **both streams are published side by side** rather than discarding a completed transfer; the manifest records the failure and the `ffmpeg -c copy` command to merge them off-device.
+When a merge is required, only **AVC** (`avc1`/`avc3`/`h264`/`mp4v`) + AAC-family audio are treated as safe Media3 transmux targets. HEVC and AV1 still download but are marked mux-risk (prefer an AVC sibling when present). VP9/Opus need WebM, which Media3 cannot write. If the merge still fails, **both streams are published side by side** rather than discarding a completed transfer; the manifest records the failure and the `ffmpeg -c copy` command to merge them off-device.
+
+When **Save archivist metadata** is on and a merge succeeds, title / description / uploader / date / source URL / cover art are also **embedded into the MP4** (iTunes/QuickTime tags) so players see them without opening the sidecars. Sidecar files are still written for a lossless archival copy.
+
+Space preflight uses a **4×** occupancy multiplier when mux or audio-extract will keep intermediate streams on disk (2× for progressive).
 
 ### Cancellation and limits
 
-- The ongoing notification has a **Cancel** action; the flag is polled from the Python progress hook, which aborts yt-dlp mid-download.
-- `Service.onTimeout` is handled for Android 15+, where a `dataSync` foreground service has a capped daily runtime. Partial files are kept.
+- The ongoing notification has a **Cancel** action; WorkManager stop + a flag polled from the Python progress hook (and from Media3 export) abort mid-work.
 - Download ids are derived from URL + format, so re-sharing a link resumes the existing partial instead of starting over. Abandoned scratch directories are swept after 7 days.
 
 ## Tests
 
 ```bash
 ./gradlew :ytdlp:check          # JVM unit tests + the Python bridge tests
+./gradlew :ytdlp:connectedDebugAndroidTest   # Media3 mux/cancel on a device/emulator
 ./gradlew :app:testFossDebugUnitTest
 python3 ytdlp/src/test/python/test_ytdlp_bridge.py   # directly, for iteration
 ```
@@ -98,5 +108,5 @@ steam-run ./gradlew :app:assembleFossDebug :app:assemblePlayDebug
 | Flavor | Contents |
 |--------|----------|
 | `play` | Archive + clipboard only (no Chaquopy) |
-| `foss` | Full download feature (default, arm64) |
+| `foss` | Full download feature (default, arm64 only) |
 | `dev` | Full download + `x86_64` for emulators |

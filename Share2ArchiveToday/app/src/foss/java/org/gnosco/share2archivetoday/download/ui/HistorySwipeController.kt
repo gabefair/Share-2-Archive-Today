@@ -20,6 +20,10 @@ import org.gnosco.share2archivetoday.R
  *
  * Swipe left reveals Open; swipe right reveals Remove. Progress scales the
  * action labels so the gesture teaches the mapping before commit.
+ *
+ * While a horizontal drag is active (or was on this gesture), click / long-press
+ * must be ignored — ListView's long-press timer otherwise still fires once we
+ * start consuming MOVE events.
  */
 class HistorySwipeController(
     private val listView: ListView,
@@ -33,6 +37,8 @@ class HistorySwipeController(
     private var downX = 0f
     private var downY = 0f
     private var dragging = false
+    /** True from drag-start until the next DOWN — blocks click/long-press for this gesture. */
+    private var gestureOwnedBySwipe = false
     private var activePosition = -1
     private var activeRow: View? = null
     private var foreground: View? = null
@@ -40,6 +46,9 @@ class HistorySwipeController(
     private var deleteLabel: View? = null
     private var crossedThreshold = false
     private var animator: ValueAnimator? = null
+
+    /** Whether the current (or just-finished) gesture was a swipe, not a tap/hold. */
+    fun shouldSuppressItemInteraction(): Boolean = gestureOwnedBySwipe || dragging
 
     fun attach() {
         listView.setOnTouchListener(this)
@@ -60,7 +69,7 @@ class HistorySwipeController(
         if (Build.VERSION.SDK_INT >= 30) {
             haptic(view, HapticFeedbackConstants.CONFIRM)
         } else {
-            haptic(view, HapticFeedbackConstants.LONG_PRESS)
+            haptic(view, HapticFeedbackConstants.CLOCK_TICK)
         }
     }
 
@@ -69,6 +78,7 @@ class HistorySwipeController(
             MotionEvent.ACTION_DOWN -> {
                 animator?.cancel()
                 dragging = false
+                gestureOwnedBySwipe = false
                 crossedThreshold = false
                 downX = event.x
                 downY = event.y
@@ -92,9 +102,7 @@ class HistorySwipeController(
                 val dy = event.y - downY
                 if (!dragging) {
                     if (abs(dx) > touchSlop && abs(dx) > abs(dy) * 1.2f) {
-                        dragging = true
-                        listView.parent?.requestDisallowInterceptTouchEvent(true)
-                        haptic(listView, HapticFeedbackConstants.CLOCK_TICK)
+                        beginSwipe()
                     } else {
                         return false
                     }
@@ -134,10 +142,22 @@ class HistorySwipeController(
                         springBack(fg)
                 }
                 dragging = false
+                // Keep gestureOwnedBySwipe until the next DOWN so the ListView
+                // click/long-press that may still be dispatched is ignored.
                 return true
             }
         }
         return false
+    }
+
+    private fun beginSwipe() {
+        dragging = true
+        gestureOwnedBySwipe = true
+        listView.parent?.requestDisallowInterceptTouchEvent(true)
+        // We are about to consume MOVE; without this, ListView's pending long-press fires.
+        listView.cancelLongPress()
+        activeRow?.cancelLongPress()
+        haptic(listView, HapticFeedbackConstants.CLOCK_TICK)
     }
 
     private fun commitDistance(rowWidth: Float): Float =

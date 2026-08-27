@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import java.io.File
 import org.gnosco.share2archivetoday.download.history.BestPartialStore
+import org.gnosco.share2archivetoday.ytdlp.ArchiveMediaEmbedder
 import org.gnosco.share2archivetoday.ytdlp.DownloadSidecar
 import org.gnosco.share2archivetoday.ytdlp.Media3Muxer
 import org.gnosco.share2archivetoday.ytdlp.MediaTypes
@@ -11,7 +12,7 @@ import org.gnosco.share2archivetoday.ytdlp.YtDlpBridge
 import org.gnosco.share2archivetoday.ytdlp.YtDlpFailureClassifier
 import org.json.JSONObject
 
-/** Runs yt-dlp download + optional Media3 mux/extract. Keeps [VideoDownloadService] slim. */
+/** Runs yt-dlp download + optional Media3 mux/extract for [DownloadPipeline]. */
 class DownloadExecutor(
     private val context: Context,
     private val bridge: YtDlpBridge,
@@ -65,6 +66,7 @@ class DownloadExecutor(
             archiveMetadata = archiveMetadata,
             includeComments = includeComments,
             writeSubtitles = writeSubtitles || archiveMetadata,
+            subtitleLangs = YtDlpBridge.defaultSubtitleLangs(context),
         )
         return when {
             audioOnly && requiresVideoExtract && combinedFormatId != null ->
@@ -153,7 +155,9 @@ class DownloadExecutor(
         onStatus("Extracting audio…")
         val out = File(work, "audio_only.m4a")
         return try {
-            val audio = Media3Muxer(context).extractAudioBlocking(av, out)
+            val audio = Media3Muxer(context).extractAudioBlocking(av, out) {
+            cancelSignal?.isCancelled() == true
+        }
             Result(
                 // Deliberately not compared against the source file by size: the
                 // extracted track is always smaller than the video it came from.
@@ -164,7 +168,7 @@ class DownloadExecutor(
                 remuxOperation = "extract-audio",
             )
         } catch (t: Throwable) {
-            if (isCancelled(t)) throw t
+            if (isCancelled(t) || t is org.gnosco.share2archivetoday.ytdlp.Media3Cancelled) throw t
             Media3Muxer.logFailure(t)
             onStatus("Couldn't extract audio — saving video")
             Result(
@@ -235,15 +239,38 @@ class DownloadExecutor(
         onStatus("Merging…")
         val out = File(work, "merged.mp4")
         return try {
-            val merged = Media3Muxer(context).muxBlocking(videoFile, audio, out)
+            val merged = Media3Muxer(context).muxBlocking(videoFile, audio, out) {
+                cancelSignal?.isCancelled() == true
+            }
             partials.considerPartial(downloadId, "merged", merged)
+            var primaryFile = merged
+            val embedNotes = mutableListOf<String>()
+            if (options.archiveMetadata) {
+                onStatus("Embedding metadata…")
+                val embedded = ArchiveMediaEmbedder.embed(
+                    media = merged,
+                    sidecars = video.sidecars,
+                    titleFallback = video.title,
+                    provenance = video.provenance,
+                )
+                primaryFile = embedded.file
+                embedNotes += embedded.notes
+                if (embedded.embedded.isNotEmpty()) {
+                    Log.i(TAG, "Embedded into MP4: ${embedded.embedded}")
+                }
+            }
             onStatus("Saving…")
             Result(
-                primary = Artifact(merged, MediaTypes.forFile(merged), "video"),
+                primary = Artifact(primaryFile, MediaTypes.forFile(primaryFile), "video"),
                 sidecars = video.sidecars,
                 provenance = video.provenance,
                 remuxTool = MEDIA3,
-                remuxOperation = "mux-audio-video",
+                remuxOperation = if (options.archiveMetadata) {
+                    "mux-audio-video+embed-metadata"
+                } else {
+                    "mux-audio-video"
+                },
+                notes = embedNotes,
             )
         } catch (t: Throwable) {
             if (isCancelled(t)) throw t
@@ -319,6 +346,7 @@ class DownloadExecutor(
     /** Cancellation must abort the whole job, not be swallowed by a per-format retry loop. */
     private fun isCancelled(t: Throwable): Boolean =
         cancelSignal?.isCancelled() == true ||
+            t is org.gnosco.share2archivetoday.ytdlp.Media3Cancelled ||
             YtDlpFailureClassifier.classify(t) == YtDlpFailureClassifier.Kind.CANCELLED
 
     private fun short(t: Throwable): String =

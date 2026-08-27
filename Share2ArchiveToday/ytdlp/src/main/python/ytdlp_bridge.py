@@ -50,12 +50,26 @@ class _BridgeLogger:
     usually the only clue for "probe worked, download failed" reports.
     """
 
+    # Repeated once-per-request on Android (no curl_cffi). Keep the first; drop the rest.
+    _SUPPRESS_AFTER_FIRST = (
+        "no impersonate target is available",
+        "but no impersonate target is available",
+    )
+
     def __init__(self, sink: Optional[Callable[[str, str], None]] = None, keep: int = 4000):
         self.lines: deque = deque(maxlen=keep)
         self._sink = sink
+        self._suppressed: set = set()
 
     def _record(self, level: str, message: Any) -> None:
         text = str(message)
+        for needle in self._SUPPRESS_AFTER_FIRST:
+            if needle in text:
+                if needle in self._suppressed:
+                    return
+                self._suppressed.add(needle)
+                text = f"{text} (further identical warnings suppressed)"
+                break
         stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%H:%M:%S")
         self.lines.append(f"{stamp} {level.upper():7} {text}")
         # Only warnings and errors cross the JNI boundary; yt-dlp routes all of its
@@ -102,6 +116,9 @@ def _base_opts(**extra: Any) -> dict:
         # Archive integrity: a download with holes must fail loudly rather than be
         # published as though it were complete.
         "skip_unavailable_fragments": False,
+        # Parallel fragment fetches for native HLS/DASH. Progress hooks may arrive from
+        # worker threads; Kotlin notification updates are posted to the main handler.
+        "concurrent_fragment_downloads": 4,
     }
     if _CACHE_DIR:
         opts["cachedir"] = _CACHE_DIR
@@ -241,7 +258,13 @@ def download(
     archive_metadata = bool(options.get("archive_metadata"))
     include_comments = bool(options.get("include_comments"))
     write_subtitles = bool(options.get("write_subtitles", archive_metadata))
-    subtitle_langs = options.get("subtitle_langs") or ["all"]
+    # Never default to "all": YouTube rate-limits (HTTP 429) when every language is
+    # requested. Prefer caller-supplied locale tags; fall back to English.
+    raw_langs = options.get("subtitle_langs")
+    if isinstance(raw_langs, list) and raw_langs:
+        subtitle_langs = [str(x) for x in raw_langs if str(x).strip()]
+    else:
+        subtitle_langs = ["en"]
 
     started_at = datetime.datetime.now(datetime.timezone.utc)
 
@@ -316,11 +339,13 @@ def download(
         # megabytes on a popular video.
         opts["getcomments"] = include_comments
     if write_subtitles:
-        # Standalone .vtt/.srt need no ffmpeg, and captions are often the only textual
-        # record of a video worth archiving.
+        # Standalone .vtt/.srt need no ffmpeg. Limit languages (see subtitle_langs) so
+        # archive metadata does not 429 YouTube by pulling every track.
         opts["writesubtitles"] = True
         opts["writeautomaticsub"] = True
         opts["subtitleslangs"] = list(subtitle_langs)
+        # Caption/thumbnail side failures must not discard a finished media download.
+        opts["ignoreerrors"] = "only_download"
 
     with YoutubeDL(opts) as ydl:
         info = _resolve_single(ydl, url, download=True)

@@ -15,6 +15,8 @@ import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
 import java.io.File
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -58,8 +60,13 @@ class Media3Muxer(private val context: Context) {
             }
         }
 
-    fun muxBlocking(videoFile: File, audioFile: File, outputFile: File): File =
-        blockExport(outputFile) {
+    fun muxBlocking(
+        videoFile: File,
+        audioFile: File,
+        outputFile: File,
+        cancelSignal: (() -> Boolean)? = null,
+    ): File =
+        blockExport(outputFile, cancelSignal) {
             val videoItem = EditedMediaItem.Builder(uriItem(videoFile)).build()
             val audioItem = EditedMediaItem.Builder(uriItem(audioFile)).build()
             Composition.Builder(
@@ -68,8 +75,12 @@ class Media3Muxer(private val context: Context) {
             ).setTransmuxAudio(true).setTransmuxVideo(true).build()
         }
 
-    fun extractAudioBlocking(inputFile: File, outputFile: File): File =
-        blockExport(outputFile) {
+    fun extractAudioBlocking(
+        inputFile: File,
+        outputFile: File,
+        cancelSignal: (() -> Boolean)? = null,
+    ): File =
+        blockExport(outputFile, cancelSignal) {
             val audioOnly = EditedMediaItem.Builder(uriItem(inputFile))
                 .setRemoveVideo(true)
                 .build()
@@ -105,13 +116,19 @@ class Media3Muxer(private val context: Context) {
         }
     }
 
-    private fun blockExport(outputFile: File, composition: () -> Composition): File {
+    private fun blockExport(
+        outputFile: File,
+        cancelSignal: (() -> Boolean)?,
+        composition: () -> Composition,
+    ): File {
         check(Looper.myLooper() != Looper.getMainLooper()) {
             "muxBlocking/extractAudioBlocking must not run on the main thread"
         }
         val latch = CountDownLatch(1)
         val result = AtomicReference<File?>()
         val error = AtomicReference<Throwable?>()
+        val transformerRef = AtomicReference<Transformer?>()
+        val cancelled = AtomicBoolean(false)
         if (outputFile.exists()) outputFile.delete()
         outputFile.parentFile?.mkdirs()
 
@@ -134,13 +151,34 @@ class Media3Muxer(private val context: Context) {
                         }
                     })
                     .build()
+                transformerRef.set(transformer)
+                if (cancelSignal?.invoke() == true) {
+                    cancelled.set(true)
+                    latch.countDown()
+                    return@post
+                }
                 transformer.start(composition(), outputFile.absolutePath)
             } catch (t: Throwable) {
                 error.set(t)
                 latch.countDown()
             }
         }
-        latch.await()
+
+        while (!latch.await(250, TimeUnit.MILLISECONDS)) {
+            if (cancelSignal?.invoke() == true) {
+                cancelled.set(true)
+                transformerRef.get()?.let { t ->
+                    mainHandler.post { runCatching { t.cancel() } }
+                }
+                latch.countDown()
+                break
+            }
+        }
+
+        if (cancelled.get() || cancelSignal?.invoke() == true) {
+            runCatching { outputFile.delete() }
+            throw Media3Cancelled("Media3 export cancelled")
+        }
         error.get()?.let { throw it }
         return result.get() ?: error("Export produced no file")
     }
@@ -150,3 +188,6 @@ class Media3Muxer(private val context: Context) {
         fun logFailure(t: Throwable) = Log.e(TAG, "Mux/extract failed", t)
     }
 }
+
+/** Raised when [Media3Muxer] aborts a blocking export because the cancel signal fired. */
+class Media3Cancelled(message: String) : RuntimeException(message)

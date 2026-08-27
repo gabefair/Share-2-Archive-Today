@@ -20,8 +20,10 @@ android {
         minSdk = 24
         ndk {
             // App flavors filter further; include emulator ABI for :dev builds.
+            // FOSS ships arm64-v8a only (Chaquopy + yt-dlp size/compat).
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
     }
 
@@ -81,11 +83,12 @@ val hostPython: String = run {
  */
 val fetchYtdlpLatest by tasks.registering(Exec::class) {
     inputs.file(rootProject.file("tools/fetch_ytdlp_latest.py"))
-    // Tag file changes when checkout moves; also re-run when forced via --rerun-tasks.
+    inputs.file(rootProject.file("ytdlp/YTDLP_PIN"))
     outputs.file(rootProject.file("third_party/yt-dlp/yt_dlp/version.py"))
-    // Always consult GitHub for "latest" (script no-ops if already on the desired tag).
-    // Pin with S2A_YTDLP_TAG for reproducible builds; still runs so a stale checkout is fixed.
-    outputs.upToDateWhen { false }
+    // When a pin is committed, Gradle can skip the fetch if the checkout already matches.
+    // Force latest with S2A_YTDLP_LATEST=1 (then the pin file alone is not enough).
+    val forceLatest = System.getenv("S2A_YTDLP_LATEST").orEmpty() in setOf("1", "true", "yes")
+    outputs.upToDateWhen { !forceLatest }
     workingDir = rootProject.projectDir
     commandLine(hostPython, "tools/fetch_ytdlp_latest.py")
 }
@@ -154,4 +157,9 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     // Real org.json on the unit-test classpath; the android.jar stub throws instead.
     testImplementation("org.json:json:20240303")
+
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("junit:junit:4.13.2")
 }

@@ -37,13 +37,18 @@
     <string name="download_already_title">Already downloaded</string>
     <string name="download_open_existing">Open existing</string>
     <string name="download_again">Download again</string>
+    <string name="download_retry">Retry</string>
+    <string name="download_retry_started">Retry started</string>
+    <string name="download_retry_unavailable">Nothing to retry — share the link again</string>
+    <string name="download_playlist_first">Playlist or channel shared — downloading the first video</string>
     <string name="download_continue">Continue</string>
     <string name="download_cancel">Cancel</string>
     <string name="download_history_empty">No downloads yet</string>
     <string name="download_history_empty_title">Nothing here yet</string>
     <string name="download_history_empty_message">Completed downloads appear here. Share a video link to get started.</string>
-    <string name="download_history_swipe_hint">Swipe left to open · swipe right to remove · tap for more</string>
+    <string name="download_history_swipe_hint">Swipe left to open · swipe right to remove · tap to share · hold for more</string>
     <string name="download_share">Share</string>
+    <string name="download_details">Details</string>
     <string name="download_archive_page">Archive page</string>
     <string name="download_no_browser">No browser available to open archive.today</string>
     <string name="download_share_via">Share via</string>
@@ -75,5 +80,15 @@
     <string name="download_err_no_space">There isn\'t enough free storage for this download. Free some space and try again.</string>
     <string name="download_err_mux">The video and audio could not be combined on this device.</string>
     <string name="download_waiting_busy">Waiting for the current download to finish…</string>
+    <string name="download_busy_title">Download in progress</string>
+    <string name="download_busy_message">Another download is using yt-dlp right now.\n\n%1$s</string>
+    <string name="download_busy_wait">Wait</string>
+    <string name="download_busy_queue">Queue this link</string>
+    <string name="download_busy_cancel_current">Cancel current</string>
+    <string name="download_busy_queued_toast">Queued — you\'ll get a notification when it\'s free to analyze</string>
+    <string name="download_busy_cancelled_toast">Current download cancelled</string>
+    <string name="download_queued_ready_title">Link ready to download</string>
+    <string name="download_queued_ready">Tap to analyze the link you queued</string>
+    <string name="download_queued_ready_many">Tap to analyze the next queued link (%1$d waiting)</string>
     <string name="download_notifications_denied">Notifications are off, so there will be no progress or cancel button. You can still watch the download in history.</string>
 </resources>

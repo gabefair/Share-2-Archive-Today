@@ -259,6 +259,19 @@ class QualityPickerModelTest {
     }
 
     @Test
+    fun hevcAndAv1AreNotTreatedAsSafeMuxTargets() {
+        val formats = listOf(
+            fmt("av1", 1080, video = true, audio = false, tbr = 3000.0, vcodec = "av01.0.08M.08"),
+            fmt("hevc", 1080, video = true, audio = false, tbr = 2800.0, vcodec = "hev1.1.6.L93.B0"),
+            fmt("avc", 1080, video = true, audio = false, tbr = 2500.0, vcodec = "avc1.640028"),
+            fmt("aac", null, video = false, audio = true, tbr = 128.0, acodec = "mp4a.40.2"),
+        )
+        val option = QualityPickerModel.buildVideoOptions(formats).single()
+        assertEquals("avc", option.videoFormatId)
+        assertFalse(option.muxRisk)
+    }
+
+    @Test
     fun rankedAudioForMergePutsMuxableCodecsFirst() {
         val formats = listOf(
             fmt("opus", null, video = false, audio = true, tbr = 160.0, acodec = "opus"),

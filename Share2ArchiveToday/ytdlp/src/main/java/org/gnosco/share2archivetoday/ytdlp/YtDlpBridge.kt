@@ -2,9 +2,11 @@ package org.gnosco.share2archivetoday.ytdlp
 
 import android.content.Context
 import android.util.Log
+import androidx.core.os.ConfigurationCompat
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
@@ -50,7 +52,8 @@ class YtDlpBridge private constructor(private val py: Python) {
         val archiveMetadata: Boolean = false,
         val includeComments: Boolean = false,
         val writeSubtitles: Boolean = false,
-        val subtitleLangs: List<String> = listOf("all"),
+        /** BCP-47 / yt-dlp language tags. Avoid "all" — it 429s YouTube. */
+        val subtitleLangs: List<String> = defaultSubtitleLangs(),
     ) {
         fun toJson(): String = JSONObject().apply {
             put("out_template", outTemplate)
@@ -118,6 +121,29 @@ class YtDlpBridge private constructor(private val py: Python) {
         /** Single thread for every Python call (Chaquopy + ART stability). */
         private val pythonExecutor: ExecutorService = Executors.newSingleThreadExecutor { r ->
             Thread(r, "ytdlp-python").apply { isDaemon = true }
+        }
+
+        /**
+         * System language(s) plus English for captions. Prefer [context] locales when
+         * available; otherwise [Locale.getDefault]. Never returns `"all"`.
+         */
+        fun defaultSubtitleLangs(context: Context? = null): List<String> {
+            val out = linkedSetOf<String>()
+            if (context != null) {
+                val locales = ConfigurationCompat.getLocales(context.resources.configuration)
+                for (i in 0 until locales.size()) {
+                    val loc = locales[i] ?: continue
+                    out.add(loc.toLanguageTag())
+                    loc.language.takeIf { it.isNotBlank() }?.let { out.add(it) }
+                }
+            }
+            if (out.isEmpty()) {
+                val fallback = Locale.getDefault()
+                out.add(fallback.toLanguageTag())
+                fallback.language.takeIf { it.isNotBlank() }?.let { out.add(it) }
+            }
+            out.add("en")
+            return out.toList()
         }
 
         fun get(context: Context): YtDlpBridge {

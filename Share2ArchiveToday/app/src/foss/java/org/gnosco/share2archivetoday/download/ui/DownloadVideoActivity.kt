@@ -25,15 +25,21 @@ import org.gnosco.share2archivetoday.R
 import org.gnosco.share2archivetoday.download.DownloadErrorMessages
 import org.gnosco.share2archivetoday.download.OpenDownloadedMedia
 import org.gnosco.share2archivetoday.download.history.DownloadHistoryStore
-import org.gnosco.share2archivetoday.download.service.VideoDownloadService
+import org.gnosco.share2archivetoday.download.service.ActiveDownloadStatus
+import org.gnosco.share2archivetoday.download.service.DownloadScheduler
+import org.gnosco.share2archivetoday.download.service.PendingShareQueue
 import org.gnosco.share2archivetoday.ytdlp.FormatInfo
+import org.gnosco.share2archivetoday.ytdlp.ProbeResult
 import org.gnosco.share2archivetoday.ytdlp.QualityPickerModel
 import org.gnosco.share2archivetoday.ytdlp.YtDlpBridge
 import org.gnosco.share2archivetoday.ytdlp.YtDlpFailureClassifier
-
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 /**
  * Share-target entry: clean URL -> duplicate check -> probe -> quality picker ->
- * optional cellular warning -> foreground service.
+ * optional cellular warning -> WorkManager download.
  */
 class DownloadVideoActivity : MainActivity() {
 
@@ -88,34 +94,14 @@ class DownloadVideoActivity : MainActivity() {
         val processed = processArchiveUrl(url)
         val cleaned = handleURL(processed)
         cleanedUrl = cleaned
+        // Arriving via the "queued link ready" notification — drop it from the queue.
+        PendingShareQueue.remove(this, cleaned)
+        PendingShareQueue.remove(this, url)
 
         val history = DownloadHistoryStore(this)
         val existing = history.findSuccessful(cleaned)
         if (existing != null && history.uriStillValid(this, existing)) {
-            AlertDialog.Builder(this)
-                .setTitle(R.string.download_already_title)
-                .setItems(
-                    arrayOf(
-                        getString(R.string.download_open_existing),
-                        getString(R.string.download_again),
-                        getString(R.string.download_cancel),
-                    )
-                ) { _, which ->
-                    when (which) {
-                        0 -> {
-                            OpenDownloadedMedia.open(
-                                this,
-                                android.net.Uri.parse(existing.mediaStoreUri!!),
-                            )
-                            // Stay until the player/chooser is up; finish after so grants stick.
-                            window.decorView.post { finish() }
-                        }
-                        1 -> beginProbe(cleaned)
-                        else -> finish()
-                    }
-                }
-                .setOnCancelListener { finish() }
-                .show()
+            offerExisting(existing) { beginProbe(cleaned) }
             return
         }
         beginProbe(cleaned)
@@ -123,48 +109,184 @@ class DownloadVideoActivity : MainActivity() {
 
     override fun shouldFinishAfterShareIntent(): Boolean = false
 
-    private fun beginProbe(url: String) {
-        val progress = AlertDialog.Builder(this)
-            .setMessage(R.string.download_analyzing)
-            // The Python interpreter is serialized behind one thread, so this can queue
-            // behind an active download. It must always be possible to back out.
-            .setCancelable(true)
-            .setOnCancelListener { finish() }
-            .create()
-        progress.show()
+    private enum class BusyChoice { WAIT, QUEUE, CANCEL_CURRENT, ABORT }
 
+    private fun beginProbe(url: String) {
         scope.launch {
             try {
                 Log.i(TAG, "Probe starting for $url")
                 val bridge = withContext(Dispatchers.IO) {
                     YtDlpBridge.get(this@DownloadVideoActivity)
                 }
-                if (bridge.isBusy) {
-                    progress.setMessage(getString(R.string.download_waiting_busy))
+
+                if (bridge.isBusy || ActiveDownloadStatus.snapshot().active) {
+                    when (askBusyChoice()) {
+                        BusyChoice.ABORT -> {
+                            finish()
+                            return@launch
+                        }
+                        BusyChoice.QUEUE -> {
+                            PendingShareQueue.enqueue(this@DownloadVideoActivity, url)
+                            Toast.makeText(
+                                applicationContext,
+                                R.string.download_busy_queued_toast,
+                                Toast.LENGTH_LONG,
+                            ).show()
+                            finish()
+                            return@launch
+                        }
+                        BusyChoice.CANCEL_CURRENT -> {
+                            val id = ActiveDownloadStatus.snapshot().downloadId
+                            DownloadScheduler.cancel(this@DownloadVideoActivity, id)
+                            Toast.makeText(
+                                applicationContext,
+                                R.string.download_busy_cancelled_toast,
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                        BusyChoice.WAIT -> Unit
+                    }
                 }
-                val probe = withContext(Dispatchers.IO) { bridge.probe(url) }
-                Log.i(TAG, "Probe ok: ${probe.title}, ${probe.formats.size} formats")
-                progress.dismiss()
-                showQualityPicker(
-                    originalUrl = url,
-                    // Playlist and channel shares resolve to a single video here; using the
-                    // canonical URL means the download does not have to resolve it again.
-                    downloadUrl = probe.webpageUrl ?: url,
-                    title = probe.title,
-                    formats = probe.formats,
-                    durationSec = probe.duration,
-                )
-            } catch (t: Throwable) {
-                progress.dismiss()
-                Log.e(TAG, "Probe failed kind=${YtDlpFailureClassifier.classify(t)}", t)
-                AlertDialog.Builder(this@DownloadVideoActivity)
-                    .setTitle(DownloadErrorMessages.title(this@DownloadVideoActivity, t))
-                    .setMessage(DownloadErrorMessages.message(this@DownloadVideoActivity, t))
-                    .setPositiveButton(R.string.download_err_ok) { _, _ -> finish() }
+
+                val progress = AlertDialog.Builder(this@DownloadVideoActivity)
+                    .setMessage(R.string.download_analyzing)
+                    .setCancelable(true)
                     .setOnCancelListener { finish() }
-                    .show()
+                    .create()
+                progress.show()
+
+                try {
+                    // Live status while queued behind a download (Wait or Cancel-in-progress).
+                    val busyWatcher = launch {
+                        while (isActive) {
+                            val snap = ActiveDownloadStatus.snapshot()
+                            if (bridge.isBusy || snap.active) {
+                                progress.setMessage(busyStatusText(snap))
+                            } else if (progress.isShowing) {
+                                progress.setMessage(getString(R.string.download_analyzing))
+                            }
+                            delay(400)
+                        }
+                    }
+                    val probe = withContext(Dispatchers.IO) { bridge.probe(url) }
+                    busyWatcher.cancel()
+                    Log.i(TAG, "Probe ok: ${probe.title}, ${probe.formats.size} formats")
+                    runCatching { progress.dismiss() }
+
+                    if (url != probe.webpageUrl && !probe.webpageUrl.isNullOrBlank()) {
+                        Toast.makeText(
+                            applicationContext,
+                            R.string.download_playlist_first,
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+
+                    val history = DownloadHistoryStore(this@DownloadVideoActivity)
+                    val existing = history.findSuccessful(probe.webpageUrl ?: url)
+                        ?: history.findSuccessfulByVideoId(probe.id)
+                    if (existing != null && history.uriStillValid(this@DownloadVideoActivity, existing)) {
+                        offerExisting(existing) {
+                            showQualityPicker(url, probe)
+                        }
+                        return@launch
+                    }
+
+                    showQualityPicker(url, probe)
+                } catch (t: Throwable) {
+                    runCatching { progress.dismiss() }
+                    throw t
+                }
+            } catch (t: Throwable) {
+                Log.e(TAG, "Probe failed kind=${YtDlpFailureClassifier.classify(t)}", t)
+                if (!isFinishing) {
+                    AlertDialog.Builder(this@DownloadVideoActivity)
+                        .setTitle(DownloadErrorMessages.title(this@DownloadVideoActivity, t))
+                        .setMessage(DownloadErrorMessages.message(this@DownloadVideoActivity, t))
+                        .setPositiveButton(R.string.download_err_ok) { _, _ -> finish() }
+                        .setOnCancelListener { finish() }
+                        .show()
+                }
             }
         }
+    }
+
+    private suspend fun askBusyChoice(): BusyChoice =
+        suspendCancellableCoroutine { cont ->
+            fun resumeOnce(choice: BusyChoice) {
+                if (cont.isActive) cont.resume(choice)
+            }
+            val dialog = AlertDialog.Builder(this)
+                .setTitle(R.string.download_busy_title)
+                .setMessage(busyStatusText(ActiveDownloadStatus.snapshot()))
+                .setPositiveButton(R.string.download_busy_wait) { _, _ ->
+                    resumeOnce(BusyChoice.WAIT)
+                }
+                .setNeutralButton(R.string.download_busy_queue) { _, _ ->
+                    resumeOnce(BusyChoice.QUEUE)
+                }
+                .setNegativeButton(R.string.download_busy_cancel_current) { _, _ ->
+                    resumeOnce(BusyChoice.CANCEL_CURRENT)
+                }
+                .setOnCancelListener { resumeOnce(BusyChoice.ABORT) }
+                .create()
+
+            val unsub = ActiveDownloadStatus.addListener { snap ->
+                if (dialog.isShowing) {
+                    runOnUiThread {
+                        if (dialog.isShowing) dialog.setMessage(busyStatusText(snap))
+                    }
+                }
+            }
+            cont.invokeOnCancellation {
+                unsub()
+                runCatching { if (dialog.isShowing) dialog.dismiss() }
+            }
+            dialog.setOnDismissListener { unsub() }
+            dialog.show()
+        }
+
+    private fun busyStatusText(snap: ActiveDownloadStatus.Snapshot): String {
+        val detail = buildString {
+            val title = snap.title?.takeIf { it.isNotBlank() }
+            val prog = snap.progressLabel()
+            when {
+                title != null && prog != null -> {
+                    append(title)
+                    append("\n")
+                    append(prog)
+                }
+                title != null -> append(title)
+                prog != null -> append(prog)
+                else -> append(getString(R.string.download_waiting_busy))
+            }
+        }
+        return getString(R.string.download_busy_message, detail)
+    }
+
+    private fun offerExisting(existing: org.gnosco.share2archivetoday.download.history.HistoryEntry, onAgain: () -> Unit) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.download_already_title)
+            .setItems(
+                arrayOf(
+                    getString(R.string.download_open_existing),
+                    getString(R.string.download_again),
+                    getString(R.string.download_cancel),
+                )
+            ) { _, which ->
+                when (which) {
+                    0 -> {
+                        OpenDownloadedMedia.open(
+                            this,
+                            android.net.Uri.parse(existing.mediaStoreUri!!),
+                        )
+                        window.decorView.post { finish() }
+                    }
+                    1 -> onAgain()
+                    else -> finish()
+                }
+            }
+            .setOnCancelListener { finish() }
+            .show()
     }
 
     private data class Choice(
@@ -173,13 +295,14 @@ class DownloadVideoActivity : MainActivity() {
         val videoIndex: Int = -1,
     )
 
-    private fun showQualityPicker(
-        originalUrl: String,
-        downloadUrl: String,
-        title: String,
-        formats: List<FormatInfo>,
-        durationSec: Double?,
-    ) {
+    private fun showQualityPicker(originalUrl: String, probe: ProbeResult) {
+        val downloadUrl = probe.webpageUrl ?: originalUrl
+        val title = probe.title
+        val formats = probe.formats
+        val durationSec = probe.duration
+        val videoId = probe.id
+        val webpageUrl = probe.webpageUrl
+
         val langs = preferredAudioLanguages()
         val audio = QualityPickerModel.bestAudioOnly(formats, durationSec, langs)
 
@@ -252,11 +375,17 @@ class DownloadVideoActivity : MainActivity() {
                 val meta = archiveMeta.isChecked
                 val comments = meta && includeComments.isChecked
                 if (choice.isAudio) {
-                    onAudioChosen(originalUrl, downloadUrl, title, audio, formats, langs, meta, comments)
+                    onAudioChosen(
+                        originalUrl, downloadUrl, title, audio, formats, langs,
+                        meta, comments, videoId, webpageUrl,
+                    )
                 } else {
                     val opt = videos[choice.videoIndex]
                     maybeWarnCellular(opt.estimatedBytes) {
-                        startVideo(originalUrl, downloadUrl, title, opt, formats, langs, meta, comments)
+                        startVideo(
+                            originalUrl, downloadUrl, title, opt, formats, langs,
+                            meta, comments, videoId, webpageUrl,
+                        )
                     }
                 }
             }
@@ -318,6 +447,8 @@ class DownloadVideoActivity : MainActivity() {
         langs: List<String>,
         archiveMetadata: Boolean,
         includeComments: Boolean,
+        videoId: String?,
+        webpageUrl: String?,
     ) {
         val audioId = audio.formatId
         if (audioId == null) {
@@ -333,7 +464,7 @@ class DownloadVideoActivity : MainActivity() {
                     ranked.isNotEmpty() -> ranked
                     else -> listOf(audioId)
                 }
-                VideoDownloadService.start(
+                DownloadScheduler.start(
                     this,
                     url = downloadUrl,
                     originalUrl = originalUrl,
@@ -346,6 +477,9 @@ class DownloadVideoActivity : MainActivity() {
                     archiveMetadata = archiveMetadata,
                     includeComments = includeComments,
                     estimatedBytes = audio.estimatedBytes,
+                    webpageUrl = webpageUrl,
+                    videoId = videoId,
+                    wifiOnly = false,
                 )
                 toastDownloadContinuing()
                 finish()
@@ -373,16 +507,17 @@ class DownloadVideoActivity : MainActivity() {
         langs: List<String>,
         archiveMetadata: Boolean,
         includeComments: Boolean,
+        videoId: String?,
+        webpageUrl: String?,
     ) {
         val preferred = opt.audioFormatId
-        // When merging, try muxable codecs first so an Opus track does not sink the merge.
         val ranked = QualityPickerModel.rankedAudioFormatIds(formats, langs, forMux = opt.needsMux)
         val audioIds = when {
             !opt.needsMux -> emptyList()
             preferred != null -> listOf(preferred) + ranked.filter { it != preferred }
             else -> ranked
         }
-        VideoDownloadService.start(
+        DownloadScheduler.start(
             this,
             url = downloadUrl,
             originalUrl = originalUrl,
@@ -396,6 +531,8 @@ class DownloadVideoActivity : MainActivity() {
             archiveMetadata = archiveMetadata,
             includeComments = includeComments,
             estimatedBytes = opt.estimatedBytes,
+            webpageUrl = webpageUrl,
+            videoId = videoId,
         )
         toastDownloadContinuing()
         finish()

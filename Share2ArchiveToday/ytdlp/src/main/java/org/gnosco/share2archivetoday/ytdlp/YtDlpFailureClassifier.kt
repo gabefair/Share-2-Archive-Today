@@ -30,7 +30,10 @@ object YtDlpFailureClassifier {
     fun classify(throwable: Throwable): Kind {
         val msg = rootMessage(throwable).lowercase()
         return when {
-            "downloadcancelled" in msg || "download cancelled" in msg -> Kind.CANCELLED
+            "downloadcancelled" in msg ||
+                "download cancelled" in msg ||
+                "media3 export cancelled" in msg ||
+                throwable is Media3Cancelled -> Kind.CANCELLED
             "unsupported url" in msg -> Kind.UNSUPPORTED_URL
             "http error 403" in msg || "error 403" in msg || "status code 403" in msg ->
                 Kind.HTTP_FORBIDDEN

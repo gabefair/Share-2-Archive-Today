@@ -193,10 +193,9 @@ def build_external_stub(original_source: str) -> str:
 
     missing = [n for n in _EXPLICIT_FUNCS if n not in functions]
     if missing:
-        print(
-            f"warning: upstream external.py no longer defines {missing}; "
-            "the stub may be out of date",
-            file=sys.stderr,
+        raise SystemExit(
+            f"error: upstream external.py no longer defines {missing}; "
+            "update tools/trim_ytdlp.py — the Android stub would break at runtime"
         )
 
     return "".join(parts)

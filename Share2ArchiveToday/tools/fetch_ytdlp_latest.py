@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Ensure third_party/yt-dlp is checked out to the latest (or pinned) release tag.
+"""Ensure third_party/yt-dlp is checked out to a pinned (or latest) release tag.
 
 Build-time behavior:
-  - Default: query GitHub for yt-dlp's latest *release* tag and checkout it.
-  - Override: set S2A_YTDLP_TAG (e.g. 2026.08.19) to pin for reproducible / offline builds.
+  - Default: read ytdlp/YTDLP_PIN (committed) for reproducible builds.
+  - Override pin: set S2A_YTDLP_TAG=YYYY.MM.DD.
+  - Follow latest: set S2A_YTDLP_LATEST=1 to query GitHub for the newest release.
   - Skip network: if already on the desired tag, do nothing.
 
 Requires network unless the desired tag is already present locally.
@@ -21,6 +22,7 @@ from pathlib import Path
 
 REPO_URL = "https://github.com/yt-dlp/yt-dlp.git"
 API_LATEST = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
+PIN_FILE = Path(__file__).resolve().parents[1] / "ytdlp" / "YTDLP_PIN"
 
 
 def run(
@@ -44,10 +46,17 @@ def current_exact_tag(repo: Path) -> str | None:
     return git_ok(repo, "describe", "--tags", "--exact-match")
 
 
-def resolve_desired_tag() -> str:
-    pinned = os.environ.get("S2A_YTDLP_TAG", "").strip()
-    if pinned:
-        return pinned.lstrip("v")
+def read_pin_file() -> str | None:
+    if not PIN_FILE.is_file():
+        return None
+    for line in PIN_FILE.read_text(encoding="utf-8").splitlines():
+        tag = line.split("#", 1)[0].strip().lstrip("v")
+        if tag:
+            return tag
+    return None
+
+
+def fetch_latest_tag() -> str:
     req = urllib.request.Request(
         API_LATEST,
         headers={
@@ -61,12 +70,25 @@ def resolve_desired_tag() -> str:
     except urllib.error.URLError as e:
         raise SystemExit(
             f"error: could not fetch latest yt-dlp release ({e}). "
-            "Set S2A_YTDLP_TAG to a known tag for offline/pinned builds."
+            "Unset S2A_YTDLP_LATEST and use the committed pin, or set S2A_YTDLP_TAG."
         ) from e
     tag = data.get("tag_name")
     if not tag:
         raise SystemExit(f"error: unexpected GitHub API response: {data!r}")
     return str(tag).lstrip("v")
+
+
+def resolve_desired_tag() -> str:
+    pinned_env = os.environ.get("S2A_YTDLP_TAG", "").strip()
+    if pinned_env:
+        return pinned_env.lstrip("v")
+    if os.environ.get("S2A_YTDLP_LATEST", "").strip() in ("1", "true", "yes"):
+        return fetch_latest_tag()
+    pin = read_pin_file()
+    if pin:
+        return pin
+    # No pin file — fall back to latest so a fresh checkout still builds.
+    return fetch_latest_tag()
 
 
 def ensure_repo(repo: Path) -> None:
@@ -83,7 +105,6 @@ def ensure_repo(repo: Path) -> None:
 
 
 def checkout_tag(repo: Path, tag: str) -> None:
-    # Prefer fetching just this tag; fall back to all tags.
     fetched = run(
         ["git", "fetch", "--tags", "--force", "origin", f"refs/tags/{tag}:refs/tags/{tag}"],
         cwd=repo,
@@ -133,7 +154,6 @@ def main() -> int:
         raise SystemExit(f"error: git checkout of yt-dlp tag {tag} failed:\n{err}") from e
 
     head = git_ok(repo, "rev-parse", "HEAD")
-    # Annotated tags: resolve to the commit object.
     tag_rev = git_ok(repo, "rev-parse", f"refs/tags/{tag}^{{}}") or git_ok(
         repo, "rev-parse", f"refs/tags/{tag}"
     )

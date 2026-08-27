@@ -325,14 +325,18 @@ object QualityPickerModel {
         get() = protocol?.contains("m3u8", ignoreCase = true) == true
 
     /**
-     * Codecs the platform MP4 muxer reliably accepts. VP8/VP9 and Opus/Vorbis are only
-     * containerable in WebM, which Media3 cannot write.
+     * Codecs the platform MP4 muxer reliably accepts across OEM MediaCodec paths.
+     *
+     * AVC is the only video codec we treat as safe. HEVC and AV1 often fail Media3
+     * transmux on device even though they are valid in MP4; those still download, but
+     * surface as [VideoOption.muxRisk] so an AVC alternative is preferred when present.
+     * VP8/VP9 and Opus/Vorbis need WebM, which Media3 cannot write.
      */
     internal val FormatInfo.isMp4MuxableVideo: Boolean
         get() {
             val codec = vcodec?.lowercase()?.substringBefore('.') ?: return true
             if (codec == "none" || codec == "unknown") return true
-            return codec in setOf("avc1", "avc3", "h264", "hev1", "hvc1", "h265", "av01", "mp4v")
+            return codec in setOf("avc1", "avc3", "h264", "mp4v")
         }
 
     internal val FormatInfo.isMp4MuxableAudio: Boolean
